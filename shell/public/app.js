@@ -136,10 +136,25 @@ async function loadKeyState() {
   } catch (x) { /* 拉不到 key 状态不打扰主界面，静默 */ }
 }
 
-/* ---- 启动时拉一次状态（侧栏徽标 + 我的 Key）---- */
+/* ---- 登录后读回历史：退出再登录也能看到之前的对话 ---- */
+async function loadHistory() {
+  try {
+    const r = await fetch("/api/chat/history", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => null);
+    if (!j || !Array.isArray(j.messages)) return;
+    for (const m of j.messages) {
+      if (!m || !m.text) continue;
+      bubble(m.role === "user" ? "user" : "assistant", m.text);
+    }
+  } catch (x) { /* 读不到历史不打扰主界面，静默 */ }
+}
+
+/* ---- 启动时拉一次状态（侧栏徽标 + 我的 Key + 历史）---- */
 (async () => {
   try { const j = await (await fetch("/api/skills")).json(); $("#pSkills").textContent = "技能 " + j.skills.length; $("#pSkills").className = "pill ok"; } catch (e) {}
   try { const j = await (await fetch("/api/status")).json(); $("#pDash").textContent = "看板 " + (j.dashboardOk ? "在线" : "离线"); $("#pDash").className = "pill " + (j.dashboardOk ? "ok" : "bad"); } catch (e) {}
   loadKeyState();
+  loadHistory();
   ta.focus();
 })();

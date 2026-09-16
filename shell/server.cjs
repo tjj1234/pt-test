@@ -292,6 +292,12 @@ async function handle(req, res) {
     return json(res, 200, { ok: true });
   }
 
+  // ---- 读回对话历史（退出再登录也能看到之前的对话）----
+  if (p === "/api/chat/history" && req.method === "GET") {
+    const messages = await conversations.load(me.user.id);
+    return json(res, 200, { ok: true, messages });
+  }
+
   if (p === "/api/chat" && req.method === "POST") {
     if (!chatLimiter.allow(clientIp(req))) {
       return json(res, 429, { ok: false, error: "请求过于频繁，请稍后再试" });
