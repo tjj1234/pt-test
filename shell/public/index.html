@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>北极星 · PowerTokens 归因与增长 Agent</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  /* P0-2：主界面「我的 Key」入口 + 未绑 key 提示条（沿用 styles.css 变量，不新造配色） */
+  .nav .keynav{display:flex;align-items:center;gap:10px;width:100%;padding:10px 12px;
+    border-radius:9px;color:var(--sideink);font-size:14px;text-decoration:none;font-family:inherit}
+  .nav .keynav:hover{background:rgba(255,255,255,.07);color:#fff}
+  .nav .keynav .ico{width:18px;text-align:center}
+  .keydot{flex:0 0 auto;width:9px;height:9px;border-radius:50%;background:var(--bad);
+    box-shadow:0 0 0 3px rgba(220,38,38,.22)}
+  .keylast{flex:0 0 auto;font-size:11px;color:#7c86a3;font-family:ui-monospace,Consolas,monospace}
+  .keybanner{display:flex;align-items:center;gap:10px;padding:10px 24px;
+    background:linear-gradient(90deg,#fdf3e7,#fdeaea);border-bottom:1px solid #f5d9b8;
+    color:#9a5b13;font-size:13px;text-decoration:none}
+  .keybanner:hover{filter:brightness(.985)}
+  .keybanner b{font-weight:600}
+  .keygo{display:inline-block;margin-top:10px;padding:8px 14px;border:0;border-radius:9px;cursor:pointer;
+    font-weight:600;font-family:inherit;font-size:13px;color:#fff;
+    background:linear-gradient(135deg,var(--brand),var(--brand2))}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand"><div class="logo">P</div><div><h1>北极星</h1><p>归因与增长 Agent</p></div></div>
+    <nav class="nav">
+      <button data-v="chat" class="on"><span class="ico">💬</span>对话</button>
+      <button data-v="dash"><span class="ico">📊</span>归因看板</button>
+      <button data-v="skills"><span class="ico">🧩</span>技能</button>
+      <button data-v="status"><span class="ico">🛡️</span>运行状态</button>
+      <a class="keynav" id="keyNav" href="/settings">
+        <span class="ico">🔑</span><span>我的 Key</span>
+        <span class="keydot" id="keyDot" hidden></span>
+        <span class="keylast" id="keyLast4" hidden></span>
+      </a>
+    </nav>
+    <div class="foot">
+      <div>形态 B · headless</div>
+      <div>DSH 不开端口</div>
+      <div style="margin-top:8px"><a href="#" id="out" style="color:#8b95b0">退出登录</a></div>
+    </div>
+  </aside>
+  <main class="main">
+    <a class="keybanner" id="keyBanner" href="/settings" hidden>
+      <span>🔑</span><span><b>你还未绑定 PT key</b>，绑定后才能对话 —— 点击前往设置</span>
+    </a>
+    <header class="top">
+      <h2 id="title">对话</h2><div class="sp"></div>
+      <span class="pill" id="pSkills">技能 —</span>
+      <span class="pill" id="pDash">看板 —</span>
+    </header>
+
+    <section class="view on" id="v-chat">
+      <div class="chat" id="chat">
+        <div class="empty" id="hello">
+          <h3>问点什么</h3>
+          <p>北极大盘为什么涨了？· 哪个素材在烧钱？· 埋点质量怎么样？</p>
+        </div>
+      </div>
+      <div class="compose">
+        <div class="quick">
+          <button>近7天哪些素材在烧钱？</button>
+          <button>哪几个国家表现最好？</button>
+          <button>埋点质量帮我体检一下</button>
+          <button>这周整体干得怎么样？</button>
+        </div>
+        <div class="in">
+          <textarea id="ta" rows="1" placeholder="问点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+          <button class="send" id="send">发送</button>
+        </div>
+        <div class="meta" style="max-width:820px;margin:8px auto 0" id="cm"></div>
+      </div>
+    </section>
+
+    <section class="view" id="v-dash"><iframe id="dashFrame" src="about:blank"></iframe></section>
+
+    <section class="view" id="v-skills"><div class="page">
+      <div class="note">这些是<b>产品工作区</b>里的技能。DSH 的开发技能（社媒那 10 个）<b>不在产品里</b> —— 隔离已经生效。</div>
+      <div class="grid" id="skillGrid"></div>
+    </div></section>
+
+    <section class="view" id="v-status"><div class="page">
+      <div class="kv" id="statusKv"></div>
+      <div class="note">业务壳只把问题交给 DSH，DSH 不开任何对外端口 —— 用户永远碰不到 DSH 本身。</div>
+    </div></section>
+  </main>
+</div>
+<script src="/assets/app.js"></script>
+</body></html>

@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>登录 / 注册 · 北极星</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  /* 仅本页需要的「登录/注册」切换样式，全部沿用 styles.css 的 :root 变量，不新造配色 */
+  .tabs{display:flex;margin:18px 0 8px;background:#f1f3f9;border-radius:11px;padding:4px;gap:4px}
+  .tab{flex:1;padding:9px 0;border:0;border-radius:8px;background:transparent;color:var(--sub);
+    font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+  .tab.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(15,23,42,.08)}
+  .panel{display:none}
+  .panel.on{display:block}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <div class="login-card">
+    <div class="brand">
+      <div class="logo">P</div>
+      <div><h1>北极星</h1><p>PowerTokens 归因与增长 Agent</p></div>
+    </div>
+
+    <div class="tabs">
+      <button type="button" class="tab on" data-tab="login">登录</button>
+      <button type="button" class="tab" data-tab="register">注册</button>
+    </div>
+
+    <form class="panel on" id="f" autocomplete="on">
+      <label for="u">账号</label><input id="u" value="admin" autocomplete="username">
+      <label for="p">密码</label><input id="p" type="password" value="northstar" autocomplete="current-password">
+      <button class="btn" id="b" type="submit">登录</button>
+      <div class="err" id="e"></div>
+      <div class="hint">演示账号：<b>admin / northstar</b><br>这是业务壳自己的登录，和 DSH 无关。</div>
+    </form>
+
+    <form class="panel" id="rf" autocomplete="on" novalidate>
+      <label for="ru">用户名</label><input id="ru" autocomplete="username" placeholder="2~64 个字符" spellcheck="false">
+      <label for="rp">密码</label><input id="rp" type="password" autocomplete="new-password" placeholder="至少 8 位">
+      <label for="rp2">确认密码</label><input id="rp2" type="password" autocomplete="new-password" placeholder="再输一遍">
+      <button class="btn" id="rb" type="submit">注册并进入设置</button>
+      <div class="err" id="re"></div>
+      <div class="hint">注册即为你创建专属租户（1 账号 = 1 租户，BYOK）。<br>注册成功后自动登录，并跳转到设置页绑定你的 PT key。</div>
+    </form>
+  </div>
+</div>
+<script src="/assets/register.js"></script>
+</body></html>

@@ -1,0 +1,18 @@
+{
+  "name": "northstar-analytics",
+  "version": "1.0.0",
+  "private": true,
+  "description": "北极星（PowerTokens）· 归因看板后端 —— 归因数据 API + 看板前端（PGlite 真库）",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node start.cjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "fastify": "^4.28.1",
+    "pg": "^8.11.3"
+  }
+}

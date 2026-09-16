@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PowerTokens 归因面板</title>
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="tabs/tabs.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- ===== 顶部 Tab 导航（吸顶） ===== -->
+    <header class="top-tabbar">
+      <div class="tabbar-brand">
+        <div class="logo-mark">P</div>
+        <div class="brand-text">
+          <div class="brand-title">PowerTokens 归因面板</div>
+          <div class="brand-sub">广告 × 行为融合归因</div>
+        </div>
+      </div>
+      <!-- 由 app.js 按 TABS 配置生成 5 个 nav-item -->
+      <nav class="tabbar-nav" id="tabbar-nav" aria-label="主导航"></nav>
+    </header>
+
+    <!-- ===== 全局筛选区（全 Tab 共享，切 Tab 不重置） ===== -->
+    <div class="filter-bar">
+      <div class="filter-head">
+        <h1 class="filter-title">PowerTokens 归因面板</h1>
+        <span class="badge badge-violet">末触 UTM</span>
+        <span class="badge badge-zinc" id="data-source-badge">只读 · 无构建</span>
+        <button type="button" id="filter-collapse-btn" class="preset-btn" aria-expanded="true">收起筛选</button>
+      </div>
+      <div class="caliber-line">口径：SS-GTM → Collect + 广告落库 · 只读 token（scope analytics:read）</div>
+      <div id="filter-collapsed-summary" class="filter-collapsed-summary hidden"></div>
+      <!-- 筛选 chip 墙，由 app.js renderTagWall() 生成 -->
+      <div id="filter-tag-wall" class="filter-tag-wall"></div>
+    </div>
+
+    <!-- ===== 单内容区（只显示当前 Tab 的 section） ===== -->
+    <!-- 5 个 section#page-* 由 app.js 按 TABS 配置生成 -->
+    <main id="main-scroll" aria-live="polite"></main>
+  </div>
+
+  <!-- ===== 用户详情抽屉（3.3 承接，本期只留占位容器） ===== -->
+  <div id="drawer-overlay" class="drawer-overlay" aria-hidden="true"></div>
+  <aside id="user-drawer" class="drawer" aria-hidden="true">
+    <div class="drawer-head">
+      <div>
+        <div id="drawer-title" class="drawer-title">用户详情</div>
+        <div id="drawer-subtitle" class="drawer-subtitle muted">占位 · 3.3 承接（用户行为详情抽屉）</div>
+      </div>
+      <button type="button" id="drawer-close" class="preset-btn" aria-label="关闭">关闭</button>
+    </div>
+    <div id="drawer-body" class="drawer-body">
+      <div class="state state-empty">
+        <div class="state-title">抽屉占位</div>
+        <div class="state-hint muted">个人行为漏斗 / 来源归因 / 浏览轨迹 / Key / 调用 / 充值明细由 3.3 实现。</div>
+      </div>
+    </div>
+  </aside>
+
+  <noscript>
+    <div style="padding:16px;font-family:sans-serif;">本面板需要启用 JavaScript（原生 JS，无构建步骤）。</div>
+  </noscript>
+
+  <script src="app.js"></script>
+  <script src="tabs/tabs-common.js"></script>
+  <script src="tabs/overview.js"></script>
+  <script src="tabs/creatives.js"></script>
+  <script src="tabs/users.js"></script>
+  <script src="tabs/products.js"></script>
+  <script src="tabs/health.js"></script>
+</body>
+</html>

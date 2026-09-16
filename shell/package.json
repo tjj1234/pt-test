@@ -1,0 +1,16 @@
+{
+  "name": "northstar-shell",
+  "version": "1.0.0",
+  "private": true,
+  "description": "北极星（PowerTokens）· 业务壳后端 —— 多租户身份 / 登录 / 设置 / 对话 / PT key（BYOK）",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node server.cjs"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "^0.5.8"
+  }
+}
