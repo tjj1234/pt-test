@@ -95,7 +95,7 @@
         body: JSON.stringify({ username, password }),
       });
       const lj = await lr.json().catch(() => null);
-      if (lj && lj.ok) { location.href = "/settings"; return; }
+      if (lj && lj.ok) { location.href = "/"; return; }
       el.re.textContent = "注册成功，但自动登录失败，请切回「登录」手动登录";
       switchTab(el.tabs[0]);
     } catch (x) {

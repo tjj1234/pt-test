@@ -60,7 +60,7 @@ function needKeyBubble() {
   bub.textContent = "你还没绑定 PT key，绑定后我才能替你查数据、跑技能。";
   const btn = document.createElement("button");
   btn.className = "keygo"; btn.textContent = "🔑 去绑定";
-  btn.addEventListener("click", () => { location.href = "/settings"; });
+  btn.addEventListener("click", () => { if (window.openKeyDrawer) window.openKeyDrawer(); else location.href = "/settings"; });
   box.appendChild(bub); box.appendChild(btn);
   el.appendChild(av); el.appendChild(box); chat.appendChild(el);
   chat.scrollTop = chat.scrollHeight;
