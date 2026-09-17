@@ -82,7 +82,7 @@ const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").dige
 
 const json = (res, code, obj) => {
   const body = JSON.stringify(obj);
-  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body) });
+  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body), "Cache-Control": "no-store" });
   res.end(body);
 };
 function readBody(req, limit) {
@@ -314,7 +314,7 @@ function proxyDashboard(req, res, tenantId) {
 }
 function serveFile(res, f) {
   if (!fs.existsSync(f)) { res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h2>404</h2>"); }
-  res.writeHead(200, { "Content-Type": MIME[path.extname(f).toLowerCase()] || "application/octet-stream" });
+  res.writeHead(200, { "Content-Type": MIME[path.extname(f).toLowerCase()] || "application/octet-stream", "Cache-Control": "no-cache" });
   res.end(fs.readFileSync(f));
 }
 
