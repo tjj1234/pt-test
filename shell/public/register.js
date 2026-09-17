@@ -75,7 +75,7 @@
     if (password.length < 8) { el.re.textContent = "密码至少 8 位"; return; }
     if (password !== confirm) { el.re.textContent = "两次输入的密码不一致"; return; }
 
-    setBusy(el.rb, true, "注册中…", "注册并进入设置");
+    setBusy(el.rb, true, "注册中…", "注册并进入对话");
     try {
       const rr = await fetch("/api/auth/register", {
         method: "POST", credentials: "same-origin",
@@ -101,7 +101,7 @@
     } catch (x) {
       el.re.textContent = "连不上服务：" + x.message;
     } finally {
-      setBusy(el.rb, false, null, "注册并进入设置");
+      setBusy(el.rb, false, null, "注册并进入对话");
     }
   });
 })();
