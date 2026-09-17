@@ -55,24 +55,32 @@
     </header>
 
     <section class="view on" id="v-chat">
-      <div class="chat" id="chat">
-        <div class="empty" id="hello">
-          <h3>问点什么</h3>
-          <p>北极大盘为什么涨了？· 哪个素材在烧钱？· 埋点质量怎么样？</p>
-        </div>
+      <div class="conv-pane">
+        <button class="newconv" id="newConv">＋ 新建对话</button>
+        <div class="conv-list" id="convList"></div>
       </div>
-      <div class="compose">
-        <div class="quick">
-          <button>近7天哪些素材在烧钱？</button>
-          <button>哪几个国家表现最好？</button>
-          <button>埋点质量帮我体检一下</button>
-          <button>这周整体干得怎么样？</button>
+      <div class="chat-pane">
+        <div class="chat" id="chat">
+          <div class="empty" id="hello">
+            <h3>问点什么</h3>
+            <p>北极大盘为什么涨了？· 哪个素材在烧钱？· 埋点质量怎么样？</p>
+            <p class="empty-hint">还没有对话？点左侧「＋ 新建对话」开始，或直接在下面提问。</p>
+          </div>
         </div>
-        <div class="in">
-          <textarea id="ta" rows="1" placeholder="问点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
-          <button class="send" id="send">发送</button>
+        <div class="compose">
+          <div class="quick">
+            <button>近7天哪些素材在烧钱？</button>
+            <button>哪几个国家表现最好？</button>
+            <button>埋点质量帮我体检一下</button>
+            <button>这周整体干得怎么样？</button>
+          </div>
+          <div class="in">
+            <textarea id="ta" rows="1" placeholder="问点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
+            <button class="send" id="send">发送</button>
+            <button class="stop" id="stop" hidden>停止</button>
+          </div>
+          <div class="meta" style="max-width:820px;margin:8px auto 0" id="cm"></div>
         </div>
-        <div class="meta" style="max-width:820px;margin:8px auto 0" id="cm"></div>
       </div>
     </section>
 

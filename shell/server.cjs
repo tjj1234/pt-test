@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * 北极星 · 业务壳后端（形态 B · 多租户 · 打包发布版）
+ * 北极星 · 业务壳后端（形态 B · 多租户 · 打包发布版 · 对话窗口化）
  * ============================================================================
- * 本文件 = server-v6.cjs（看板代理 / 技能 / 状态 / 对话 / 多租户 BYOK / 日志 / 探活 / 部署）
- *        + 跨平台打包改造：
- *          A1 · DSH 路径可配置：DSH_JS 环境变量优先，否则自动发现（execPath/cwd 上溯、
- *              全局 npm root），找不到给清晰中文报错；仍用 process.execPath 跑 bin.js。
- *          A2 · master key 跨平台：Windows 走 DPAPI；非 Windows 走 0600 文件（见 keys.cjs）。
- *          B  · 路径全部相对 repo 根（用 path.resolve(__dirname, ...)），无绝对/中文前缀。
+ * 本文件 = server.fixed.cjs（看板代理 / 技能 / 状态 / 多租户 BYOK / 日志 / 探活 / 部署）
+ *        + 对话窗口化改造：
+ *          A · 多对话：GET/POST /api/conversations、GET/PATCH/DELETE /api/conversations/:id
+ *          B · 消息能力：每条消息带 ts；POST /api/chat 带 conversationId + 可选 regenerate
+ *          C · 停止与并发：POST /api/chat/stop kill 子进程；同一用户同一时刻只允许一个
+ *              生成中的对话（runningJobs）；runDshForUser 已改异步 spawn（不阻塞事件循环）
+ *          D · 持久化：所有对话 + 每条消息（含 ts）落库，重启不丢
  *
  * 三条不可动摇的规矩（形态 B · 多租户）：
  *   ① DSH_HOME 必须是产品自己的家，绝不用开发者的 ~/.dsh
@@ -26,7 +27,7 @@ const { spawnSync } = require("child_process");
 // ---- 结构化日志（零第三方依赖，按天切割落 logs）----
 const log = require("./logging.cjs");
 
-// ---- 模块接线（全部最终名）----
+// ---- 模块接线（全部最终名；conversations / tenant 为对话窗口化后的新版）----
 const { initAuth } = require("./auth.cjs");
 const { handleAuthRoutes, sessionFromCookie } = require("./auth-routes.cjs");
 const keysMod = require("./keys.cjs");
@@ -73,12 +74,37 @@ const DRY_RUN_CHAT = process.env.PT_CHAT_DRYRUN === "1";
 const RATE_CHAT_PER_MIN = Number(process.env.PT_RATE_CHAT_PER_MIN || 20);
 const chatLimiter = createRateLimiter({ windowMs: 60000, max: RATE_CHAT_PER_MIN });
 
+let auth = null;                 // 身份库句柄
+let keys = null;                 // key 加密句柄
+let conversations = null;        // 对话窗口化落库句柄
+
+const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
+
+const json = (res, code, obj) => {
+  const body = JSON.stringify(obj);
+  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body) });
+  res.end(body);
+};
+function readBody(req, limit) {
+  limit = limit || (1 << 20);
+  return new Promise((resolve) => {
+    let n = 0; const chunks = [];
+    req.on("data", (c) => { n += c.length; if (n > limit) { req.destroy(); return; } chunks.push(c); });
+    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+  });
+}
+function cookie(req, name) {
+  const m = (req.headers.cookie || "").match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+const authed = (req) => (auth ? sessionFromCookie(req, auth) : Promise.resolve(null));
+
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".woff2": "font/woff2" };
+
 /* ============================================================================
  * 看板多租户（A 方案 · 租户透传，默认关闭）
- * ----------------------------------------------------------------------------
- * B 方案（默认）：/api/analytics 与 /dashboard 一律发固定只读 token（DASH_TOKEN）。
- * A 方案（PT_DASH_TENANT_INJECT=1）：把「已登录用户的 tenant_id」以 X-Tenant-Id
- *   头透传给看板后端（看板后端需 TRUST_TENANT_HEADER=1）。
  * ========================================================================== */
 const DASH_TENANT_INJECT = process.env.PT_DASH_TENANT_INJECT === "1";
 const DASH_TENANT_HEADER = "x-tenant-id";
@@ -93,9 +119,6 @@ function dashProxyHeaders(req, tenantId) {
 
 /* ============================================================================
  * DSH 入口发现（跨平台）
- * ----------------------------------------------------------------------------
- * Windows 上 Node 不允许直接 spawn `.cmd`，所以直接用 process.execPath 跑 bin.js。
- * 优先级：--dsh 参数 > DSH_JS 环境变量 > 自动发现（execPath/cwd 上溯、全局 npm root）。
  * ========================================================================== */
 function findDshEntry() {
   const explicit = arg("--dsh", null);
@@ -150,36 +173,133 @@ function dshMissingHint() {
   );
 }
 
-let auth = null;                 // 身份库句柄
-let keys = null;                 // key 加密句柄
-let conversations = null;        // 对话历史落库句柄
+/* ============================================================================
+ * 并发控制：同一用户同一时刻只允许一个「生成中」的对话。
+ *   runningJobs: userId -> job（null = 已 claim 还没 spawn；job = 运行中的子进程句柄）
+ * ========================================================================== */
+const runningJobs = new Map();
 
-const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
+// dry-run 占位回复的序号（保证「重新生成」能得到不同回答，便于自测断言）
+let dryRunSeq = 0;
 
-const json = (res, code, obj) => {
-  const body = JSON.stringify(obj);
-  res.writeHead(code, { "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(body) });
-  res.end(body);
-};
-function readBody(req, limit) {
-  limit = limit || (1 << 20);
-  return new Promise((resolve) => {
-    let n = 0; const chunks = [];
-    req.on("data", (c) => { n += c.length; if (n > limit) { req.destroy(); return; } chunks.push(c); });
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
+/* ============================================================================
+ * /api/chat 核心流程（异步，事件循环不阻塞）
+ * ========================================================================== */
+async function handleChat(req, res, me, body) {
+  const uid = me.user.id;
+  const conversationId = String(body.conversationId || "").trim();
+  const regenerate = body.regenerate === true;
+  const msgRaw = String(body.message || "").trim();
+
+  if (!conversationId) return json(res, 400, { ok: false, error: "缺少 conversationId" });
+  if (!regenerate && !msgRaw) return json(res, 400, { ok: false, error: "问题不能为空" });
+
+  // 加载对话（归属校验：只取属于当前用户的）
+  const conv = await conversations.get(uid, conversationId);
+  if (!conv) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+
+  let messages = Array.isArray(conv.messages) ? conv.messages : [];
+  let question = msgRaw;
+
+  if (regenerate) {
+    if (!messages.length) return json(res, 400, { ok: false, error: "没有可重新生成的内容" });
+    const last = messages[messages.length - 1];
+    if (last.role === "assistant") {
+      // 删除旧回答，问题 = 它前面那条用户消息
+      let qi = -1;
+      for (let i = messages.length - 2; i >= 0; i--) {
+        if (messages[i].role === "user") { qi = i; break; }
+      }
+      if (qi < 0) return json(res, 400, { ok: false, error: "没有找到对应的问题" });
+      question = String(messages[qi].text || "").trim();
+      if (!question) return json(res, 400, { ok: false, error: "问题为空" });
+      messages = messages.slice(0, messages.length - 1);
+    } else if (last.role === "user") {
+      // 停止后：最后一条是用户问题（没有回答），直接重跑这条问题
+      question = String(last.text || "").trim();
+      if (!question) return json(res, 400, { ok: false, error: "问题为空" });
+    } else {
+      return json(res, 400, { ok: false, error: "无法重新生成" });
+    }
+  } else {
+    messages = messages.concat([{ role: "user", text: question, ts: new Date().toISOString() }]);
+  }
+
+  // 未绑 key 预检：先友好提示，不落库「悬空问题」
+  let preKey = null;
+  try { preKey = await keys.decryptApiKey(uid); } catch (e) { /* 交给 runDshForUser 再报 */ }
+  if (!preKey || !String(preKey).trim()) {
+    return json(res, 409, { ok: false, needKey: true, error: "还没保存你的 PT key（BYOK）。请先到「设置」页保存 key，再开始对话。" });
+  }
+
+  // 先把用户问题落库（停止/失败也不丢问题）
+  await conversations.saveMessages(uid, conversationId, messages);
+
+  // 拼 DSH 任务（历史上下文 + 当前问题）
+  let task = question;
+  if (messages.length > 1) {
+    const hist = messages.slice(0, -1).slice(-6).map((c) => (c.role === "user" ? "用户" : "助手") + "：" + c.text).join("\n");
+    task = "以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + hist + "\n\n用户现在问：" + question;
+  }
+
+  const r = await tenantMod.runDshForUser(uid, task, {
+    tenantId: me.tenant.id,
+    decryptApiKey: keys.decryptApiKey,
+    dryRun: DRY_RUN_CHAT,
+    onSpawn: (job) => { runningJobs.set(uid, job); },
   });
-}
-function cookie(req, name) {
-  const m = (req.headers.cookie || "").match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
-  return m ? decodeURIComponent(m[1]) : null;
-}
-const authed = (req) => (auth ? sessionFromCookie(req, auth) : Promise.resolve(null));
 
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "application/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8", ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".woff2": "font/woff2" };
+  // 兜底：runDshForUser 内部因 key 来源缺失 / 无 key 失败（预检已挡掉大多数，但保留原语义）
+  if (!r.ok && (r.code === tenantMod.NO_API_KEY_CODE || r.code === tenantMod.NO_KEY_SOURCE_CODE)) {
+    return json(res, 409, { ok: false, needKey: true, error: r.error });
+  }
 
-/** 反向代理：把看板藏到业务壳后面。用户看不到 8095，也看不到只读 token。 */
+  // 停止：问题已保存，没跑完的回答丢弃不保存
+  if (r.stopped) {
+    const cur = await conversations.get(uid, conversationId);
+    return json(res, 200, { ok: false, stopped: true, error: "已停止", messages: cur ? cur.messages : messages });
+  }
+
+  if (!r.ok) {
+    // DSH 执行失败：把失败信息作为助手回复落库（历史完整、可「重新生成」重试）
+    const errText = "（DSH 执行失败：" + (r.error || "退出码 " + r.code) + "）" + (r.text ? "\n" + r.text : "");
+    const saved = messages.concat([{ role: "assistant", text: errText, ts: new Date().toISOString() }]);
+    await conversations.saveMessages(uid, conversationId, saved);
+    return json(res, 200, {
+      ok: false, reply: errText, messages: saved,
+      ms: r.ms || 0, exitCode: r.code, error: r.error,
+      turns: saved.filter((m) => m.role === "assistant").length,
+    });
+  }
+
+  // 成功（dry-run 或真实 DSH 输出）
+  let reply = r.text;
+  if (DRY_RUN_CHAT) {
+    reply = "[PT_CHAT_DRYRUN 占位回复 #" + (++dryRunSeq) + " @ " + Date.now() + "，非真实 DSH 输出]";
+  }
+  const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString() }]);
+  await conversations.saveMessages(uid, conversationId, saved);
+
+  const base = {
+    ok: true,
+    reply: reply || "（DSH 没有输出）",
+    messages: saved,
+    ms: r.ms || 0,
+    turns: saved.filter((m) => m.role === "assistant").length,
+  };
+  if (DRY_RUN_CHAT) {
+    return json(res, 200, Object.assign(base, {
+      dryRun: true,
+      tenantId: r.tenantId,
+      workspace: r.cwd,
+      userId: r.userId,
+      keySha256: r.keySha256,
+    }));
+  }
+  return json(res, 200, base);
+}
+
+/** 反向代理：把看板藏到业务壳后面。 */
 function proxyDashboard(req, res, tenantId) {
   const sub = req.url.replace(/^\/dashboard/, "") || "/";
   const target = (sub === "/" || sub === "") ? "/?pt_ro_token=" + encodeURIComponent(DASH_TOKEN) : sub;
@@ -287,82 +407,70 @@ async function handle(req, res) {
     return json(res, 200, Object.assign({ ok: true }, st));
   }
 
-  if (p === "/api/chat/reset" && req.method === "POST") {
-    await conversations.save(me.user.id, []);
-    return json(res, 200, { ok: true });
+  // ---- 停止当前用户正在跑的 DSH ----
+  if (p === "/api/chat/stop" && req.method === "POST") {
+    const uid = me.user.id;
+    const job = runningJobs.get(uid);
+    if (!job) return json(res, 200, { ok: true, stopped: false, error: "当前没有正在运行的任务" });
+    job.kill(); // 杀掉子进程；杀完由 handleChat 里的 close 事件回报 stopped=true，未完成回答丢弃
+    return json(res, 200, { ok: true, stopped: true });
   }
 
-  // ---- 读回对话历史（退出再登录也能看到之前的对话）----
-  if (p === "/api/chat/history" && req.method === "GET") {
-    const messages = await conversations.load(me.user.id);
-    return json(res, 200, { ok: true, messages });
+  // ---- 对话列表 / 新建 ----
+  if (p === "/api/conversations" && req.method === "GET") {
+    const list = await conversations.list(me.user.id);
+    return json(res, 200, { ok: true, conversations: list });
+  }
+  if (p === "/api/conversations" && req.method === "POST") {
+    const conv = await conversations.create(me.user.id);
+    return json(res, 200, { ok: true, id: conv.id, conversation: conv });
   }
 
+  // ---- 单对话：读 / 改标题 / 删除 ----
+  const convMatch = p.match(/^\/api\/conversations\/([^\/]+)$/);
+  if (convMatch) {
+    const id = decodeURIComponent(convMatch[1]);
+    if (req.method === "GET") {
+      const conv = await conversations.get(me.user.id, id);
+      if (!conv) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+      return json(res, 200, { ok: true, conversation: conv });
+    }
+    if (req.method === "PATCH") {
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+      const r = await conversations.rename(me.user.id, id, body.title);
+      if (r.notFound) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+      if (!r.ok) return json(res, 400, { ok: false, error: r.error });
+      return json(res, 200, { ok: true, title: r.title });
+    }
+    if (req.method === "DELETE") {
+      const r = await conversations.remove(me.user.id, id);
+      if (r.notFound) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+      return json(res, 200, { ok: true });
+    }
+  }
+
+  // ---- 发消息 / 重新生成 ----
   if (p === "/api/chat" && req.method === "POST") {
     if (!chatLimiter.allow(clientIp(req))) {
       return json(res, 429, { ok: false, error: "请求过于频繁，请稍后再试" });
     }
-
     let body = {};
     try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
-    const msg = String(body.message || "").trim();
-    if (!msg) return json(res, 400, { ok: false, error: "问题不能为空" });
 
     const uid = me.user.id;
-    const conv = await conversations.load(uid);
-
-    let task = msg;
-    if (conv.length) {
-      const hist = conv.slice(-6).map((c) => (c.role === "user" ? "用户" : "助手") + "：" + c.text).join("\n");
-      task = "以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + hist + "\n\n用户现在问：" + msg;
+    // 并发控制：同一用户同一时刻只允许一个生成中的对话（同步 check-and-set，无 await，原子）
+    if (runningJobs.has(uid)) {
+      return json(res, 409, { ok: false, busy: true, error: "上一个还在跑，请先停止或等它结束" });
     }
-
-    const r = await tenantMod.runDshForUser(uid, task, {
-      tenantId: me.tenant.id,
-      decryptApiKey: keys.decryptApiKey,
-      dryRun: DRY_RUN_CHAT,
-    });
-
-    if (!r.ok && (r.code === tenantMod.NO_API_KEY_CODE || r.code === tenantMod.NO_KEY_SOURCE_CODE)) {
-      return json(res, 409, { ok: false, needKey: true, error: r.error });
+    runningJobs.set(uid, null); // claim 占位（还没真正 spawn）
+    try {
+      return await handleChat(req, res, me, body);
+    } finally {
+      // handleChat 返回即代表本次运行已结束（成功/停止/失败/提前退出），一律清掉占位，
+      // 否则会残留导致该用户永远「上一个还在跑」。
+      runningJobs.delete(uid);
     }
-
-    if (!r.ok) {
-      return json(res, 200, {
-        ok: false,
-        reply: r.text || ("（DSH 执行失败：" + (r.error || "退出码 " + r.code) + "）"),
-        ms: r.ms || 0, exitCode: r.code, error: r.error,
-      });
-    }
-
-    if (DRY_RUN_CHAT) {
-      const prior = conv.length;
-      const saved = conv.concat([
-        { role: "user", text: msg },
-        { role: "assistant", text: "[PT_CHAT_DRYRUN 占位回复，非真实 DSH 输出]" },
-      ]);
-      await conversations.save(uid, saved);
-      return json(res, 200, {
-        ok: true, dryRun: true,
-        tenantId: r.tenantId,
-        workspace: r.cwd,
-        userId: r.userId,
-        keySha256: sha256(r.env.POWERTOKENS_API_KEY),
-        historyMsgs: prior,
-        turns: Math.floor(saved.length / 2),
-      });
-    }
-
-    const saved = conv.concat([
-      { role: "user", text: msg },
-      { role: "assistant", text: r.text },
-    ]);
-    await conversations.save(uid, saved);
-    return json(res, 200, {
-      ok: r.ok,
-      reply: r.text || (r.ok ? "（DSH 没有输出）" : "（DSH 执行失败：" + (r.error || "退出码 " + r.code) + "）"),
-      ms: r.ms, exitCode: r.code, error: r.error, turns: Math.floor(saved.length / 2),
-    });
   }
 
   return json(res, 404, { ok: false, error: "没有这个接口：" + p });
@@ -430,7 +538,7 @@ async function main() {
     }).listen(port, LISTEN_HOST, () => {
       log.info("listening", { port, host: LISTEN_HOST, dbDir: DB_DIR, dashboardPort: DASH_PORT, rateChatPerMin: RATE_CHAT_PER_MIN, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
       console.log("================================================================");
-      console.log("  北极星 · 业务壳（形态 B · 多租户 · 打包发布版）");
+      console.log("  北极星 · 业务壳（形态 B · 多租户 · 对话窗口化）");
       console.log("================================================================");
       console.log("");
       console.log("  ★ 这就是产品对外的唯一入口（DSH 本身不开端口）");
@@ -453,6 +561,7 @@ async function main() {
       console.log("  ★ 日志：结构化 JSON 行 → " + log.LOG_DIR + "（按天切割，零泄露）");
       console.log("  ★ 身份库已就绪：账号/会话落库（" + DB_DIR + "），重启不丢");
       console.log("  ★ 限流已启用（chat 限流 " + RATE_CHAT_PER_MIN + "/分）");
+      console.log("  ★ 并发：同一用户同一时刻只允许一个生成中的对话；不同用户并行");
       console.log("  ★ TRUST_PROXY=" + (process.env.TRUST_PROXY === "1" ? "开" : "关")
         + " · 看板租户透传=" + (DASH_TENANT_INJECT ? "开" : "关（B 方案共享演示数据兜底）"));
       console.log("");

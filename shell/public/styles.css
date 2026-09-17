@@ -46,17 +46,48 @@ background:transparent;color:var(--sideink);font-size:14px;cursor:pointer;text-a
 .pill.bad{background:#fdeaea;color:var(--bad)}
 .view{flex:1;min-height:0;display:none;flex-direction:column}
 .view.on{display:flex}
-/* ---------- 对话 ---------- */
+/* ---------- 对话（多对话窗口：左对话列表 + 右聊天区） ---------- */
+#v-chat.on{flex-direction:row}
+.conv-pane{width:264px;flex:0 0 264px;background:#f0f2f8;border-right:1px solid var(--line);
+  display:flex;flex-direction:column;min-height:0}
+.newconv{margin:12px 12px 8px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;
+  background:#fff;color:var(--brand);font-weight:600;font-family:inherit;cursor:pointer;font-size:13.5px}
+.newconv:hover{border-color:var(--brand);background:#f4f4ff}
+.conv-list{flex:1;overflow:auto;padding:0 10px 12px}
+.conv-empty{padding:20px 14px;color:var(--sub);font-size:12.5px;text-align:center}
+.conv-item{position:relative;margin-bottom:4px;padding:9px 30px 9px 11px;border-radius:9px;cursor:pointer;
+  border:1px solid transparent}
+.conv-item:hover{background:#e7eaf4}
+.conv-item.on{background:#fff;border-color:var(--line);box-shadow:0 1px 4px rgba(15,23,42,.06)}
+.conv-title{font-size:13.5px;color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-sub{font-size:11.5px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-menu{position:absolute;top:6px;right:6px;width:24px;height:24px;border:0;border-radius:6px;
+  background:transparent;color:var(--sub);cursor:pointer;font-size:14px;line-height:1;display:none}
+.conv-item:hover .conv-menu,.conv-item.on .conv-menu{display:block}
+.conv-menu:hover{background:#e0e4f0;color:var(--ink)}
+.conv-menu-pop{position:fixed;z-index:50;background:#fff;border:1px solid var(--line);border-radius:9px;
+  box-shadow:0 8px 24px rgba(15,23,42,.16);padding:5px;min-width:120px}
+.conv-menu-pop button{display:block;width:100%;text-align:left;padding:8px 11px;border:0;border-radius:6px;
+  background:transparent;color:var(--ink);font-family:inherit;font-size:13px;cursor:pointer}
+.conv-menu-pop button:hover{background:#f1f3f9}
+.conv-menu-pop button.danger{color:var(--bad)}
+.conv-menu-pop button.danger:hover{background:#fdeaea}
+.chat-pane{flex:1;min-width:0;display:flex;flex-direction:column}
 .chat{flex:1;overflow:auto;padding:24px}
 .msg{max-width:820px;margin:0 auto 16px;display:flex;gap:12px}
 .msg .av{width:32px;height:32px;flex:0 0 32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
 font-size:13px;font-weight:700;color:#fff}
 .msg.u .av{background:#94a3b8}
 .msg.a .av{background:linear-gradient(135deg,var(--brand),var(--brand2))}
+.msg .box{flex:1;min-width:0}
 .bub{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px 15px;white-space:pre-wrap;
 word-break:break-word;max-width:100%;overflow-x:auto}
 .msg.u .bub{background:#eef1ff;border-color:#dfe4ff}
-.meta{font-size:11.5px;color:var(--sub);margin-top:7px}
+.meta{font-size:11.5px;color:var(--sub);margin-top:7px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.meta .ts{opacity:.85}
+.msgbtn{border:1px solid var(--line);background:#fff;color:var(--sub);border-radius:7px;padding:2px 9px;
+  font-size:11.5px;cursor:pointer;font-family:inherit;line-height:1.5}
+.msgbtn:hover{border-color:var(--brand);color:var(--brand)}
 .compose{border-top:1px solid var(--line);background:#fff;padding:14px 24px 18px}
 .compose .in{max-width:820px;margin:0 auto;display:flex;gap:10px;align-items:flex-end}
 .compose textarea{flex:1;resize:none;padding:11px 13px;border:1px solid var(--line);border-radius:11px;
@@ -65,17 +96,25 @@ font:14px/1.5 inherit;outline:none;min-height:46px;max-height:170px}
 .compose .send{padding:12px 20px;border:0;border-radius:11px;cursor:pointer;font-weight:600;font-family:inherit;
 background:linear-gradient(135deg,var(--brand),var(--brand2));color:#fff}
 .compose .send:disabled{opacity:.5;cursor:default}
+.compose .stop{padding:12px 18px;border:1px solid var(--bad);border-radius:11px;cursor:pointer;font-weight:600;
+font-family:inherit;background:#fff;color:var(--bad)}
+.compose .stop:hover{background:#fdeaea}
 .quick{max-width:820px;margin:0 auto 10px;display:flex;gap:8px;flex-wrap:wrap}
 .quick button{font-size:12.5px;padding:6px 12px;border:1px solid var(--line);background:#fff;border-radius:999px;
 cursor:pointer;color:var(--sub);font-family:inherit}
 .quick button:hover{border-color:var(--brand);color:var(--brand)}
 .empty{max-width:820px;margin:8px auto;color:var(--sub);text-align:center;padding:40px 20px}
 .empty h3{color:var(--ink);margin:0 0 8px}
+.empty .empty-hint{margin-top:10px;font-size:12.5px}
 .typing{display:inline-block}
 .typing i{display:inline-block;width:6px;height:6px;margin-right:3px;border-radius:50%;background:var(--brand);
 animation:bl 1.2s infinite}
 .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
 @keyframes bl{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+.stopped-bar{max-width:820px;margin:0 auto 16px;display:flex;align-items:center;gap:12px;
+  background:#fdf3e7;border:1px solid #f5d9b8;border-radius:10px;padding:10px 14px;color:#9a5b13;font-size:13px}
+.stopped-bar .msgbtn{background:#fff}
+.sysline{max-width:820px;margin:0 auto 16px;text-align:center;color:var(--sub);font-size:12.5px}
 /* ---------- 看板 ---------- */
 #dashFrame{flex:1;border:0;width:100%;background:#fff}
 /* ---------- 卡片区 ---------- */

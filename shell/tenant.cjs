@@ -1,11 +1,18 @@
 "use strict";
 /**
- * tenant.cjs —— 多租户租户隔离（U3.1）
+ * tenant.cjs —— 多租户租户隔离（U3.1 · 异步化改造）
  * ============================================================================
- * 职责：
+ * 职责（与旧版一致）：
  *   · workspace 隔离：1 用户 = 1 租户，每人一个独立工作区目录（防穿越）；
  *   · env 注入：明文 PT key 只在 spawn 时注入一次 env，绝不落盘；
  *   · DSH 入口发现（跨平台）：优先 DSH_JS 环境变量，其次自动发现，找不到给中文报错。
+ *
+ * 异步化改造（对话窗口化）：
+ *   · runDshForUser 不再用 spawnSync（会阻塞整个事件循环，一个对话卡住就拖垮所有浏览器），
+ *     改为异步 spawn，返回 Promise；事件循环不再阻塞；
+ *   · 通过 opts.onSpawn(job) 把「运行中的子进程句柄」交给接线方（server.cjs），
+ *     job 上有 kill() —— 停止就是 kill 子进程，杀完由 close 事件回报 stopped=true；
+ *   · buildSpec 顺带算好 keySha256（只存哈希，绝不把明文 key 带出 spawn 范围）。
  *
  * key 来源三级回退（只在 runDshForUser 内部解析一次）：
  *   ① opts.decryptApiKey —— 接线方 initKeys({db}) 后传入的「绑定函数」（推荐）；
@@ -15,7 +22,8 @@
  */
 const fs = require("fs");
 const path = require("path");
-const { spawnSync } = require("child_process");
+const crypto = require("crypto");
+const { spawn, spawnSync } = require("child_process");
 
 const SHELL = __dirname;
 const REPO_ROOT = path.resolve(SHELL, "..");
@@ -29,6 +37,8 @@ const TMP = path.join(RUNTIME, "_tmp");
 
 const NO_API_KEY_CODE = "NO_API_KEY";       // 用户没存 key（decrypt 返回 null/空）
 const NO_KEY_SOURCE_CODE = "NO_KEY_SOURCE"; // 服务端没接到 key 来源（接线缺失/无 stub）
+
+const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
 /* ============================================================================
  * DSH 入口发现（跨平台）
@@ -183,7 +193,7 @@ async function resolveDecryptApiKey(opts = {}) {
 }
 
 /* ============================================================================
- * 组装一次 spawn 参数（明文 key 只在 env 出现一次）
+ * 组装一次 spawn 参数（明文 key 只在 env 出现一次；顺带算 keySha256，明文不带出）
  * ========================================================================== */
 function buildSpec(tenantId, workspace, userId, task, opts, apiKey) {
   const dshHome = opts.dshHome || DSH_HOME;
@@ -196,36 +206,95 @@ function buildSpec(tenantId, workspace, userId, task, opts, apiKey) {
   env.POWERTOKENS_API_KEY = String(apiKey);
 
   const argv = [entry, "--profile", profile.name, String(task)];
-  return { argv, env, cwd: workspace, profile, dshHome, entry, userId, tenantId };
+  return {
+    argv, env, cwd: workspace, profile, dshHome, entry, userId, tenantId,
+    keySha256: sha256(String(apiKey)),
+  };
 }
 
-function spawnDsh(spec, opts = {}) {
+/* ============================================================================
+ * 异步 spawn（事件循环不阻塞）；opts.onSpawn(job) 让接线方拿到可 kill 的句柄。
+ * ========================================================================== */
+function spawnDshAsync(spec, opts = {}) {
   if (!spec.entry) {
-    return { ok: false, code: "NO_DSH", text: "", ms: 0, exitCode: null,
-             error: dshMissingHint(),
-             workspace: spec.cwd, tenantId: spec.tenantId };
+    return Promise.resolve({
+      ok: false, code: "NO_DSH", text: "", ms: 0, exitCode: null,
+      error: dshMissingHint(),
+      workspace: spec.cwd, tenantId: spec.tenantId, keySha256: spec.keySha256,
+    });
   }
   const tmpDir = opts.tmpDir || TMP;
   fs.mkdirSync(tmpDir, { recursive: true });
   const outFile = path.join(tmpDir, "out-" + spec.profile.name + ".txt");
   const fd = fs.openSync(outFile, "w");
   const t0 = Date.now();
-  const res = spawnSync(process.execPath, spec.argv, {
-    cwd: spec.cwd, env: spec.env, stdio: ["ignore", fd, fd],
-    timeout: opts.timeoutMs || 300000, windowsHide: true,
+
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(process.execPath, spec.argv, {
+        cwd: spec.cwd, env: spec.env,
+        stdio: ["ignore", fd, fd], windowsHide: true,
+      });
+    } catch (e) {
+      try { fs.closeSync(fd); } catch (e2) {}
+      return resolve({
+        ok: false, code: "SPAWN", text: "", ms: Date.now() - t0,
+        error: String((e && e.message) || e),
+        workspace: spec.cwd, tenantId: spec.tenantId, keySha256: spec.keySha256,
+      });
+    }
+
+    const job = {
+      child,
+      stopped: false,
+      kill() { this.stopped = true; try { this.child.kill(); } catch (e) {} },
+      outFile,
+      t0,
+      spec,
+    };
+    if (typeof opts.onSpawn === "function") { try { opts.onSpawn(job); } catch (e) {} }
+
+    let settled = false;
+    const finish = (result) => {
+      if (settled) return;
+      settled = true;
+      try { fs.closeSync(fd); } catch (e) {}
+      resolve(result);
+    };
+
+    child.on("error", (e) => {
+      finish({
+        ok: false, code: (e && e.code) || "SPAWN", text: "", ms: Date.now() - t0,
+        error: String((e && e.message) || e), stopped: job.stopped,
+        workspace: spec.cwd, tenantId: spec.tenantId, keySha256: spec.keySha256,
+      });
+    });
+
+    child.on("close", (code, signal) => {
+      let text = "";
+      try { text = fs.readFileSync(outFile, "utf8"); } catch (e) {}
+      text = text.replace(/^\uFEFF/, "").trim();
+      const stopped = job.stopped;
+      finish({
+        ok: !stopped && code === 0,
+        stopped,
+        text,
+        ms: Date.now() - t0,
+        code,
+        signal: signal || null,
+        error: stopped ? "已停止" : null,
+        workspace: spec.cwd,
+        tenantId: spec.tenantId,
+        userId: spec.userId,
+        keySha256: spec.keySha256,
+      });
+    });
   });
-  fs.closeSync(fd);
-  let text = "";
-  try { text = fs.readFileSync(outFile, "utf8"); } catch (e) {}
-  text = text.replace(/^\uFEFF/, "").trim();
-  const error = res.error ? (res.error.code || res.error.message || String(res.error)) : null;
-  return { ok: res.status === 0, text, ms: Date.now() - t0,
-           code: res.status, exitCode: res.status, error,
-           workspace: spec.cwd, tenantId: spec.tenantId };
 }
 
 /* ============================================================================
- * runDshForUser(userId, task, opts?)
+ * runDshForUser(userId, task, opts?) —— 异步版
  * ========================================================================== */
 async function runDshForUser(userId, task, opts = {}) {
   const uid = String(userId || "").trim();
@@ -263,7 +332,7 @@ async function runDshForUser(userId, task, opts = {}) {
 
   const spec = buildSpec(tenantId, workspace, userId, task, opts, apiKey);
   if (opts.dryRun) return { ok: true, dryRun: true, ...spec };
-  return spawnDsh(spec, opts);
+  return spawnDshAsync(spec, opts);
 }
 
 module.exports = {
