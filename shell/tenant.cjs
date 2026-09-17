@@ -104,9 +104,23 @@ function dshMissingHint() {
 /* ============================================================================
  * profile（每跑一个轻量 profile；node_modules 是 junction 共享，不按租户复制）
  * ========================================================================== */
+const SETTINGS_TEMPLATE = path.join(SHELL, "dsh-settings.yaml");
+function ensureDshHomeConfig(dshHome) {
+  const home = dshHome || DSH_HOME;
+  const dst = path.join(home, "settings.yaml");
+  if (fs.existsSync(dst)) return;
+  fs.mkdirSync(home, { recursive: true });
+  if (fs.existsSync(SETTINGS_TEMPLATE)) {
+    try { fs.copyFileSync(SETTINGS_TEMPLATE, dst); }
+    catch (e) { process.stderr.write("[DSH] settings.yaml 播种失败：" + e.message + "\n"); }
+  } else {
+    process.stderr.write("[DSH] 警告：仓库缺 dsh-settings.yaml 模板，DSH 将回退默认模型路由\n");
+  }
+}
 let profileSeq = 0;
 function makeProfile(dshHome) {
   const home = dshHome || DSH_HOME;
+  ensureDshHomeConfig(home);
   const name = "run-" + Date.now().toString(36) + "-" + (profileSeq++).toString(36);
   const dir = path.join(home, "profiles", name);
   fs.mkdirSync(dir, { recursive: true });
