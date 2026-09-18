@@ -118,19 +118,23 @@ function ensureDshHomeConfig(dshHome) {
     process.stderr.write("[DSH] 警告：仓库缺 dsh-settings.yaml 模板，DSH 将回退默认模型路由\n");
   }
 }
-let profileSeq = 0;
 function makeProfile(dshHome) {
   const home = dshHome || DSH_HOME;
   ensureDshHomeConfig(home);
-  const name = "run-" + Date.now().toString(36) + "-" + (profileSeq++).toString(36);
+  const name = "run-fixed";
   const dir = path.join(home, "profiles", name);
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({
-    name: "dsh-profile-" + name, private: true, dependencies: {},
-    dsh: { profile: { bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } },
-  }), "utf8");
-  fs.writeFileSync(path.join(dir, "pnpm-workspace.yaml"),
-    "packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n", "utf8");
+  const pkgFile = path.join(dir, "package.json");
+  if (!fs.existsSync(pkgFile)) {
+    fs.writeFileSync(pkgFile, JSON.stringify({
+      name: "dsh-profile-" + name, private: true, dependencies: {},
+      dsh: { profile: { bundles: ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless"] } },
+    }), "utf8");
+  }
+  const wsFile = path.join(dir, "pnpm-workspace.yaml");
+  if (!fs.existsSync(wsFile)) {
+    fs.writeFileSync(wsFile, "packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n", "utf8");
+  }
   return { name, dir };
 }
 
@@ -250,7 +254,7 @@ function spawnDshAsync(spec, opts = {}) {
   }
   const tmpDir = opts.tmpDir || TMP;
   fs.mkdirSync(tmpDir, { recursive: true });
-  const outFile = path.join(tmpDir, "out-" + spec.profile.name + ".txt");
+  const outFile = path.join(tmpDir, "out-" + Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex") + ".txt");
   const fd = fs.openSync(outFile, "w");
   const t0 = Date.now();
 
@@ -300,6 +304,7 @@ function spawnDshAsync(spec, opts = {}) {
       let text = "";
       try { text = fs.readFileSync(outFile, "utf8"); } catch (e) {}
       text = text.replace(/^\uFEFF/, "").trim();
+      try { fs.unlinkSync(outFile); } catch (e) {}
       const stopped = job.stopped;
       finish({
         ok: !stopped && code === 0,

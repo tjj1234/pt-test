@@ -46,7 +46,7 @@ function bubbleSys(text) {
 function thinking() {
   const el = document.createElement("div");
   el.className = "msg a";
-  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 正在查数据、跑技能…</div></div>';
+  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 正在查数据、跑技能…<span class="elapsed"></span></div></div>';
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight;
   return el;
 }
@@ -265,7 +265,7 @@ async function runChat(payload) {
   setBusy(true);
   const t = thinking();
   const t0 = Date.now();
-  const tick = setInterval(() => { cm.textContent = "已等待 " + Math.round((Date.now() - t0) / 1000) + " 秒…"; }, 1000);
+  const tick = setInterval(() => { const e = t.querySelector(".elapsed"); if (e) e.textContent = "（已等待 " + Math.round((Date.now() - t0) / 1000) + " 秒）"; }, 1000);
   try {
     const r = await fetch("/api/chat", {
       method: "POST", credentials: "same-origin",
