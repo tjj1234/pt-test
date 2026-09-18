@@ -34,6 +34,7 @@ const DSH_HOME = path.join(RUNTIME, "dsh-home");
 const SHARED_WORKSPACE = path.join(RUNTIME, "workspace");
 const SKILLS_SOURCE = path.join(SHARED_WORKSPACE, ".dsh", "skills");
 const TMP = path.join(RUNTIME, "_tmp");
+const PERSONA_FILE = path.join(SHELL, "agent-persona.md");
 
 const NO_API_KEY_CODE = "NO_API_KEY";       // 用户没存 key（decrypt 返回 null/空）
 const NO_KEY_SOURCE_CODE = "NO_KEY_SOURCE"; // 服务端没接到 key 来源（接线缺失/无 stub）
@@ -209,6 +210,14 @@ async function resolveDecryptApiKey(opts = {}) {
 /* ============================================================================
  * 组装一次 spawn 参数（明文 key 只在 env 出现一次；顺带算 keySha256，明文不带出）
  * ========================================================================== */
+/** 读取人设（agent-persona.md）；缺文件/空文件返回空串，不影响正常对话。 */
+function readPersona() {
+  try {
+    const t = fs.readFileSync(PERSONA_FILE, "utf8").trim();
+    return t || "";
+  } catch (e) { return ""; }
+}
+
 function buildSpec(tenantId, workspace, userId, task, opts, apiKey) {
   const dshHome = opts.dshHome || DSH_HOME;
   const entry = opts.dshEntry || DSH.js;
@@ -219,7 +228,9 @@ function buildSpec(tenantId, workspace, userId, task, opts, apiKey) {
   if (nodePath) env.NODE_PATH = nodePath;
   env.POWERTOKENS_API_KEY = String(apiKey);
 
-  const argv = [entry, "--profile", profile.name, String(task)];
+  const persona = readPersona();
+  const fullTask = persona ? ("【系统设定】\n" + persona + "\n\n【用户问题】\n" + String(task)) : String(task);
+  const argv = [entry, "--profile", profile.name, fullTask];
   return {
     argv, env, cwd: workspace, profile, dshHome, entry, userId, tenantId,
     keySha256: sha256(String(apiKey)),
