@@ -304,6 +304,9 @@ async function ask(msg) {
     if (!id) return;
   }
   ta.value = ""; ta.style.height = "auto";
+  // 立即渲染用户消息（乐观更新），AI 回复回来后再用服务器完整列表覆盖
+  renderMessage({ role: "user", text: msg, ts: Date.now() });
+  chat.scrollTop = chat.scrollHeight;
   await runChat({ conversationId: state.activeId, message: msg });
 }
 
