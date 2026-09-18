@@ -242,61 +242,65 @@ async function handleChat(req, res, me, body) {
     task = "以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + hist + "\n\n用户现在问：" + question;
   }
 
+  // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  res.flushHeaders();
+  const sse = (obj) => { try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (e) {} };
+
   const r = await tenantMod.runDshForUser(uid, task, {
     tenantId: me.tenant.id,
     decryptApiKey: keys.decryptApiKey,
     dryRun: DRY_RUN_CHAT,
     onSpawn: (job) => { runningJobs.set(uid, job); },
+    onDelta: (delta) => { sse({ delta }); },
   });
 
-  // 兜底：runDshForUser 内部因 key 来源缺失 / 无 key 失败（预检已挡掉大多数，但保留原语义）
+  // 兜底：runDshForUser 内部因 key 来源缺失 / 无 key 失败
   if (!r.ok && (r.code === tenantMod.NO_API_KEY_CODE || r.code === tenantMod.NO_KEY_SOURCE_CODE)) {
-    return json(res, 409, { ok: false, needKey: true, error: r.error });
+    sse({ done: true, ok: false, needKey: true, error: r.error, messages });
+    return res.end();
   }
 
   // 停止：问题已保存，没跑完的回答丢弃不保存
   if (r.stopped) {
     const cur = await conversations.get(uid, conversationId);
-    return json(res, 200, { ok: false, stopped: true, error: "已停止", messages: cur ? cur.messages : messages });
+    sse({ done: true, ok: false, stopped: true, error: "已停止", messages: cur ? cur.messages : messages });
+    return res.end();
   }
 
   if (!r.ok) {
-    // DSH 执行失败：把失败信息作为助手回复落库（历史完整、可「重新生成」重试）
+    // DSH 执行失败：把失败信息作为助手回复落库
     const errText = "（DSH 执行失败：" + (r.error || "退出码 " + r.code) + "）" + (r.text ? "\n" + r.text : "");
     const saved = messages.concat([{ role: "assistant", text: errText, ts: new Date().toISOString() }]);
     await conversations.saveMessages(uid, conversationId, saved);
-    return json(res, 200, {
-      ok: false, reply: errText, messages: saved,
-      ms: r.ms || 0, exitCode: r.code, error: r.error,
-      turns: saved.filter((m) => m.role === "assistant").length,
-    });
+    sse({ done: true, ok: false, reply: errText, messages: saved, error: r.error, turns: saved.filter((m) => m.role === "assistant").length });
+    return res.end();
   }
 
   // 成功（dry-run 或真实 DSH 输出）
   let reply = r.text;
   if (DRY_RUN_CHAT) {
     reply = "[PT_CHAT_DRYRUN 占位回复 #" + (++dryRunSeq) + " @ " + Date.now() + "，非真实 DSH 输出]";
+    sse({ delta: reply });
   }
   const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString() }]);
   await conversations.saveMessages(uid, conversationId, saved);
 
-  const base = {
+  sse({
+    done: true,
     ok: true,
     reply: reply || "（DSH 没有输出）",
     messages: saved,
     ms: r.ms || 0,
     turns: saved.filter((m) => m.role === "assistant").length,
-  };
-  if (DRY_RUN_CHAT) {
-    return json(res, 200, Object.assign(base, {
-      dryRun: true,
-      tenantId: r.tenantId,
-      workspace: r.cwd,
-      userId: r.userId,
-      keySha256: r.keySha256,
-    }));
-  }
-  return json(res, 200, base);
+    ...(DRY_RUN_CHAT ? { dryRun: true, tenantId: r.tenantId, workspace: r.cwd, userId: r.userId, keySha256: r.keySha256 } : {}),
+  });
+  return res.end();
 }
 
 /** 反向代理：把看板藏到业务壳后面。 */

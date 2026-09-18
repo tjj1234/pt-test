@@ -284,10 +284,31 @@ function spawnDshAsync(spec, opts = {}) {
     };
     if (typeof opts.onSpawn === "function") { try { opts.onSpawn(job); } catch (e) {} }
 
+    // 流式：轮询 outFile 增量，逐段回调 opts.onDelta(text)（DSH headless 已逐字写 stdout）
+    let deltaTimer = null;
+    let lastSize = 0;
+    if (typeof opts.onDelta === "function") {
+      deltaTimer = setInterval(() => {
+        try {
+          const st = fs.statSync(outFile);
+          if (st.size > lastSize) {
+            const len = st.size - lastSize;
+            const buf = Buffer.alloc(len);
+            const rfd = fs.openSync(outFile, "r");
+            try { fs.readSync(rfd, buf, 0, len, lastSize); } finally { fs.closeSync(rfd); }
+            lastSize = st.size;
+            const delta = buf.toString("utf8");
+            if (delta) opts.onDelta(delta);
+          }
+        } catch (e) { /* 忽略轮询瞬时错误 */ }
+      }, 50);
+    }
+
     let settled = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
+      if (deltaTimer) clearInterval(deltaTimer);
       try { fs.closeSync(fd); } catch (e) {}
       resolve(result);
     };

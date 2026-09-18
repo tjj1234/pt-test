@@ -50,6 +50,13 @@ function thinking() {
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight;
   return el;
 }
+
+/* 流式：把 thinking 气泡转成逐字增长的回复气泡 */
+function streamInto(el, text) {
+  const bub = el.querySelector(".bub");
+  if (bub) bub.textContent = text;
+  chat.scrollTop = chat.scrollHeight;
+}
 /* P0-3：未绑 key 的友好提示 + 「去绑定」按钮（不是「执行失败」） */
 function needKeyBubble() {
   const el = document.createElement("div");
@@ -271,25 +278,57 @@ async function runChat(payload) {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
     });
-    const j = await r.json().catch(() => null);
-    clearInterval(tick); t.remove();
+    const ct = (r.headers.get("content-type") || "");
 
-    if (!r.ok && r.status === 409 && j && j.needKey) {
-      needKeyBubble(); cm.textContent = "";
-    } else if (!r.ok && r.status === 409 && j && j.busy) {
-      bubbleSys(j.error || "上一个还在跑，请先停止或等它结束"); cm.textContent = "";
-    } else if (j && j.stopped) {
-      renderChat(j.messages); showStoppedBar(); cm.textContent = "已停止";
-    } else if (j && j.ok) {
-      renderChat(j.messages);
-      cm.textContent = "第 " + j.turns + " 轮 · 上下文由业务壳维护（headless 不续接会话）";
+    if (ct.indexOf("text/event-stream") >= 0) {
+      // 流式：逐段消费 SSE，边到边打字机渲染
+      const reader = r.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buf = "", acc = "", gotDone = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n\n")) >= 0) {
+          const frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+          const line = frame.split("\n").find((l) => l.indexOf("data: ") === 0);
+          if (!line) continue;
+          let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
+          if (obj.delta) { acc += obj.delta; streamInto(t, acc); }
+          if (obj.done) {
+            gotDone = true;
+            clearInterval(tick); t.remove();
+            if (obj.stopped) { renderChat(obj.messages); showStoppedBar(); cm.textContent = "已停止"; }
+            else if (obj.ok) { renderChat(obj.messages); cm.textContent = "第 " + obj.turns + " 轮 · 上下文由业务壳维护（headless 不续接会话）"; }
+            else { if (Array.isArray(obj.messages)) renderChat(obj.messages); else bubbleSys("执行失败：" + (obj.error || "")); cm.textContent = ""; }
+            await refreshList();
+          }
+        }
+      }
+      // 保险：流异常结束却没收到 done
+      if (!gotDone) { clearInterval(tick); t.remove(); if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() }); }
     } else {
-      const err = (j && j.error) ? j.error : ("HTTP " + r.status);
-      if (j && Array.isArray(j.messages)) renderChat(j.messages);
-      else bubbleSys("执行失败：" + err);
-      cm.textContent = "";
+      // 非流式（预检错误 / needKey / busy 等 JSON）
+      const j = await r.json().catch(() => null);
+      clearInterval(tick); t.remove();
+      if (!r.ok && r.status === 409 && j && j.needKey) {
+        needKeyBubble(); cm.textContent = "";
+      } else if (!r.ok && r.status === 409 && j && j.busy) {
+        bubbleSys(j.error || "上一个还在跑，请先停止或等它结束"); cm.textContent = "";
+      } else if (j && j.stopped) {
+        renderChat(j.messages); showStoppedBar(); cm.textContent = "已停止";
+      } else if (j && j.ok) {
+        renderChat(j.messages);
+        cm.textContent = "第 " + j.turns + " 轮 · 上下文由业务壳维护（headless 不续接会话）";
+      } else {
+        const err = (j && j.error) ? j.error : ("HTTP " + r.status);
+        if (j && Array.isArray(j.messages)) renderChat(j.messages);
+        else bubbleSys("执行失败：" + err);
+        cm.textContent = "";
+      }
+      await refreshList();
     }
-    await refreshList();
   } catch (x) {
     clearInterval(tick); t.remove(); bubbleSys("请求出错：" + x.message); cm.textContent = "";
   } finally {
