@@ -539,6 +539,7 @@ async function runDshForUser(userId, question, opts = {}) {
 
   const spec = buildSpec(tenantId, workspace, userId, opts, apiKey);
   if (opts.dryRun) return { ok: true, dryRun: true, ...spec };
+  opts.question = question;   // 注入问题：runDshPersistent 用它拼「用户现在问：…」
   return runDshPersistent(spec, opts);
 }
 
