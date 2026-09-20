@@ -289,27 +289,20 @@ async function handleChat(req, res, me, body) {
   // 先把用户问题落库（停止/失败也不丢问题）
   await conversations.saveMessages(uid, conversationId, messages);
 
-  // 拼 DSH 任务（历史上下文 + 当前问题 + 长期记忆 + 图片路径）
-  let task = question;
-  const parts = [];
-  // ⑪ 注入用户长期记忆
-  let memLines = [];
-  try { memLines = (memory && (await memory.memoryLines(uid))) || []; } catch (e) { memLines = []; }
-  if (memLines.length) {
-    parts.push("用户长期记忆：\n" + memLines.map((l) => "  · " + l).join("\n"));
-  }
+  // 组装上下文（交给 tenant 常驻层决定冷/热：冷启动才补历史，热会话由 DSH session 持有轨迹）
+  let memText = "";
+  try { memText = ((memory && (await memory.memoryLines(uid))) || []).map((l) => "  · " + l).join("\n"); } catch (e) { memText = ""; }
+  let histText = "";
   if (messages.length > 1) {
-    const hist = messages.slice(0, -1).slice(-6).map((c) => (c.role === "user" ? "用户" : "助手") + "：" + c.text).join("\n");
-    parts.push("以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + hist);
+    histText = messages.slice(0, -1).slice(-6).map((c) => (c.role === "user" ? "用户" : "助手") + "：" + c.text).join("\n");
   }
   // ⑨ 图片路径说明（多模态：告知 DSH 图片已上传到本地路径）
   const lastUser = messages[messages.length - 1];
+  let imageNote = "";
   if (lastUser && lastUser.image) {
     const imgAbs = uploadsAbsPath(lastUser.image);
-    parts.push("用户这次附带了一张图片，已上传到本地路径：" + imgAbs + "（如你有读取文件 / 识别图片的能力请读取它；否则请据路径说明你暂无法直接看图）");
+    imageNote = "用户这次附带了一张图片，已上传到本地路径：" + imgAbs + "（如你有读取文件 / 识别图片的能力请读取它；否则请据路径说明你暂无法直接看图）";
   }
-  parts.push("用户现在问：" + question);
-  task = parts.join("\n\n");
 
   // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
   res.writeHead(200, {
@@ -321,8 +314,12 @@ async function handleChat(req, res, me, body) {
   res.flushHeaders();
   const sse = (obj) => { try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (e) {} };
 
-  const r = await tenantMod.runDshForUser(uid, task, {
+  const r = await tenantMod.runDshForUser(uid, question, {
     tenantId: me.tenant.id,
+    conversationId,
+    history: histText,
+    memory: memText,
+    imageNote,
     decryptApiKey: keys.decryptApiKey,
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
@@ -541,6 +538,8 @@ async function handle(req, res) {
     if (req.method === "DELETE") {
       const r = await conversations.remove(me.user.id, id);
       if (r.notFound) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+      // 常驻架构：同步释放该对话对应的 DSH session（轨迹）
+      try { tenantMod.closeDshSession(id); } catch (e) {}
       return json(res, 200, { ok: true });
     }
   }

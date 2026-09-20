@@ -1,0 +1,173 @@
+import { writeSync } from "node:fs";
+import { installModelSelection } from "@deepseek-ai/dsh-agent";
+import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { SessionId } from "@deepseek-ai/dsh-session";
+
+/**
+ * persistent-runner —— 常驻 agent 驱动插件（替代 headless 一次性 runner）。
+ * 挂载在 dsh-base 上（无 headless），通过 stdin/stdout 走 JSON-lines 协议：
+ *   stdin  命令： {"type":"task","sessionId":..,"task":..,"model":..,"first":..}
+ *               {"type":"close","sessionId":..}
+ *               {"type":"ping"}  /  {"type":"exit"}
+ *   stdout 事件： {"type":"ready"} | {"type":"delta","sessionId":..,"text":..}
+ *               {"type":"done","sessionId":..,"ok":..,"text":..,"reason":..,"ms":..}
+ *               {"type":"closed","sessionId":..} | {"type":"error",..} | {"type":"pong"}
+ * 同一 sessionId 复用同一个 Agent（session 持久 = 轨迹可见）；进程常驻不退出。
+ */
+
+const name = "persistent-runner";
+const inject = ["agentDefaultModel", "agents", "sessions"];
+
+function emit(obj) {
+  try { writeSync(1, JSON.stringify(obj) + "\n"); } catch (e) { /* stdout 关闭时忽略 */ }
+}
+
+/** 汇总一次 turn（seq >= firstSeq 的事件）里的最后一段 assistant 文本 + 结束原因。 */
+function summarize(events, firstSeq) {
+  let started = false;
+  let text = "";
+  let reason;
+  for (const event of events) {
+    if (event.seq < firstSeq) continue;
+    if (event.type === "turn/start") { started = true; continue; }
+    if (!started) continue;
+    if (event.type === "assistant/message") {
+      const joined = (event.data?.message?.content || [])
+        .filter((block) => block.type === "text")
+        .map((block) => block.text).join("");
+      if (joined !== "") text = joined;
+    }
+    if (event.type === "turn/end") reason = event.data?.reason;
+  }
+  return { text, reason };
+}
+
+function apply(ctx) {
+  (async () => {
+    await ctx.get("loader")?.await();
+    const agents = ctx.get("agents");
+    const defaultModel = ctx.get("agentDefaultModel");
+    const sessions = ctx.get("sessions");
+    if (!agents || !defaultModel || !sessions) {
+      emit({ type: "error", message: "persistent-runner: 核心服务缺失（agents/sessions/agentDefaultModel）" });
+      return;
+    }
+
+    const agentMap = new Map();       // sessionId -> { agent }
+    const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
+    let busy = false;                 // 顺序处理命令，避免同进程并发干扰
+
+    // 逐字流：把每个 assistant 文本增量路由到对应 sessionId
+    ctx.on("session/event", (session, event) => {
+      const sid = sessionKey.get(session);
+      if (!sid) return;
+      if (event.type !== "assistant/chunk") return;
+      const chunk = event.data?.chunk;
+      if (chunk?.type === "text-delta" && chunk.text) {
+        emit({ type: "delta", sessionId: sid, text: chunk.text });
+      }
+    });
+
+    async function handleTask(cmd) {
+      const sid = String(cmd.sessionId || "").trim();
+      const task = String(cmd.task || "").trim();
+      if (!sid) { emit({ type: "done", sessionId: sid, ok: false, error: "缺 sessionId" }); return; }
+      if (!task) { emit({ type: "done", sessionId: sid, ok: false, error: "任务不能为空" }); return; }
+      const t0 = Date.now();
+
+      let rec = agentMap.get(sid);
+      try {
+        if (!rec) {
+          const selection = defaultModel.currentSelection();
+          const provider = cmd.provider || selection.provider;
+          const model = cmd.model || selection.model;
+          const { agent } = await agents.create({
+            sessionId: SessionId("session-" + sid),
+            meta: { cwd: process.cwd() },
+            agentOptions: { provider, model },
+            setup: (agentCtx) => {
+              installModelSelection(agentCtx, { current: { provider, model }, assembled: void 0 });
+            },
+          });
+          await agent.whenIdle();
+          rec = { agent };
+          agentMap.set(sid, rec);
+          sessionKey.set(agent.session, sid);
+        }
+
+        const agent = rec.agent;
+        const firstSeq = agent.session.seq;
+        agent.followup(createUserMessage({
+          content: [{ type: "text", text: task }],
+          source: { kind: "user" },
+        }));
+        await agent.whenIdle();
+        await sessions.flush(agent.session);
+        const outcome = summarize(agent.session.events, firstSeq);
+        emit({
+          type: "done", sessionId: sid,
+          ok: outcome.reason?.kind === "completed" || outcome.text !== "",
+          text: outcome.text,
+          reason: outcome.reason?.kind ?? null,
+          reasonDetail: outcome.reason?.error ? { code: outcome.reason.error.code, message: outcome.reason.error.message } : null,
+          ms: Date.now() - t0,
+        });
+      } catch (e) {
+        emit({ type: "done", sessionId: sid, ok: false, error: String(e && e.message || e), ms: Date.now() - t0 });
+      }
+    }
+
+    async function handleClose(cmd) {
+      const sid = String(cmd.sessionId || "").trim();
+      const rec = agentMap.get(sid);
+      if (rec) {
+        try { await sessions.flush(rec.agent.session); } catch (e) { /* 忽略 */ }
+        sessionKey.delete(rec.agent.session);
+        agentMap.delete(sid);
+      }
+      emit({ type: "closed", sessionId: sid });
+    }
+
+    function shutdown() {
+      emit({ type: "bye" });
+      const exit = ctx.get("appExit");
+      if (typeof exit === "function") exit(0);
+      else process.exit(0);
+    }
+
+    async function handleLine(line) {
+      let cmd;
+      try { cmd = JSON.parse(line); } catch (e) { emit({ type: "error", message: "bad json: " + line }); return; }
+      switch (cmd.type) {
+        case "ping": emit({ type: "pong" }); return;
+        case "task": await handleTask(cmd); return;
+        case "close": await handleClose(cmd); return;
+        case "exit": shutdown(); return;
+        default: emit({ type: "error", message: "unknown cmd: " + cmd.type }); return;
+      }
+    }
+
+    // stdin 顺序消费（一条命令处理完再处理下一条）
+    let buf = "";
+    let queue = Promise.resolve();
+    process.stdin.setEncoding("utf8");
+    process.stdin.on("data", (chunk) => {
+      buf += chunk;
+      let idx;
+      while ((idx = buf.indexOf("\n")) >= 0) {
+        const line = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 1);
+        if (!line) continue;
+        queue = queue.then(() => handleLine(line)).catch((e) => emit({ type: "error", message: String(e && e.message || e) }));
+      }
+    });
+    process.stdin.on("end", () => { queue.then(() => shutdown()); });
+
+    emit({ type: "ready" });
+  })().catch((e) => {
+    emit({ type: "error", message: String(e && e.message || e) });
+    process.exit(1);
+  });
+}
+
+export { name, inject, apply };
