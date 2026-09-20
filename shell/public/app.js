@@ -24,7 +24,7 @@ function fmtShort(ts) {
 }
 
 /* ---- 视图切换 ---- */
-const TITLES = { chat: "对话", dash: "归因看板", skills: "技能", status: "运行状态" };
+const TITLES = { chat: "对话", dash: "归因看板", skills: "技能", status: "运行状态", memory: "长期记忆" };
 document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => {
   const v = b.dataset.v;
   document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("on", x === b));
@@ -33,6 +33,7 @@ document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click"
   if (v === "dash" && !dashLoaded) { $("#dashFrame").src = "/dashboard/"; dashLoaded = true; }
   if (v === "skills") loadSkills();
   if (v === "status") loadStatus();
+  if (v === "memory") loadMemory();
 }));
 
 /* ---- 气泡 ---- */
@@ -97,7 +98,14 @@ function renderMessage(m, opts) {
   el.className = "msg " + (m.role === "user" ? "u" : "a");
   const av = document.createElement("div"); av.className = "av"; av.textContent = m.role === "user" ? "我" : "北";
   const box = document.createElement("div"); box.className = "box";
-  const bub = document.createElement("div"); bub.className = "bub"; bub.textContent = m.text == null ? "" : m.text;
+  const bub = document.createElement("div"); bub.className = "bub";
+  if (m.image) {
+    const img = document.createElement("img");
+    img.className = "bubimg"; img.src = m.image; img.alt = "上传图片"; img.loading = "lazy";
+    bub.appendChild(img);
+  }
+  const btxt = document.createElement("span"); btxt.className = "bubtext"; btxt.textContent = m.text == null ? "" : m.text;
+  bub.appendChild(btxt);
   box.appendChild(bub);
 
   const meta = document.createElement("div"); meta.className = "meta";
@@ -109,6 +117,12 @@ function renderMessage(m, opts) {
     const copy = document.createElement("button"); copy.className = "msgbtn"; copy.textContent = "复制";
     copy.addEventListener("click", () => copyText(m.text, copy));
     meta.appendChild(copy);
+  }
+  if (opts && opts.branchable && m.role === "assistant") {
+    const br = document.createElement("button"); br.className = "msgbtn"; br.textContent = "分岔";
+    br.title = "以这条回复之前的上下文重新生成";
+    br.addEventListener("click", () => branch(opts.index));
+    meta.appendChild(br);
   }
   if (opts && opts.regeneratable) {
     const regen = document.createElement("button"); regen.className = "msgbtn"; regen.textContent = "重新生成";
@@ -134,7 +148,7 @@ function renderChat(messages) {
   }
   msgs.forEach((m, i) => {
     const lastAssistant = i === msgs.length - 1 && m.role === "assistant";
-    renderMessage(m, { regeneratable: lastAssistant });
+    renderMessage(m, { branchable: true, index: i, regeneratable: lastAssistant });
   });
 }
 
@@ -160,7 +174,10 @@ function renderList() {
     convListEl.innerHTML = '<div class="conv-empty">还没有对话，点「＋ 新建对话」开始</div>';
     return;
   }
-  for (const c of state.list) {
+  const active = state.list.filter((c) => !c.archived);
+  const archived = state.list.filter((c) => c.archived);
+
+  const mkItem = (c) => {
     const item = document.createElement("div");
     item.className = "conv-item" + (c.id === state.activeId ? " on" : "");
     const title = document.createElement("div"); title.className = "conv-title"; title.textContent = c.title || "新对话";
@@ -174,8 +191,22 @@ function renderList() {
     item.appendChild(menu);
 
     item.addEventListener("click", () => { if (state.activeId !== c.id) openConversation(c.id); });
-    convListEl.appendChild(item);
-  }
+    return item;
+  };
+
+  const section = (label, items) => {
+    const h = document.createElement("div"); h.className = "conv-sec"; h.textContent = label;
+    convListEl.appendChild(h);
+    if (!items.length) {
+      const e = document.createElement("div"); e.className = "conv-empty"; e.textContent = "（空）";
+      convListEl.appendChild(e);
+      return;
+    }
+    for (const c of items) convListEl.appendChild(mkItem(c));
+  };
+
+  section("进行中", active);
+  section("已归档", archived);
 }
 
 function openMenu(c, anchor) {
@@ -183,9 +214,15 @@ function openMenu(c, anchor) {
   const pop = document.createElement("div"); pop.className = "conv-menu-pop";
   const ren = document.createElement("button"); ren.textContent = "重命名";
   ren.addEventListener("click", () => { closeMenu(); renameConversation(c); });
+  const arc = document.createElement("button"); arc.textContent = c.archived ? "恢复" : "归档";
+  arc.addEventListener("click", () => { closeMenu(); toggleArchive(c); });
+  const expM = document.createElement("button"); expM.textContent = "导出 Markdown";
+  expM.addEventListener("click", () => { closeMenu(); exportConversation(c, "md"); });
+  const expJ = document.createElement("button"); expJ.textContent = "导出 JSON";
+  expJ.addEventListener("click", () => { closeMenu(); exportConversation(c, "json"); });
   const del = document.createElement("button"); del.className = "danger"; del.textContent = "删除";
   del.addEventListener("click", () => { closeMenu(); deleteConversation(c); });
-  pop.appendChild(ren); pop.appendChild(del);
+  pop.appendChild(ren); pop.appendChild(arc); pop.appendChild(expM); pop.appendChild(expJ); pop.appendChild(del);
   document.body.appendChild(pop);
   const r = anchor.getBoundingClientRect();
   pop.style.top = (r.bottom + 4) + "px";
@@ -343,15 +380,41 @@ async function ask(msg) {
     if (!id) return;
   }
   ta.value = ""; ta.style.height = "auto";
+  const payload = { conversationId: state.activeId, message: msg };
+  if (pendingImage) payload.image = pendingImage;
   // 立即渲染用户消息（乐观更新），AI 回复回来后再用服务器完整列表覆盖
-  renderMessage({ role: "user", text: msg, ts: Date.now() });
+  renderMessage({ role: "user", text: msg, ts: Date.now(), image: pendingImage || undefined });
   chat.scrollTop = chat.scrollHeight;
-  await runChat({ conversationId: state.activeId, message: msg });
+  clearPendingImage();
+  await runChat(payload);
 }
 
 async function regenerate() {
   if (state.busy || !state.activeId) return;
   await runChat({ conversationId: state.activeId, regenerate: true });
+}
+
+/* ---- ⑤ 分岔：以某条 assistant 之前的上下文重新生成 ---- */
+async function branch(index) {
+  if (state.busy || !state.activeId) return;
+  await runChat({ conversationId: state.activeId, branchFrom: index });
+}
+
+/* ---- ⑥ 归档 / 恢复 ---- */
+async function toggleArchive(c) {
+  try {
+    await fetch("/api/conversations/" + encodeURIComponent(c.id) + (c.archived ? "/unarchive" : "/archive"), {
+      method: "POST", credentials: "same-origin",
+    });
+    await refreshList();
+  } catch (e) { /* 静默 */ }
+}
+
+/* ---- ⑧ 导出（Content-Disposition 触发下载） ---- */
+function exportConversation(c, fmt) {
+  const a = document.createElement("a");
+  a.href = "/api/conversations/" + encodeURIComponent(c.id) + "/export?fmt=" + (fmt || "md");
+  document.body.appendChild(a); a.click(); a.remove();
 }
 
 send.addEventListener("click", () => ask(ta.value));
@@ -363,6 +426,139 @@ stopBtn.addEventListener("click", async () => {
 ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(ta.value); } });
 ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 170) + "px"; });
 document.querySelectorAll(".quick button").forEach(b => b.addEventListener("click", () => ask(b.textContent)));
+
+/* ---- 技能 ---- *//* ---- ⑨ 图片上传 ---- */
+const imgInput = $("#imgInput"), imgBtn = $("#imgBtn"), imgPreview = $("#imgPreview"), imgThumb = $("#imgThumb"), imgClear = $("#imgClear");
+let pendingImage = null;
+function setPendingImage(url) { pendingImage = url; imgThumb.src = url; imgPreview.hidden = false; }
+function clearPendingImage() { pendingImage = null; imgThumb.removeAttribute("src"); imgPreview.hidden = true; if (imgInput) imgInput.value = ""; }
+if (imgBtn) imgBtn.addEventListener("click", () => imgInput.click());
+if (imgClear) imgClear.addEventListener("click", clearPendingImage);
+if (imgInput) imgInput.addEventListener("change", async () => {
+  const f = imgInput.files && imgInput.files[0];
+  if (!f) return;
+  if (f.size > 15 * 1024 * 1024) { alert("图片太大（≤15MB）"); imgInput.value = ""; return; }
+  let b64;
+  try {
+    b64 = await new Promise((resolve, reject) => {
+      const rd = new FileReader();
+      rd.onload = () => resolve(String(rd.result));
+      rd.onerror = () => reject(new Error("读取失败"));
+      rd.readAsDataURL(f);
+    });
+  } catch (e) { alert("读取失败：" + e.message); return; }
+  try {
+    const r = await fetch("/api/upload", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64 }),
+    });
+    const j = await r.json().catch(() => null);
+    if (j && j.ok && j.url) setPendingImage(j.url);
+    else alert((j && j.error) || "上传失败");
+  } catch (e) { alert("上传失败：" + e.message); }
+});
+
+/* ---- ⑦ 搜索 ---- */
+const search = $("#search"), searchResults = $("#searchResults");
+let searchTimer = null;
+if (search) search.addEventListener("input", () => {
+  clearTimeout(searchTimer);
+  const q = search.value.trim();
+  if (!q) { searchResults.hidden = true; searchResults.innerHTML = ""; return; }
+  searchTimer = setTimeout(async () => {
+    try {
+      const r = await fetch("/api/conversations/search?q=" + encodeURIComponent(q), { credentials: "same-origin" });
+      const j = await r.json().catch(() => null);
+      const list = (j && Array.isArray(j.conversations)) ? j.conversations : [];
+      searchResults.innerHTML = "";
+      if (!list.length) {
+        const e = document.createElement("div"); e.className = "sr-empty"; e.textContent = "没有匹配的对话";
+        searchResults.appendChild(e);
+      } else {
+        for (const c of list) {
+          const it = document.createElement("div"); it.className = "sr-item";
+          const t = document.createElement("div"); t.className = "sr-title"; t.textContent = c.title || "新对话";
+          const sub = document.createElement("div"); sub.className = "sr-sub";
+          sub.textContent = (c.preview || "") + " · " + fmtShort(c.updated_at);
+          it.appendChild(t); it.appendChild(sub);
+          it.addEventListener("click", () => { searchResults.hidden = true; searchResults.innerHTML = ""; search.value = ""; openConversation(c.id); });
+          searchResults.appendChild(it);
+        }
+      }
+      searchResults.hidden = false;
+    } catch (e) { /* 静默 */ }
+  }, 220);
+});
+if (searchResults) document.addEventListener("click", (e) => {
+  if (search && searchResults && !search.contains(e.target) && !searchResults.contains(e.target)) searchResults.hidden = true;
+});
+
+/* ---- ⑩ 模型切换 ---- */
+const modelSelect = $("#modelSelect");
+async function loadModels() {
+  if (!modelSelect) return;
+  try {
+    const r = await fetch("/api/models", { credentials: "same-origin" });
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok || !Array.isArray(j.models)) return;
+    modelSelect.innerHTML = "";
+    for (const m of j.models) {
+      const o = document.createElement("option");
+      o.value = m.id; o.textContent = m.name || m.id;
+      if (m.id === j.current) o.selected = true;
+      modelSelect.appendChild(o);
+    }
+  } catch (e) { /* 静默 */ }
+}
+if (modelSelect) modelSelect.addEventListener("change", async () => {
+  const model = modelSelect.value;
+  if (!model) return;
+  try {
+    const r = await fetch("/api/models/select", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model }),
+    });
+    const j = await r.json().catch(() => null);
+    if (!(j && j.ok)) alert((j && j.error) || "切换失败");
+  } catch (e) { alert("切换失败：" + e.message); }
+});
+
+/* ---- ⑪ 长期记忆面板 ---- */
+async function loadMemory() {
+  const list = $("#memList");
+  if (!list) return;
+  list.innerHTML = '<div class="mem-empty">读取中…</div>';
+  try {
+    const j = await (await fetch("/api/memory", { credentials: "same-origin" })).json();
+    const items = (j && Array.isArray(j.memories)) ? j.memories : [];
+    list.innerHTML = "";
+    if (!items.length) { list.innerHTML = '<div class="mem-empty">还没有长期记忆。添加后，会注入到每次对话的上下文开头。</div>'; return; }
+    for (const m of items) {
+      const row = document.createElement("div"); row.className = "mem-row";
+      const k = document.createElement("div"); k.className = "mem-key"; k.textContent = m.key;
+      const v = document.createElement("div"); v.className = "mem-val"; v.textContent = m.value;
+      const del = document.createElement("button"); del.className = "mem-del"; del.textContent = "删除";
+      del.addEventListener("click", async () => {
+        await fetch("/api/memory?key=" + encodeURIComponent(m.key), { method: "DELETE", credentials: "same-origin" });
+        loadMemory();
+      });
+      row.appendChild(k); row.appendChild(v); row.appendChild(del);
+      list.appendChild(row);
+    }
+  } catch (e) { list.innerHTML = '<div class="mem-empty">读取失败：' + e.message + '</div>'; }
+}
+const memAdd = $("#memAdd");
+if (memAdd) memAdd.addEventListener("click", async () => {
+  const key = $("#memKey").value.trim(), val = $("#memVal").value.trim();
+  if (!key || !val) { alert("记忆名和内容都要填"); return; }
+  const r = await fetch("/api/memory", {
+    method: "POST", credentials: "same-origin",
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value: val }),
+  });
+  const j = await r.json().catch(() => null);
+  if (j && j.ok) { $("#memKey").value = ""; $("#memVal").value = ""; loadMemory(); }
+  else alert((j && j.error) || "保存失败");
+});
 
 /* ---- 技能 ---- */
 async function loadSkills() {
@@ -419,6 +615,7 @@ async function loadKeyState() {
   try { const j = await (await fetch("/api/skills")).json(); $("#pSkills").textContent = "技能 " + j.skills.length; $("#pSkills").className = "pill ok"; } catch (e) {}
   try { const j = await (await fetch("/api/status")).json(); $("#pDash").textContent = "看板 " + (j.dashboardOk ? "在线" : "离线"); $("#pDash").className = "pill " + (j.dashboardOk ? "ok" : "bad"); } catch (e) {}
   loadKeyState();
+  loadModels();
   await refreshList();
   if (state.list.length) await openConversation(state.list[0].id);
   else renderChat([]);

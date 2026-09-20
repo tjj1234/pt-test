@@ -12,6 +12,20 @@
 const fs = require("fs");
 const path = require("path");
 
+/**
+ * PG 适配层（可选）：conv/db-pg.cjs。找不到就置 null（不影响纯 PGlite 场景）。
+ * 只有当 PT_PG_DSN / PT_PG_HOST / PT_PG_DATABASE / PT_PG_USER 等环境变量被设置时，
+ * open() 才会真正走真实 PostgreSQL；否则一律退回原来的 PGlite（现有测试不受影响）。
+ */
+let _pgmod; // undefined = 还没探测；null = 已探测且不存在
+function pgBackend() {
+  if (_pgmod !== undefined) return _pgmod;
+  _pgmod = null;
+  try { _pgmod = require(path.join(__dirname, "..", "conv", "db-pg.cjs")); }
+  catch (e) { _pgmod = null; }
+  return _pgmod;
+}
+
 /** 找到 PGlite 的 CommonJS 入口（dist/index.cjs 的绝对路径）。 */
 function resolvePgliteEntry() {
   // 允许显式指定，方便容器 / 特殊环境里换自己的 node_modules
@@ -35,7 +49,7 @@ function resolvePgliteEntry() {
 }
 
 /** 打开（或创建）PGlite 库，dataDir 落盘 = 重启不丢。 */
-async function open({ dataDir }) {
+async function openPglite({ dataDir }) {
   const entry = resolvePgliteEntry();
   if (!entry) {
     throw new Error(
@@ -48,6 +62,20 @@ async function open({ dataDir }) {
   const db = new PGlite(dataDir);
   await db.waitReady;
   return { db, close: async () => { await db.close(); } };
+}
+
+/**
+ * 统一入口：检测到 PG 配置（PT_PG_DSN / PT_PG_HOST / ... ）→ 真实 PostgreSQL；
+ * 否则 → 原 PGlite（保持现有测试与 8099 服务行为不变）。
+ * 返回的 { db, close } 形状两者完全一致，上层 auth / keys / conversations 无需感知。
+ */
+async function open({ dataDir }) {
+  const pg = pgBackend();
+  if (pg && pg.pgConfigured()) {
+    console.log("[db] 检测到 PT_PG_* 配置，切换到真实 PostgreSQL（忽略 dataDir：" + dataDir + "）");
+    return pg.openPg();
+  }
+  return openPglite({ dataDir });
 }
 
 /**

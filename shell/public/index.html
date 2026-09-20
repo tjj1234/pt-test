@@ -32,6 +32,7 @@
       <button data-v="dash"><span class="ico">📊</span>归因看板</button>
       <button data-v="skills"><span class="ico">🧩</span>技能</button>
       <button data-v="status"><span class="ico">🛡️</span>运行状态</button>
+      <button data-v="memory"><span class="ico">🧠</span>记忆</button>
       <a class="keynav" id="keyNav" href="/settings">
         <span class="ico">🔑</span><span>我的 Key</span>
         <span class="keydot" id="keyDot" hidden></span>
@@ -49,7 +50,15 @@
       <span>🔑</span><span><b>你还未绑定 PT key</b>，绑定后才能对话 —— 点击前往设置</span>
     </a>
     <header class="top">
-      <h2 id="title">对话</h2><div class="sp"></div>
+      <h2 id="title">对话</h2>
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="🔍 搜索对话…" autocomplete="off">
+        <div id="searchResults" class="search-results" hidden></div>
+      </div>
+      <div class="sp"></div>
+      <label class="model-sel">🧠 模型
+        <select id="modelSelect"></select>
+      </label>
       <span class="pill" id="pSkills">技能 —</span>
       <span class="pill" id="pDash">看板 —</span>
     </header>
@@ -74,7 +83,10 @@
             <button>埋点质量帮我体检一下</button>
             <button>这周整体干得怎么样？</button>
           </div>
+          <div class="img-preview" id="imgPreview" hidden><img id="imgThumb" alt="待发图片"><button id="imgClear" type="button">×</button></div>
           <div class="in">
+            <input type="file" id="imgInput" accept="image/*" hidden>
+            <button class="imgbtn" id="imgBtn" type="button" title="上传图片">🖼️</button>
             <textarea id="ta" rows="1" placeholder="问点什么…（Enter 发送，Shift+Enter 换行）"></textarea>
             <button class="send" id="send">发送</button>
             <button class="stop" id="stop" hidden>停止</button>
@@ -85,6 +97,17 @@
     </section>
 
     <section class="view" id="v-dash"><iframe id="dashFrame" src="about:blank"></iframe></section>
+
+    <section class="view" id="v-memory"><div class="page">
+      <div class="mem-wrap">
+        <div class="mem-add">
+          <input id="memKey" placeholder="记忆名（如：老板偏好）">
+          <input id="memVal" placeholder="记忆内容（如：优先关注美国市场）">
+          <button id="memAdd">添加 / 更新</button>
+        </div>
+        <div id="memList" class="mem-list"></div>
+      </div>
+    </div></section>
 
     <section class="view" id="v-skills"><div class="page">
       <div class="note">这些是<b>产品工作区</b>里的技能。DSH 的开发技能（社媒那 10 个）<b>不在产品里</b> —— 隔离已经生效。</div>

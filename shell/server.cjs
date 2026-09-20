@@ -34,6 +34,7 @@ const keysMod = require("./keys.cjs");
 const { handleKeyRoutes } = require("./key-routes.cjs");
 const tenantMod = require("./tenant.cjs");
 const convMod = require("./conversations.cjs");
+const memoryMod = require("./memory.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
 
 // ---- 路径：全部相对 repo 根，可用环境变量覆盖 ----
@@ -77,6 +78,7 @@ const chatLimiter = createRateLimiter({ windowMs: 60000, max: RATE_CHAT_PER_MIN 
 let auth = null;                 // 身份库句柄
 let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
+let memory = null;               // 用户长期记忆 / 所选模型
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
@@ -182,6 +184,32 @@ const runningJobs = new Map();
 // dry-run 占位回复的序号（保证「重新生成」能得到不同回答，便于自测断言）
 let dryRunSeq = 0;
 
+/** 从 /uploads/<file> URL 反推本地绝对路径（供 DSH 任务文本引用）。 */
+function uploadsAbsPath(url) {
+  const m = String(url || "").match(/\/uploads\/([^\/?#]+)/);
+  return m ? path.join(RUNTIME, "_uploads", m[1]) : String(url || "");
+}
+
+/** 导出：带 Content-Disposition 触发浏览器下载。 */
+function exportResponse(res, filename, content, contentType) {
+  res.writeHead(200, {
+    "Content-Type": contentType,
+    "Content-Disposition": 'attachment; filename="' + filename + '"',
+    "Cache-Control": "no-store",
+  });
+  res.end(content);
+}
+
+/** Markdown 导出：按时间顺序拼 ## 用户 / ## 助手。 */
+function toMarkdown(messages) {
+  return (Array.isArray(messages) ? messages : []).map((m) => {
+    const who = m.role === "user" ? "用户" : "助手";
+    let body = m.text == null ? "" : String(m.text);
+    if (m.image) body += "\n\n![图片](" + m.image + ")";
+    return "## " + who + "\n\n" + body;
+  }).join("\n\n");
+}
+
 /* ============================================================================
  * /api/chat 核心流程（异步，事件循环不阻塞）
  * ========================================================================== */
@@ -190,9 +218,10 @@ async function handleChat(req, res, me, body) {
   const conversationId = String(body.conversationId || "").trim();
   const regenerate = body.regenerate === true;
   const msgRaw = String(body.message || "").trim();
+  const hasBranch = body.branchFrom !== undefined && body.branchFrom !== null;
 
   if (!conversationId) return json(res, 400, { ok: false, error: "缺少 conversationId" });
-  if (!regenerate && !msgRaw) return json(res, 400, { ok: false, error: "问题不能为空" });
+  if (!regenerate && !hasBranch && !msgRaw) return json(res, 400, { ok: false, error: "问题不能为空" });
 
   // 加载对话（归属校验：只取属于当前用户的）
   const conv = await conversations.get(uid, conversationId);
@@ -201,11 +230,35 @@ async function handleChat(req, res, me, body) {
   let messages = Array.isArray(conv.messages) ? conv.messages : [];
   let question = msgRaw;
 
-  if (regenerate) {
+  // ⑩ 当前所选模型（默认 deepseek-v4-pro）
+  let selectedModel = null;
+  try { selectedModel = (memory && (await memory.getModel(uid))) || tenantMod.defaultModel(); }
+  catch (e) { selectedModel = tenantMod.defaultModel(); }
+
+  // ⑨ 发消息附带的图片（URL 或本地路径）落到消息里
+  const image = String(body.image || "").trim() || null;
+
+  // ⑤ 分岔：以某条 assistant 消息之前的上下文重新生成
+  const branchFrom = (body.branchFrom !== undefined && body.branchFrom !== null) ? body.branchFrom : null;
+
+  if (branchFrom !== null) {
+    let bi = -1;
+    if (typeof branchFrom === "number") bi = branchFrom;
+    else bi = messages.findIndex((m) => m && m.ts === String(branchFrom));
+    if (bi < 0 || bi >= messages.length) return json(res, 400, { ok: false, error: "分岔位置无效" });
+    if (!messages[bi] || messages[bi].role !== "assistant") return json(res, 400, { ok: false, error: "只能对助手回复分岔" });
+    // 保留该 assistant 之前的全部历史（含它对应的用户问题），丢弃该 assistant 及其后
+    const hist = messages.slice(0, bi);
+    let qi = -1;
+    for (let i = hist.length - 1; i >= 0; i--) if (hist[i].role === "user") { qi = i; break; }
+    if (qi < 0) return json(res, 400, { ok: false, error: "没有找到对应的问题" });
+    question = String(hist[qi].text || "").trim();
+    if (!question) return json(res, 400, { ok: false, error: "问题为空" });
+    messages = hist;
+  } else if (regenerate) {
     if (!messages.length) return json(res, 400, { ok: false, error: "没有可重新生成的内容" });
     const last = messages[messages.length - 1];
     if (last.role === "assistant") {
-      // 删除旧回答，问题 = 它前面那条用户消息
       let qi = -1;
       for (let i = messages.length - 2; i >= 0; i--) {
         if (messages[i].role === "user") { qi = i; break; }
@@ -215,14 +268,15 @@ async function handleChat(req, res, me, body) {
       if (!question) return json(res, 400, { ok: false, error: "问题为空" });
       messages = messages.slice(0, messages.length - 1);
     } else if (last.role === "user") {
-      // 停止后：最后一条是用户问题（没有回答），直接重跑这条问题
       question = String(last.text || "").trim();
       if (!question) return json(res, 400, { ok: false, error: "问题为空" });
     } else {
       return json(res, 400, { ok: false, error: "无法重新生成" });
     }
   } else {
-    messages = messages.concat([{ role: "user", text: question, ts: new Date().toISOString() }]);
+    const um = { role: "user", text: question, ts: new Date().toISOString() };
+    if (image) um.image = image;
+    messages = messages.concat([um]);
   }
 
   // 未绑 key 预检：先友好提示，不落库「悬空问题」
@@ -235,12 +289,27 @@ async function handleChat(req, res, me, body) {
   // 先把用户问题落库（停止/失败也不丢问题）
   await conversations.saveMessages(uid, conversationId, messages);
 
-  // 拼 DSH 任务（历史上下文 + 当前问题）
+  // 拼 DSH 任务（历史上下文 + 当前问题 + 长期记忆 + 图片路径）
   let task = question;
+  const parts = [];
+  // ⑪ 注入用户长期记忆
+  let memLines = [];
+  try { memLines = (memory && (await memory.memoryLines(uid))) || []; } catch (e) { memLines = []; }
+  if (memLines.length) {
+    parts.push("用户长期记忆：\n" + memLines.map((l) => "  · " + l).join("\n"));
+  }
   if (messages.length > 1) {
     const hist = messages.slice(0, -1).slice(-6).map((c) => (c.role === "user" ? "用户" : "助手") + "：" + c.text).join("\n");
-    task = "以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + hist + "\n\n用户现在问：" + question;
+    parts.push("以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + hist);
   }
+  // ⑨ 图片路径说明（多模态：告知 DSH 图片已上传到本地路径）
+  const lastUser = messages[messages.length - 1];
+  if (lastUser && lastUser.image) {
+    const imgAbs = uploadsAbsPath(lastUser.image);
+    parts.push("用户这次附带了一张图片，已上传到本地路径：" + imgAbs + "（如你有读取文件 / 识别图片的能力请读取它；否则请据路径说明你暂无法直接看图）");
+  }
+  parts.push("用户现在问：" + question);
+  task = parts.join("\n\n");
 
   // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
   res.writeHead(200, {
@@ -256,6 +325,7 @@ async function handleChat(req, res, me, body) {
     tenantId: me.tenant.id,
     decryptApiKey: keys.decryptApiKey,
     dryRun: DRY_RUN_CHAT,
+    model: selectedModel,
     onSpawn: (job) => { runningJobs.set(uid, job); },
     onDelta: (delta) => { sse({ delta }); },
   });
@@ -360,6 +430,18 @@ async function handle(req, res) {
     if (f.indexOf(PUBLIC) !== 0) return json(res, 403, { ok: false, error: "非法路径" });
     return serveFile(res, f);
   }
+  // ---- ⑨ 上传图片静态服务（随机文件名，无需鉴权，供 <img> 引用）----
+  if (p.indexOf("/uploads/") === 0) {
+    const rel = decodeURIComponent(p.slice("/uploads/".length));
+    if (!rel || rel.indexOf("..") >= 0 || rel.indexOf("\\") >= 0 || rel.indexOf("/") >= 0) {
+      return json(res, 403, { ok: false, error: "非法路径" });
+    }
+    const f = path.join(RUNTIME, "_uploads", rel);
+    if (!fs.existsSync(f)) { res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h2>404</h2>"); }
+    const ct = ({ ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" })[path.extname(f).toLowerCase()] || "application/octet-stream";
+    res.writeHead(200, { "Content-Type": ct, "Cache-Control": "public, max-age=86400" });
+    return res.end(fs.readFileSync(f));
+  }
   if (p === "/dashboard" || p.indexOf("/dashboard/") === 0) {
     const meDash = await authed(req);
     if (!meDash) { res.writeHead(302, { Location: "/login" }); return res.end(); }
@@ -430,6 +512,15 @@ async function handle(req, res) {
     return json(res, 200, { ok: true, id: conv.id, conversation: conv });
   }
 
+  // ---- ⑦ 搜索（标题 + 消息正文）----
+  if (p === "/api/conversations/search" && req.method === "GET") {
+    const u = new URL(req.url, "http://127.0.0.1:" + PORT);
+    const q = (u.searchParams.get("q") || "").trim();
+    if (!q) return json(res, 200, { ok: true, conversations: [] });
+    const list = await conversations.search(me.user.id, q);
+    return json(res, 200, { ok: true, conversations: list });
+  }
+
   // ---- 单对话：读 / 改标题 / 删除 ----
   const convMatch = p.match(/^\/api\/conversations\/([^\/]+)$/);
   if (convMatch) {
@@ -452,6 +543,89 @@ async function handle(req, res) {
       if (r.notFound) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
       return json(res, 200, { ok: true });
     }
+  }
+
+  // ---- ⑥ 归档 / 恢复；⑧ 导出 ----
+  const actionMatch = p.match(/^\/api\/conversations\/([^\/]+)\/(archive|unarchive|export)$/);
+  if (actionMatch) {
+    const id = decodeURIComponent(actionMatch[1]);
+    const action = actionMatch[2];
+    if (action === "archive" || action === "unarchive") {
+      if (req.method !== "POST") return json(res, 405, { ok: false, error: "只支持 POST" });
+      const r = await conversations.setArchived(me.user.id, id, action === "archive");
+      if (r.notFound) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+      return json(res, 200, { ok: true, archived: action === "archive" });
+    }
+    if (action === "export") {
+      if (req.method !== "GET") return json(res, 405, { ok: false, error: "只支持 GET" });
+      const conv = await conversations.get(me.user.id, id);
+      if (!conv) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+      const u = new URL(req.url, "http://127.0.0.1:" + PORT);
+      const fmt = (u.searchParams.get("fmt") || "md").toLowerCase();
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const shortId = String(conv.id).slice(0, 8);
+      if (fmt === "json") {
+        return exportResponse(res, "conversation-" + shortId + "-" + stamp + ".json", JSON.stringify(conv.messages, null, 2), "application/json; charset=utf-8");
+      }
+      return exportResponse(res, "conversation-" + shortId + "-" + stamp + ".md", toMarkdown(conv.messages), "text/markdown; charset=utf-8");
+    }
+  }
+
+  // ---- ⑪ 用户长期记忆 ----
+  if (p === "/api/memory") {
+    if (req.method === "GET") {
+      const items = await memory.list(me.user.id);
+      return json(res, 200, { ok: true, memories: items });
+    }
+    if (req.method === "POST") {
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+      const r = await memory.set(me.user.id, body.key, body.value);
+      if (!r.ok) return json(res, 400, { ok: false, error: r.error });
+      return json(res, 200, { ok: true, key: r.key, value: r.value });
+    }
+    if (req.method === "DELETE") {
+      const u = new URL(req.url, "http://127.0.0.1:" + PORT);
+      const key = u.searchParams.get("key") || "";
+      await memory.del(me.user.id, key);
+      return json(res, 200, { ok: true });
+    }
+  }
+
+  // ---- ⑩ 模型列表 / 选择 ----
+  if (p === "/api/models" && req.method === "GET") {
+    let current = null;
+    try { current = await memory.getModel(me.user.id); } catch (e) {}
+    return json(res, 200, { ok: true, models: tenantMod.readModels(), current: current || tenantMod.defaultModel(), default: tenantMod.defaultModel() });
+  }
+  if (p === "/api/models/select" && req.method === "POST") {
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+    const model = String(body.model || "").trim();
+    const valid = tenantMod.readModels().some((m) => m.id === model);
+    if (!valid) return json(res, 400, { ok: false, error: "未知模型" });
+    const r = await memory.setModel(me.user.id, model);
+    return json(res, 200, { ok: true, model: r.model });
+  }
+
+  // ---- ⑨ 上传图片（base64 JSON，落到 runtime/_uploads/）----
+  if (p === "/api/upload" && req.method === "POST") {
+    let body = {};
+    try { body = JSON.parse((await readBody(req, 20 << 20)) || "{}"); } catch (e) {}
+    const b64 = String(body.image || body.data || "").trim();
+    if (!b64) return json(res, 400, { ok: false, error: "缺少图片数据" });
+    const m = b64.match(/^data:image\/(\w+);base64,(.+)$/);
+    let ext = "png", data = b64;
+    if (m) { ext = m[1] === "jpeg" ? "jpg" : m[1]; data = m[2]; }
+    let buf;
+    try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "图片数据无效" }); }
+    if (!buf.length || buf.length > 20 * 1024 * 1024) return json(res, 400, { ok: false, error: "图片太大或无效" });
+    const dir = path.join(RUNTIME, "_uploads");
+    fs.mkdirSync(dir, { recursive: true });
+    const name = "u-" + Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex") + "." + ext;
+    const abs = path.join(dir, name);
+    fs.writeFileSync(abs, buf);
+    return json(res, 200, { ok: true, url: "/uploads/" + name, path: abs });
   }
 
   // ---- 发消息 / 重新生成 ----
@@ -520,6 +694,7 @@ async function main() {
   });
   keys = await keysMod.initKeys({ db: auth.db, masterKeyFile: MASTER_KEY_FILE });
   conversations = await convMod.initConversations(auth.db);
+  memory = await memoryMod.initMemory(auth.db);
   log.info("init", { stage: "ready", dbDir: DB_DIR, username: USERNAME, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
 
   pickPort(PORT, (port) => {

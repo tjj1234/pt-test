@@ -222,11 +222,47 @@ function readPersona() {
   } catch (e) { return ""; }
 }
 
+/** 解析 dsh-settings.yaml 里 providers.powertokens.models 的模型列表（id + name）。 */
+function readModels() {
+  try {
+    const txt = fs.readFileSync(SETTINGS_TEMPLATE, "utf8");
+    const models = [];
+    const re = /- id:\s*(\S+)\s*\n(?:[ \t]+name:\s*(.+))?/g;
+    let m;
+    while ((m = re.exec(txt))) models.push({ id: m[1], name: (m[2] || m[1]).trim() });
+    return models;
+  } catch (e) { return []; }
+}
+
+/** 读 agent-default-model.model 作为默认模型。 */
+function defaultModel() {
+  try {
+    const txt = fs.readFileSync(SETTINGS_TEMPLATE, "utf8");
+    const m = txt.match(/agent-default-model:\s*\n\s*provider:\s*(\S+)\s*\n\s*model:\s*(\S+)/);
+    return m ? m[2] : "deepseek-v4-pro";
+  } catch (e) { return "deepseek-v4-pro"; }
+}
+
+/** 把所选模型写进 DSH_HOME/settings.yaml 的 agent-default-model.model（spawn 前生效）。 */
+function applyModel(dshHome, model) {
+  if (!model) return;
+  const home = dshHome || DSH_HOME;
+  try {
+    ensureDshHomeConfig(home);
+    const file = path.join(home, "settings.yaml");
+    let txt = fs.readFileSync(file, "utf8");
+    txt = txt.replace(/^(agent-default-model:\s*\n\s*provider:\s*\S+\s*\n\s*model:\s*)\S+/m,
+      (all, g1) => g1 + String(model));
+    fs.writeFileSync(file, txt, "utf8");
+  } catch (e) { process.stderr.write("[DSH] 应用所选模型失败：" + e.message + "\n"); }
+}
+
 function buildSpec(tenantId, workspace, userId, task, opts, apiKey) {
   const dshHome = opts.dshHome || DSH_HOME;
   const entry = opts.dshEntry || DSH.js;
   const nodePath = (opts.nodePath !== undefined) ? opts.nodePath : DSH.nodePath;
   const profile = makeProfile(dshHome);
+  applyModel(dshHome, opts.model);
 
   const env = Object.assign({}, process.env, { DSH_HOME: dshHome });
   if (nodePath) env.NODE_PATH = nodePath;
@@ -400,4 +436,7 @@ module.exports = {
   dshMissingHint,
   makeProfile,
   stubDecryptApiKey,
+  readModels,
+  defaultModel,
+  applyModel,
 };

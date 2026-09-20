@@ -1,25 +1,25 @@
 "use strict";
 /**
- * conversations.cjs —— 多对话窗口的持久化（对话窗口化改造）
+ * conversations-v2.cjs —— 多对话窗口的持久化（对话窗口化改造 + 归档/搜索）
  * ============================================================================
- * 相对旧版（1 用户 = 1 条、user_id 唯一、messages 只存 {role,text}）的变化：
- *   · 1 用户 = 多对话：一行一个对话（id / user_id / title / messages / created_at /
- *     updated_at），不再有 user_id 唯一约束；
- *   · 消息结构升级为 {role, text, ts}（ts = ISO8601 时间戳字符串）；
- *   · 标题：新建时「新对话」，保存消息时若标题还是默认值，自动取首条用户消息前 15 字；
- *   · 旧数据迁移：initConversations() 启动时一次性「补 ts + 生成 title」，不清空（幂等）。
+ * 相对 conversations.cjs（v1 对话窗口化）的变化：
+ *   · 每行带 archived（0=进行中，1=已归档），list/get/create 都会返回；
+ *   · 新增 setArchived(userId, id, archived) —— 归档 / 恢复；
+ *   · 新增 search(userId, q) —— 标题 + 消息正文（jsonb::text）模糊搜索。
  *
- * 安全铁律：messages 只存 user/assistant 消息文本，明文 PT key 绝不进这张表
- *   （key 只在 api_keys 表里以 AES-256-GCM 密文存在）。
+ * 其余能力与 conversations.cjs 完全一致：
+ *   · 1 用户 = 多对话；消息结构 {role, text, ts}（可带 image 图片路径）；
+ *   · 标题自动生成 / 手动改名；旧数据启动时幂等迁移。
  *
  * 对外接口（server.cjs 会调）：
- *   const conv = await initConversations(db);
- *   await conv.list(userId)                    // -> [{id,title,preview,msgCount,created_at,updated_at}] 按 updated_at 倒序
- *   await conv.create(userId)                  // -> {id,title,messages:[],created_at,updated_at}
- *   await conv.get(userId, id)                 // -> {id,title,messages,...} | null（无权限/不存在返回 null）
- *   await conv.rename(userId, id, title)       // -> {ok:true,title} | {ok:false,notFound|error}
- *   await conv.remove(userId, id)              // -> {ok:true} | {ok:false,notFound}
- *   await conv.saveMessages(userId, id, msgs)  // 覆盖写消息 + 自动标题 + 刷新 updated_at
+ *   await conv.list(userId)                    // -> [{id,title,preview,msgCount,archived,created_at,updated_at}]
+ *   await conv.create(userId)
+ *   await conv.get(userId, id)
+ *   await conv.rename(userId, id, title)
+ *   await conv.remove(userId, id)
+ *   await conv.saveMessages(userId, id, msgs)
+ *   await conv.setArchived(userId, id, archived)
+ *   await conv.search(userId, q)
  * ============================================================================
  */
 async function initConversations(db) {
@@ -37,7 +37,7 @@ async function initConversations(db) {
     return [];
   }
 
-  /** 时间戳统一转 ISO 字符串，避免 PGlite 返回 Date 对象导致的序列化差异。 */
+  /** 时间戳统一转 ISO 字符串。 */
   const iso = (v) => (v instanceof Date ? v.toISOString() : (v == null ? null : String(v)));
 
   /** 把文本压成单行、去首尾空白。 */
@@ -55,9 +55,26 @@ async function initConversations(db) {
     return firstUser ? clean(firstUser.text).slice(0, 15) : "新对话";
   };
 
+  /** 把一行 SELECT 结果映射为对外结构（带 preview / msgCount / archived）。 */
+  function rowToSummary(row) {
+    const msgs = normalize(row.messages);
+    let preview = "";
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i] && msgs[i].text) { preview = clean(msgs[i].text); break; }
+    }
+    return {
+      id: row.id,
+      title: displayTitle(row.title),
+      preview: preview.slice(0, 40),
+      msgCount: msgs.length,
+      archived: !!row.archived,
+      created_at: iso(row.created_at),
+      updated_at: iso(row.updated_at),
+    };
+  }
+
   /* --------------------------------------------------------------------------
-   * 一次性迁移旧数据（幂等）：把旧单对话里的 messages 补 ts、并按首条用户消息生成 title。
-   * 只更新「确实需要迁移」的行，跑完后下次启动是 no-op。
+   * 一次性迁移旧数据（幂等）：补 ts + 生成 title。
    * ------------------------------------------------------------------------ */
   async function backfillLegacy() {
     const r = await db.query("SELECT id, title, messages, updated_at FROM conversations");
@@ -86,27 +103,13 @@ async function initConversations(db) {
     }
   }
 
-  /** 列表：按最近更新时间倒序；带预览（最后一条消息前 40 字）与消息数。 */
+  /** 列表：按最近更新时间倒序。 */
   async function list(userId) {
     const r = await db.query(
-      "SELECT id, title, messages, created_at, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC, created_at DESC",
+      "SELECT id, title, messages, archived, created_at, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC, created_at DESC",
       [userId]
     );
-    return r.rows.map((row) => {
-      const msgs = normalize(row.messages);
-      let preview = "";
-      for (let i = msgs.length - 1; i >= 0; i--) {
-        if (msgs[i] && msgs[i].text) { preview = clean(msgs[i].text); break; }
-      }
-      return {
-        id: row.id,
-        title: displayTitle(row.title),
-        preview: preview.slice(0, 40),
-        msgCount: msgs.length,
-        created_at: iso(row.created_at),
-        updated_at: iso(row.updated_at),
-      };
-    });
+    return r.rows.map(rowToSummary);
   }
 
   /** 新建一个空对话，返回它的行。 */
@@ -114,7 +117,7 @@ async function initConversations(db) {
     const r = await db.query(
       `INSERT INTO conversations (user_id, title, messages, created_at, updated_at)
        VALUES ($1, $2, '[]'::jsonb, now(), now())
-       RETURNING id, title, created_at, updated_at`,
+       RETURNING id, title, archived, created_at, updated_at`,
       [userId, "新对话"]
     );
     const row = r.rows[0];
@@ -122,6 +125,7 @@ async function initConversations(db) {
       id: row.id,
       title: displayTitle(row.title),
       messages: [],
+      archived: !!row.archived,
       created_at: iso(row.created_at),
       updated_at: iso(row.updated_at),
     };
@@ -130,7 +134,7 @@ async function initConversations(db) {
   /** 读某用户某对话的完整历史；无权限/不存在返回 null。 */
   async function get(userId, id) {
     const r = await db.query(
-      "SELECT id, title, messages, created_at, updated_at FROM conversations WHERE id = $1 AND user_id = $2",
+      "SELECT id, title, messages, archived, created_at, updated_at FROM conversations WHERE id = $1 AND user_id = $2",
       [id, userId]
     );
     if (!r.rows.length) return null;
@@ -139,6 +143,7 @@ async function initConversations(db) {
       id: row.id,
       title: displayTitle(row.title),
       messages: normalize(row.messages),
+      archived: !!row.archived,
       created_at: iso(row.created_at),
       updated_at: iso(row.updated_at),
     };
@@ -164,7 +169,7 @@ async function initConversations(db) {
 
   /**
    * 覆盖写某对话的消息，并刷新 updated_at。
-   * 标题仍是默认值（空 /「新对话」）时，自动取首条用户消息前 15 字（手动改过的标题不覆盖）。
+   * 标题仍是默认值（空 /「新对话」）时，自动取首条用户消息前 15 字。
    */
   async function saveMessages(userId, id, messages) {
     const arr = Array.isArray(messages) ? messages : [];
@@ -181,9 +186,30 @@ async function initConversations(db) {
     return { ok: true, title: displayTitle(title) };
   }
 
+  /** 归档 / 恢复：置 archived = 1/0（只改属于该用户的）。 */
+  async function setArchived(userId, id, archived) {
+    const chk = await db.query("SELECT 1 FROM conversations WHERE id = $1 AND user_id = $2", [id, userId]);
+    if (!chk.rows.length) return { ok: false, notFound: true };
+    await db.query("UPDATE conversations SET archived = $1 WHERE id = $2 AND user_id = $3", [archived ? 1 : 0, id, userId]);
+    return { ok: true, archived: !!archived };
+  }
+
+  /** 搜索：标题 + 消息正文（jsonb::text）模糊匹配（ILIKE 不区分大小写）。 */
+  async function search(userId, q) {
+    const query = String(q || "").trim();
+    if (!query) return [];
+    const pattern = "%" + query + "%";
+    const r = await db.query(
+      "SELECT id, title, messages, archived, created_at, updated_at FROM conversations " +
+      "WHERE user_id = $1 AND (title ILIKE $2 OR messages::text ILIKE $2) ORDER BY updated_at DESC",
+      [userId, pattern]
+    );
+    return r.rows.map(rowToSummary);
+  }
+
   await backfillLegacy();
 
-  return { list, create, get, rename, remove, saveMessages };
+  return { list, create, get, rename, remove, saveMessages, setArchived, search };
 }
 
 module.exports = { initConversations };
