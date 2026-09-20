@@ -325,6 +325,7 @@ async function handleChat(req, res, me, body) {
     model: selectedModel,
     onSpawn: (job) => { runningJobs.set(uid, job); },
     onDelta: (delta) => { sse({ delta }); },
+    onStep: (step) => { sse({ step }); },
   });
 
   // 兜底：runDshForUser 内部因 key 来源缺失 / 无 key 失败
@@ -351,11 +352,18 @@ async function handleChat(req, res, me, body) {
 
   // 成功（dry-run 或真实 DSH 输出）
   let reply = r.text;
+  let steps = Array.isArray(r.steps) ? r.steps : [];
   if (DRY_RUN_CHAT) {
     reply = "[PT_CHAT_DRYRUN 占位回复 #" + (++dryRunSeq) + " @ " + Date.now() + "，非真实 DSH 输出]";
     sse({ delta: reply });
+    // DRYRUN 假轨迹：只用于验证前端「过程」渲染；真实轨迹需真实 PT key
+    steps = [
+      { name: "ad-strategy", args: "{\"scope\":\"北极星\"}", result: "（占位）读取广告数据…", isError: false },
+      { name: "dashboard-interpret", args: "", result: "（占位）归因看板解读…", isError: false },
+    ];
+    for (const s of steps) sse({ step: s });
   }
-  const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString() }]);
+  const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps }]);
   await conversations.saveMessages(uid, conversationId, saved);
 
   sse({
@@ -363,6 +371,7 @@ async function handleChat(req, res, me, body) {
     ok: true,
     reply: reply || "（DSH 没有输出）",
     messages: saved,
+    steps,
     ms: r.ms || 0,
     turns: saved.filter((m) => m.role === "assistant").length,
     ...(DRY_RUN_CHAT ? { dryRun: true, tenantId: r.tenantId, workspace: r.cwd, userId: r.userId, keySha256: r.keySha256 } : {}),

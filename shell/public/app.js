@@ -47,7 +47,7 @@ function bubbleSys(text) {
 function thinking() {
   const el = document.createElement("div");
   el.className = "msg a";
-  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 正在查数据、跑技能…<span class="elapsed"></span></div></div>';
+  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 正在查数据、跑技能…<span class="elapsed"></span></div><div class="steps-live"></div></div>';
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight;
   return el;
 }
@@ -107,6 +107,26 @@ function renderMessage(m, opts) {
   const btxt = document.createElement("span"); btxt.className = "bubtext"; btxt.textContent = m.text == null ? "" : m.text;
   bub.appendChild(btxt);
   box.appendChild(bub);
+
+  // 轨迹：展示 agent 调了哪些工具（可折叠）
+  if (Array.isArray(m.steps) && m.steps.length) {
+    const sb = document.createElement("details"); sb.className = "steps";
+    const sum = document.createElement("summary"); sum.className = "steps-sum";
+    sum.textContent = "🛠️ 过程 · " + m.steps.length + " 步";
+    sb.appendChild(sum);
+    const ol = document.createElement("div"); ol.className = "step-list";
+    for (const s of m.steps) {
+      const d = document.createElement("div"); d.className = "step" + (s.isError ? " err" : "");
+      const nm = document.createElement("div"); nm.className = "step-name";
+      nm.textContent = (s.isError ? "⚠️ " : "🔧 ") + (s.name || "工具");
+      if (s.args) { const sp = document.createElement("span"); sp.className = "step-args"; sp.textContent = " " + s.args; nm.appendChild(sp); }
+      d.appendChild(nm);
+      if (s.result) { const rs = document.createElement("div"); rs.className = "step-result"; rs.textContent = s.result; d.appendChild(rs); }
+      ol.appendChild(d);
+    }
+    sb.appendChild(ol);
+    box.appendChild(sb);
+  }
 
   const meta = document.createElement("div"); meta.className = "meta";
   if (m.ts) {
@@ -333,11 +353,20 @@ async function runChat(payload) {
           if (!line) continue;
           let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
           if (obj.delta) { acc += obj.delta; streamInto(t, acc); }
+          if (obj.step) {
+            const live = t.querySelector(".steps-live");
+            if (live) {
+              const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
+              d.textContent = (obj.step.isError ? "⚠️ " : "🔧 ") + (obj.step.name || "工具") + (obj.step.args ? " " + obj.step.args : "");
+              live.appendChild(d);
+              chat.scrollTop = chat.scrollHeight;
+            }
+          }
           if (obj.done) {
             gotDone = true;
             clearInterval(tick); t.remove();
             if (obj.stopped) { renderChat(obj.messages); showStoppedBar(); cm.textContent = "已停止"; }
-            else if (obj.ok) { renderChat(obj.messages); cm.textContent = "第 " + obj.turns + " 轮 · 上下文由业务壳维护（headless 不续接会话）"; }
+            else if (obj.ok) { renderChat(obj.messages); cm.textContent = "第 " + obj.turns + " 轮 · 常驻 agent 会话续接"; }
             else { if (Array.isArray(obj.messages)) renderChat(obj.messages); else bubbleSys("执行失败：" + (obj.error || "")); cm.textContent = ""; }
             await refreshList();
           }
@@ -357,7 +386,7 @@ async function runChat(payload) {
         renderChat(j.messages); showStoppedBar(); cm.textContent = "已停止";
       } else if (j && j.ok) {
         renderChat(j.messages);
-        cm.textContent = "第 " + j.turns + " 轮 · 上下文由业务壳维护（headless 不续接会话）";
+        cm.textContent = "第 " + j.turns + " 轮 · 常驻 agent 会话续接";
       } else {
         const err = (j && j.error) ? j.error : ("HTTP " + r.status);
         if (j && Array.isArray(j.messages)) renderChat(j.messages);

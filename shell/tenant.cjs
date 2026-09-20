@@ -302,6 +302,15 @@ function dispatchFrame(proc, frame) {
       if (w && typeof w.onDelta === "function") { try { w.onDelta(frame.text); } catch (e) {} }
       break;
     }
+    case "step": {
+      const w = proc.waiters.get(frame.sessionId);
+      if (w) {
+        const step = { name: frame.name, args: frame.args, result: frame.result, isError: frame.isError };
+        if (Array.isArray(w.steps)) w.steps.push(step);
+        if (typeof w.onStep === "function") { try { w.onStep(step); } catch (e) {} }
+      }
+      break;
+    }
     case "done": {
       const w = proc.waiters.get(frame.sessionId);
       if (w) { proc.waiters.delete(frame.sessionId); w.resolve(frame); }
@@ -437,6 +446,8 @@ function runDshPersistent(spec, opts) {
 
     const waiter = {
       onDelta: opts.onDelta,
+      onStep: opts.onStep,
+      steps: [],
       resolve: (frame) => {
         resolve({
           ok: frame.ok !== false,
@@ -444,6 +455,7 @@ function runDshPersistent(spec, opts) {
           ms: frame.ms || (Date.now() - t0),
           error: frame.error || (frame.reasonDetail ? (frame.reasonDetail.code + ": " + frame.reasonDetail.message) : null),
           stopped: frame.stopped === true,
+          steps: waiter.steps || [],
           fresh,
           workspace: spec.cwd, tenantId: spec.tenantId, userId: spec.userId, keySha256: spec.keySha256,
         });

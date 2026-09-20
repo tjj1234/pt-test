@@ -22,6 +22,12 @@ function emit(obj) {
   try { writeSync(1, JSON.stringify(obj) + "\n"); } catch (e) { /* stdout 关闭时忽略 */ }
 }
 
+/** 截断超长文本（轨迹展示用）。 */
+function truncate(s, max) {
+  const t = String(s == null ? "" : s);
+  return t.length > max ? t.slice(0, max) + "…(截断)" : t;
+}
+
 /** 汇总一次 turn（seq >= firstSeq 的事件）里的最后一段 assistant 文本 + 结束原因。 */
 function summarize(events, firstSeq) {
   let started = false;
@@ -55,16 +61,33 @@ function apply(ctx) {
 
     const agentMap = new Map();       // sessionId -> { agent }
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
-    let busy = false;                 // 顺序处理命令，避免同进程并发干扰
+    const stepNames = new Map();      // callId -> 工具名（tool/result 时回填名字）
 
-    // 逐字流：把每个 assistant 文本增量路由到对应 sessionId
+    // 逐字流 + 轨迹：把 assistant 文本增量 / 工具调用路由到对应 sessionId
     ctx.on("session/event", (session, event) => {
       const sid = sessionKey.get(session);
       if (!sid) return;
-      if (event.type !== "assistant/chunk") return;
-      const chunk = event.data?.chunk;
-      if (chunk?.type === "text-delta" && chunk.text) {
-        emit({ type: "delta", sessionId: sid, text: chunk.text });
+      if (event.type === "assistant/chunk") {
+        const chunk = event.data?.chunk;
+        if (chunk?.type === "text-delta" && chunk.text) {
+          emit({ type: "delta", sessionId: sid, text: chunk.text });
+        }
+        return;
+      }
+      if (event.type === "tool/call") {
+        const d = event.data || {};
+        if (d.callId) stepNames.set(d.callId, d.name || "tool");
+        emit({ type: "step", sessionId: sid, name: d.name || "tool", args: truncate(JSON.stringify(d.arguments), 200) });
+        return;
+      }
+      if (event.type === "tool/result") {
+        const d = event.data || {};
+        const msg = d.message || {};
+        const name = stepNames.get(msg.callId) || "tool";
+        const content = msg.content;
+        const text = Array.isArray(content) ? content.map((b) => (b && b.text) || "").join("") : String(content == null ? "" : content);
+        emit({ type: "step", sessionId: sid, name, result: truncate(text, 400), isError: msg.isError === true });
+        return;
       }
     });
 
