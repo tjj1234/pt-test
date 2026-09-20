@@ -96,7 +96,15 @@
       </div>
     </section>
 
-    <section class="view" id="v-dash"><iframe id="dashFrame" src="about:blank"></iframe></section>
+    <section class="view" id="v-dash">
+      <div class="dash-toolbar">
+        <span class="dash-toolbar-title">📊 归因面板 · 只读</span>
+        <div class="sp"></div>
+        <button class="toolbar-btn" id="sharePanelBtn">🔗 分享面板</button>
+        <button class="toolbar-btn" id="mySharesBtn">我的分享</button>
+      </div>
+      <iframe id="dashFrame" src="about:blank"></iframe>
+    </section>
 
     <section class="view" id="v-memory"><div class="page">
       <div class="mem-wrap">
@@ -120,6 +128,20 @@
     </div></section>
   </main>
 </div>
+  <!-- 面板分享弹窗 -->
+  <div class="modal-mask" id="shareModal" hidden>
+    <div class="modal">
+      <div class="modal-head"><h3>分享归因面板</h3><button class="modal-x" data-close="shareModal" type="button">×</button></div>
+      <div class="modal-body" id="shareModalBody"></div>
+    </div>
+  </div>
+  <!-- 我的分享弹窗 -->
+  <div class="modal-mask" id="mySharesModal" hidden>
+    <div class="modal">
+      <div class="modal-head"><h3>我的分享</h3><button class="modal-x" data-close="mySharesModal" type="button">×</button></div>
+      <div class="modal-body" id="mySharesBody"></div>
+    </div>
+  </div>
 <script src="/assets/key-drawer.js"></script>
 <script src="/assets/app.js"></script>
 </body></html>

@@ -35,6 +35,7 @@ const { handleKeyRoutes } = require("./key-routes.cjs");
 const tenantMod = require("./tenant.cjs");
 const convMod = require("./conversations.cjs");
 const memoryMod = require("./memory.cjs");
+const panelSharesMod = require("./panel-share.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
 
 // ---- 路径：全部相对 repo 根，可用环境变量覆盖 ----
@@ -79,6 +80,7 @@ let auth = null;                 // 身份库句柄
 let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
 let memory = null;               // 用户长期记忆 / 所选模型
+let panelShares = null;          // 面板分享落库句柄
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
@@ -392,6 +394,59 @@ function proxyDashboard(req, res, tenantId) {
   });
   req.pipe(p);
 }
+/** 写分享会话 cookie（HttpOnly，供 /api/analytics 匿名只读回退识别）。 */
+function setShareCookie(res, token) {
+  res.setHeader("Set-Cookie", "pt_share=" + encodeURIComponent(token) + "; HttpOnly; SameSite=Lax; Path=/");
+}
+
+const SHARE_CSS =
+  "body{margin:0;font:14px/1.6 -apple-system,'Segoe UI','Microsoft YaHei',sans-serif;background:#f6f7fb;color:#0f172a}" +
+  ".wrap{min-height:100vh;display:flex;align-items:center;justify-content:center}" +
+  ".card{background:#fff;border:1px solid #e6e9f0;border-radius:16px;padding:40px 44px;max-width:460px;text-align:center;box-shadow:0 20px 50px rgba(15,23,42,.12)}" +
+  ".ico{font-size:44px}.card h1{margin:12px 0 8px;font-size:20px}.card p{margin:6px 0;color:#64748b}" +
+  ".banner{display:flex;align-items:center;gap:10px;padding:10px 18px;background:#141a2e;color:#aab3c8;font-size:13px}" +
+  ".banner b{color:#fff;font-weight:600}" +
+  ".view-wrap{display:flex;flex-direction:column;height:100vh}" +
+  "#shareFrame{flex:1;border:0;width:100%;background:#fff}";
+
+function shareHtml(title, inner) {
+  return "<!doctype html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">" +
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>" + title + "</title>" +
+    "<style>" + SHARE_CSS + "</style></head><body>" + inner + "</body></html>";
+}
+
+/** 分享失效页（token 不存在 / 已撤销 / 已过期）。 */
+function serveShareInvalid(res) {
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(shareHtml("分享已失效",
+    '<div class="wrap"><div class="card"><div class="ico">🔒</div><h1>分享已失效</h1>' +
+    '<p>这个分享链接已失效（可能已被撤销、已过期，或链接有误）。</p>' +
+    '<p>请联系分享者重新获取链接。</p></div></div>'));
+}
+
+/** 分享落地页（有效）：顶部只读横幅 + 全屏只读看板 iframe。 */
+function serveShareLanding(res, token) {
+  const src = "/panel/share/" + encodeURIComponent(token) + "/view/";
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
+  res.end(shareHtml("归因面板 · 只读分享",
+    '<div class="view-wrap"><div class="banner">🔗 <b>只读分享视图</b> —— 你正在查看一个被分享的归因面板，仅可查看、不可操作。</div>' +
+    '<iframe id="shareFrame" src="' + src + '"></iframe></div>'));
+}
+
+/** 分享只读看板反向代理：藏在 /panel/share/<token>/view/ 后面，注入只读 token。 */
+function proxyShareDashboard(req, res) {
+  const sub = req.url.replace(/^\/panel\/share\/[^\/]+\/view/, "") || "/";
+  const target = (sub === "/" || sub === "") ? "/?pt_ro_token=" + encodeURIComponent(DASH_TOKEN) : sub;
+  const p = http.request({ host: "127.0.0.1", port: DASH_PORT, path: target, method: req.method,
+    headers: dashProxyHeaders(req, null) },
+    (up) => { res.writeHead(up.statusCode, up.headers); up.pipe(res); });
+  p.on("error", (e) => {
+    res.writeHead(502, { "Content-Type": "text/html; charset=utf-8" });
+    res.end("<h2>看板服务没起来</h2><p>请先启动北极星后端（默认 127.0.0.1:" + DASH_PORT + "）。</p><pre>" + e.message + "</pre>");
+  });
+  req.pipe(p);
+}
+
 function serveFile(res, f) {
   if (!fs.existsSync(f)) { res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h2>404</h2>"); }
   res.writeHead(200, { "Content-Type": MIME[path.extname(f).toLowerCase()] || "application/octet-stream", "Cache-Control": "no-cache" });
@@ -454,17 +509,42 @@ async function handle(req, res) {
     return proxyDashboard(req, res, meDash && meDash.tenant ? meDash.tenant.id : null);
   }
 
-  const me = await authed(req);
-  if (!me) return json(res, 401, { ok: false, error: "没登录" });
+  // ---- 面板分享落地页（匿名可访问；校验 token）----
+  const shareLandMatch = p.match(/^\/panel\/share\/([^\/]+)\/?$/);
+  if (shareLandMatch) {
+    const token = decodeURIComponent(shareLandMatch[1]);
+    const v = await panelShares.verify(token);
+    if (!v.valid) return serveShareInvalid(res);
+    setShareCookie(res, token);
+    return serveShareLanding(res, token);
+  }
 
+  // ---- 面板分享：只读看板反向代理（匿名可访问；每请求校验 token）----
+  if (/^\/panel\/share\/[^\/]+\/view/.test(p)) {
+    const m = p.match(/^\/panel\/share\/([^\/]+)\/view/);
+    const v = await panelShares.check(decodeURIComponent(m[1]));
+    if (!v.valid) return serveShareInvalid(res);
+    return proxyShareDashboard(req, res);
+  }
+
+  // ---- /api/analytics 反向代理：登录用户 或 有效分享 cookie（均为只读 token）----
   if (p.indexOf("/api/analytics/") === 0) {
+    const meAnalytics = await authed(req);
+    let shareOk = false;
+    const shareTok = cookie(req, "pt_share");
+    if (shareTok) { const sv = await panelShares.check(shareTok); shareOk = !!(sv && sv.valid); }
+    if (!meAnalytics && !shareOk) return json(res, 401, { ok: false, error: "没登录" });
+    const tenantId = meAnalytics && meAnalytics.tenant ? meAnalytics.tenant.id : null;
     const up = http.request({ host: "127.0.0.1", port: DASH_PORT, path: req.url, method: req.method,
-      headers: Object.assign(dashProxyHeaders(req, me.tenant ? me.tenant.id : null),
+      headers: Object.assign(dashProxyHeaders(req, tenantId),
         { authorization: "Bearer " + DASH_TOKEN }) },
       (r2) => { res.writeHead(r2.statusCode, r2.headers); r2.pipe(res); });
     up.on("error", (e) => json(res, 502, { ok: false, error: "dashboard unreachable: " + e.message }));
     return req.pipe(up);
   }
+
+  const me = await authed(req);
+  if (!me) return json(res, 401, { ok: false, error: "没登录" });
 
   if (p === "/api/skills") {
     const list = [];
@@ -636,6 +716,33 @@ async function handle(req, res) {
     return json(res, 200, { ok: true, url: "/uploads/" + name, path: abs });
   }
 
+  // ---- 面板分享 API（需登录 owner；只读 + 整面板）----
+  if (p === "/api/panel/shares" && req.method === "POST") {
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+    const expiresInHours = body.expiresInHours;
+    if (expiresInHours != null && !(Number(expiresInHours) > 0)) {
+      return json(res, 400, { ok: false, error: "expiresInHours 必须是正数（小时）" });
+    }
+    const s2 = await panelShares.create(me.user.id, expiresInHours);
+    return json(res, 200, { ok: true, id: s2.id, token: s2.token, url: s2.url, expires_at: s2.expires_at, share: s2 });
+  }
+  if (p === "/api/panel/shares" && req.method === "GET") {
+    const shares = await panelShares.list(me.user.id);
+    return json(res, 200, { ok: true, shares });
+  }
+  const shareVerifyMatch = p.match(/^\/api\/panel\/shares\/([^\/]+)\/verify$/);
+  if (shareVerifyMatch && req.method === "GET") {
+    const v = await panelShares.verify(decodeURIComponent(shareVerifyMatch[1]));
+    return json(res, 200, { ok: true, valid: v.valid, reason: v.reason || null, share: v.share || null });
+  }
+  const shareDelMatch = p.match(/^\/api\/panel\/shares\/([^\/]+)$/);
+  if (shareDelMatch && req.method === "DELETE") {
+    const r = await panelShares.revoke(me.user.id, decodeURIComponent(shareDelMatch[1]));
+    if (r.notFound) return json(res, 404, { ok: false, error: "分享不存在或不属于你" });
+    return json(res, 200, { ok: true, revoked: true });
+  }
+
   // ---- 发消息 / 重新生成 ----
   if (p === "/api/chat" && req.method === "POST") {
     if (!chatLimiter.allow(clientIp(req))) {
@@ -703,6 +810,7 @@ async function main() {
   keys = await keysMod.initKeys({ db: auth.db, masterKeyFile: MASTER_KEY_FILE });
   conversations = await convMod.initConversations(auth.db);
   memory = await memoryMod.initMemory(auth.db);
+  panelShares = await panelSharesMod.initPanelShares(auth.db);
   log.info("init", { stage: "ready", dbDir: DB_DIR, username: USERNAME, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
 
   pickPort(PORT, (port) => {

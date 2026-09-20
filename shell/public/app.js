@@ -639,6 +639,98 @@ async function loadKeyState() {
   } catch (x) { /* 静默 */ }
 }
 
+/* ---- 面板分享（只读 + 整面板）---- */
+function showModal(id) { const el = $("#" + id); if (el) el.hidden = false; }
+function hideModal(id) { const el = $("#" + id); if (el) el.hidden = true; }
+document.querySelectorAll(".modal-x").forEach((b) => b.addEventListener("click", () => hideModal(b.dataset.close)));
+document.querySelectorAll(".modal-mask").forEach((m) => m.addEventListener("click", (e) => { if (e.target === m) hideModal(m.id); }));
+
+async function openShareModal() {
+  const body = $("#shareModalBody");
+  body.innerHTML =
+    '<div class="share-form">' +
+      '<label>有效期' +
+        '<select id="shareExpiry">' +
+          '<option value="">永久</option>' +
+          '<option value="24">24 小时</option>' +
+          '<option value="168">7 天</option>' +
+          '<option value="720">30 天</option>' +
+        '</select>' +
+      '</label>' +
+      '<button class="btn" id="shareCreateBtn" type="button">生成分享链接</button>' +
+    '</div>' +
+    '<div id="shareResult"></div>';
+  showModal("shareModal");
+  $("#shareCreateBtn").addEventListener("click", createShare);
+}
+
+async function createShare() {
+  const exp = ($("#shareExpiry") && $("#shareExpiry").value) || "";
+  const payload = exp ? { expiresInHours: Number(exp) } : {};
+  const result = $("#shareResult");
+  result.innerHTML = '<div class="share-loading">生成中…</div>';
+  try {
+    const r = await fetch("/api/panel/shares", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok) { result.innerHTML = '<div class="share-err">' + ((j && j.error) || ("HTTP " + r.status)) + '</div>'; return; }
+    const full = location.origin + j.url;
+    result.innerHTML =
+      '<div class="share-link-row">' +
+        '<input id="shareLink" readonly value="' + full + '">' +
+        '<button class="btn" id="shareCopyBtn" type="button">复制</button>' +
+      '</div>' +
+      '<div class="share-meta">有效期：' + (j.expires_at ? fmtTime(j.expires_at) : "永久") + ' · 只读 · 打开即可查看（无需登录）</div>';
+    $("#shareCopyBtn").addEventListener("click", () => copyText(full, $("#shareCopyBtn")));
+  } catch (e) {
+    result.innerHTML = '<div class="share-err">创建失败：' + e.message + '</div>';
+  }
+}
+
+async function openMyShares() {
+  showModal("mySharesModal");
+  const body = $("#mySharesBody");
+  body.innerHTML = '<div class="share-loading">读取中…</div>';
+  try {
+    const r = await fetch("/api/panel/shares", { credentials: "same-origin" });
+    const j = await r.json().catch(() => null);
+    const shares = (j && Array.isArray(j.shares)) ? j.shares : [];
+    body.innerHTML = "";
+    if (!shares.length) { body.innerHTML = '<div class="share-empty">还没有分享。点「分享面板」创建一个。</div>'; return; }
+    for (const s2 of shares) {
+      const row = document.createElement("div");
+      row.className = "shares-row" + (s2.active ? "" : " off");
+      const info = document.createElement("div"); info.className = "shares-info";
+      const link = document.createElement("div"); link.className = "shares-link"; link.textContent = location.origin + s2.url;
+      const meta = document.createElement("div"); meta.className = "shares-meta";
+      const status = s2.revoked ? "已撤销" : (s2.expired ? "已过期" : "✅ 有效");
+      meta.textContent = "创建于 " + fmtTime(s2.created_at)
+        + (s2.expires_at ? " · 到期 " + fmtTime(s2.expires_at) : " · 永久")
+        + (s2.last_accessed_at ? " · 最近访问 " + fmtTime(s2.last_accessed_at) : " · 从未访问")
+        + " · " + status;
+      info.appendChild(link); info.appendChild(meta);
+      row.appendChild(info);
+      if (s2.active) {
+        const rev = document.createElement("button"); rev.className = "shares-revoke"; rev.textContent = "撤销";
+        rev.addEventListener("click", async () => {
+          await fetch("/api/panel/shares/" + encodeURIComponent(s2.id), { method: "DELETE", credentials: "same-origin" });
+          openMyShares();
+        });
+        row.appendChild(rev);
+      }
+      body.appendChild(row);
+    }
+  } catch (e) {
+    body.innerHTML = '<div class="share-err">读取失败：' + e.message + '</div>';
+  }
+}
+
+const sharePanelBtn = $("#sharePanelBtn"), mySharesBtn = $("#mySharesBtn");
+if (sharePanelBtn) sharePanelBtn.addEventListener("click", openShareModal);
+if (mySharesBtn) mySharesBtn.addEventListener("click", openMyShares);
+
 /* ---- 启动：拉状态 + 拉对话列表（自动选中最近一个；没有则空状态引导）---- */
 (async () => {
   try { const j = await (await fetch("/api/skills")).json(); $("#pSkills").textContent = "技能 " + j.skills.length; $("#pSkills").className = "pill ok"; } catch (e) {}
