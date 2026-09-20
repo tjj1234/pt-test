@@ -316,6 +316,11 @@ async function handleChat(req, res, me, body) {
   res.flushHeaders();
   const sse = (obj) => { try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (e) {} };
 
+  // ⑤ 分岔 / 重新生成：重置该对话的 DSH session（丢弃旧轨迹），下一问冷启动、只重放截断后的历史
+  if (hasBranch || regenerate) {
+    try { tenantMod.closeDshSession(conversationId); } catch (e) { /* 忽略 */ }
+  }
+
   const r = await tenantMod.runDshForUser(uid, question, {
     tenantId: me.tenant.id,
     conversationId,
