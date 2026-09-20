@@ -364,7 +364,7 @@ function getOrSpawnProcess(spec, opts) {
     try { clearInterval(existing.pollTimer); } catch (e) {}
     persistentProcesses.delete(key);
     // 该租户进程已重来，其所有 DSH session 都已丢失
-    for (const [cid, tid] of [...warmSessions.entries()]) if (tid === key) warmSessions.delete(cid);
+    for (const [cid, rec] of [...warmSessions.entries()]) if (rec && rec.tenantId === key) warmSessions.delete(cid);
   }
 
   const tmpDir = opts.tmpDir || TMP;
@@ -408,7 +408,6 @@ function getOrSpawnProcess(spec, opts) {
 
 function runDshPersistent(spec, opts) {
   const conversationId = String(opts.conversationId || "").trim();
-  const sessionId = conversationId || ("adhoc-" + crypto.randomBytes(6).toString("hex"));
 
   return new Promise((resolve) => {
     const { proc, fresh, spawnError } = getOrSpawnProcess(spec, opts);
@@ -419,8 +418,10 @@ function runDshPersistent(spec, opts) {
       });
     }
 
-    // 新鲜进程 = 无任何存活 session；该会话视为冷启动（补历史）
-    const warm = !fresh && warmSessions.get(sessionId) === spec.tenantId;
+    // 冷/热判断：新鲜进程 = 无存活 session，视为冷启动（补历史 + 用全新 sessionId 避免与磁盘持久化日志冲突）
+    const warmRec = conversationId ? warmSessions.get(conversationId) : null;
+    const warm = !fresh && warmRec && warmRec.tenantId === spec.tenantId;
+    const sessionId = warm ? warmRec.sessionId : ((conversationId || "adhoc") + "-" + crypto.randomBytes(6).toString("hex"));
 
     // 组装任务：人设 + 长期记忆 + 图片说明 +（冷启动才补历史）+ 当前问题
     const persona = readPersona();
@@ -464,8 +465,8 @@ function runDshPersistent(spec, opts) {
     proc.waiters.set(sessionId, waiter);
     writeJson(proc, { type: "task", sessionId, task: fullTask, model: opts.model });
 
-    // 成功发送后标记 warm（会话在 DSH 侧存活）
-    if (conversationId) warmSessions.set(sessionId, spec.tenantId);
+    // 成功发送后标记 warm（会话在 DSH 侧存活；记录实际 sessionId）
+    if (conversationId) warmSessions.set(conversationId, { tenantId: spec.tenantId, sessionId });
 
     // 超时保护
     setTimeout(() => {
@@ -494,9 +495,11 @@ function runDshPersistent(spec, opts) {
 
 function closeDshSession(conversationId) {
   // 关掉某个对话对应的 DSH session（删对话时调用）
-  const sid = String(conversationId || "").trim();
-  if (!sid) return;
-  warmSessions.delete(sid);
+  const cid = String(conversationId || "").trim();
+  if (!cid) return;
+  const rec = warmSessions.get(cid);
+  warmSessions.delete(cid);
+  const sid = (rec && rec.sessionId) || cid;
   for (const proc of persistentProcesses.values()) {
     if (proc && proc.child && proc.child.exitCode === null) {
       writeJson(proc, { type: "close", sessionId: sid });
