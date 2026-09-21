@@ -29,9 +29,9 @@ try {
 
   ok("adapter 三方法齐全", ["query", "transaction", "close"].every((k) => typeof storage.adapter[k] === "function"));
 
-  const reg = await auth.register({ username: "u1", email: "u1@test.com", password: "p1" });
+  const reg = await auth.register({ username: "user1", email: "u1@test.com", password: "password1" });
   ok("注册成功", reg && reg.ok === true);
-  const login = await auth.login({ username: "u1", password: "p1" });
+  const login = await auth.login({ username: "user1", password: "password1" });
   ok("登录返回 token", login && login.ok && !!login.token);
   const uid = login.user.id;
 
@@ -43,13 +43,36 @@ try {
   const list = await conversations.list(uid);
   ok("列表含该对话", Array.isArray(list) && list.some((x) => x.id === c.id));
   // 隔离：别的用户读不到
-  const reg2 = await auth.register({ username: "u2", email: "u2@test.com", password: "p2" });
-  const login2 = await auth.login({ username: "u2", password: "p2" });
+  const reg2 = await auth.register({ username: "user2", email: "u2@test.com", password: "password2" });
+  const login2 = await auth.login({ username: "user2", password: "password2" });
   ok("跨用户隔离：u2 读不到 u1 的对话", (await conversations.get(login2.user.id, c.id)) === null);
 
   await memory.set(uid, "k1", "v1");
   const mems = await memory.list(uid);
   ok("记忆写入可读", Array.isArray(mems) && mems.some((m) => m.key === "k1" && m.value === "v1"));
+
+  // 幂等：再跑一次 migrate 不报错、不重复建表
+  try { await storage.migrate(); ok("migrate 幂等重跑无报错", true); }
+  catch (e) { ok("migrate 幂等重跑无报错", false, e.message); }
+
+  // 事务 commit：插入后 commit，数据可见
+  await storage.adapter.transaction(async (tx) => {
+    await tx.query("INSERT INTO user_memory (user_id, key, value, updated_at) VALUES ($1,$2,$3,now())", [uid, "txkey", "txval"]);
+  });
+  const txRow = await storage.adapter.query("SELECT value FROM user_memory WHERE user_id=$1 AND key=$2", [uid, "txkey"]);
+  ok("事务 commit 后数据可见", txRow.rows.length === 1 && txRow.rows[0].value === "txval");
+
+  // 事务 rollback：插入后抛错，数据不可见 + 连接仍可用
+  let txRolledBack = false;
+  try {
+    await storage.adapter.transaction(async (tx) => {
+      await tx.query("INSERT INTO user_memory (user_id, key, value, updated_at) VALUES ($1,$2,$3,now())", [uid, "txrollback", "x"]);
+      throw new Error("force rollback");
+    });
+  } catch (e) { txRolledBack = true; }
+  const rxRow = await storage.adapter.query("SELECT 1 FROM user_memory WHERE user_id=$1 AND key=$2", [uid, "txrollback"]);
+  ok("事务 rollback 后数据不可见", txRolledBack && rxRow.rows.length === 0);
+  ok("rollback 后连接仍可用", Array.isArray(rxRow.rows));
 
   try {
     const kres = await keys.encryptApiKey(uid, "pt_abc1234567890");
