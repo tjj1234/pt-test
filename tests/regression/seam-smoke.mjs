@@ -16,22 +16,12 @@ let pass = 0, fail = 0;
 const ok = (n, c, e) => { if (c) { pass++; console.log("  ✅ " + n); } else { fail++; console.log("  ❌ " + n + (e ? " — " + e : "")); } };
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "seam-"));
-const migDir = path.join(tmp, "migrations");
-fs.mkdirSync(migDir);
-for (const f of fs.readdirSync(path.join(root, "shell", "db-migrations"))) {
-  fs.copyFileSync(path.join(root, "shell", "db-migrations", f), path.join(migDir, f));
-}
-for (const f of ["004_conversations_v2.sql", "005_archive_memory.sql", "006_panel_shares.sql"]) {
-  const src = path.join(root, "conv", f);
-  if (fs.existsSync(src)) fs.copyFileSync(src, path.join(migDir, f));
-}
 
 const { createStorage } = require(path.join(root, "shell", "storage", "index.cjs"));
 
 try {
   const storage = await createStorage({
     dataDir: path.join(tmp, "data"),
-    migrationsDir: migDir,
     defaultAdmin: { username: "seam", password: "seam123" },
     masterKeyFile: path.join(tmp, "master.key"),
   });

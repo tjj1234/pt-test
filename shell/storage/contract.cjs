@@ -22,6 +22,24 @@ const STORAGE_ADAPTER = {
 };
 
 /**
+ * transaction 语义契约（Slice 1.5 D）——任何 StorageAdapter 都必须满足：
+ *   1. callback 成功（resolve）→ 自动 commit；
+ *   2. callback 抛错（reject）→ 自动 rollback；
+ *   3. rollback 后连接 / 实例仍可继续使用；
+ *   4. 事务状态不泄漏到下一次请求（每次 transaction 是独立事务）；
+ *   5. 仓储在事务内必须使用传入的 tx.query，不能偷偷用外部 db.query；
+ *   6. PGlite 与 PG Adapter 都遵循同一语义。
+ */
+const TRANSACTION_SEMANTICS = {
+  commitOnResolve: true,
+  rollbackOnReject: true,
+  reusableAfterRollback: true,
+  noStateLeak: true,
+  repoUsesTx: true,        // 未来仓储事务化要求（当前仓储尚未事务化，属技术债）
+  pgAndPgliteSame: true,
+};
+
+/**
  * Repository 契约：方法签名与现有模块一一对应（不新造签名，只做显式声明）。
  * 未来 PG Adapter 必须实现「核心 Repository 在同一接口下的行为一致」。
  */
@@ -78,4 +96,4 @@ function assertRepository(repo, methods) {
   return repo;
 }
 
-module.exports = { STORAGE_ADAPTER, REPOSITORIES, assertAdapter, assertRepository };
+module.exports = { STORAGE_ADAPTER, REPOSITORIES, TRANSACTION_SEMANTICS, assertAdapter, assertRepository };

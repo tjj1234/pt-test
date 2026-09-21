@@ -45,5 +45,43 @@ for (const [label, rel, fn] of deps) {
   }
 }
 
+console.log("\n【转发层校验】（分叉消除：旧文件必须指向权威 v2 同一实现）");
+const v2init = require("../../conv/conversations-v2.cjs").initConversations;
+try { ok("shell/conversations.cjs 转发到权威 v2", require("../../shell/conversations.cjs").initConversations === v2init); }
+catch (e) { ok("shell/conversations.cjs 转发到权威 v2", false, e.message); }
+try { ok("conv/conversations.cjs 转发到权威 v2", require("../../conv/conversations.cjs").initConversations === v2init); }
+catch (e) { ok("conv/conversations.cjs 转发到权威 v2", false, e.message); }
+
+console.log("\n【transaction 语义契约】（mock db 模拟 commit/rollback）");
+{
+  const mkDb = () => {
+    const state = { committed: 0, rolledBack: 0 };
+    return {
+      state,
+      query: async () => ({ rows: [] }),
+      transaction: async (cb) => {
+        try { const r = await cb({ query: async () => ({ rows: [] }) }); state.committed++; return r; }
+        catch (e) { state.rolledBack++; throw e; }
+      },
+    };
+  };
+  const db = mkDb();
+  const adapter = contract.assertAdapter({
+    query: (s, p) => db.query(s, p),
+    transaction: (cb) => db.transaction(cb),
+    close: async () => {},
+  });
+  const r = await adapter.transaction(async (tx) => { await tx.query("x"); return 42; });
+  ok("transaction 成功路径返回结果 + commit", r === 42 && db.state.committed === 1);
+  let threw = false;
+  try { await adapter.transaction(async () => { throw new Error("boom"); }); } catch (e) { threw = true; }
+  ok("transaction 抛错路径 rollback + 错误传播", threw && db.state.rolledBack === 1);
+  const still = await adapter.query("select 1");
+  ok("rollback 后连接仍可用", Array.isArray(still.rows));
+  ok("TRANSACTION_SEMANTICS 六条声明齐全",
+    ["commitOnResolve", "rollbackOnReject", "reusableAfterRollback", "noStateLeak", "repoUsesTx", "pgAndPgliteSame"]
+      .every((k) => contract.TRANSACTION_SEMANTICS[k] === true));
+}
+
 console.log(`\n结果：${pass} 通过 / ${fail} 失败`);
 process.exit(fail ? 1 : 0);
