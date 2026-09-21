@@ -88,9 +88,12 @@ async function seed(pool, opts = {}) {
 
   const TENANT_ID = opts.tenantId || "11111111-1111-1111-1111-111111111111";
   const WORKSPACE_ID = opts.workspaceId || "ws_powertokens_main";
-  const RO_TOKEN = opts.readToken || "pt_ro_delivery_9f3c21";
+  const RO_TOKEN = opts.readToken || null;
   const WEBHOOK_ID = opts.webhookId || "wh_powertokens_001";
-  const WEBHOOK_SECRET = opts.webhookSecret || "whsec_delivery_a71b4e";
+  const WEBHOOK_SECRET = opts.webhookSecret || null;
+  if (!RO_TOKEN || !WEBHOOK_SECRET) {
+    throw new Error("seed() 缺少只读 token / webhook secret（P0-2：不再内置默认值，必须由调用方显式传入）");
+  }
 
   const todayStart = utcDayStart(Date.now());
   const dayList = [];

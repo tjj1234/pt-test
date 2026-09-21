@@ -227,8 +227,10 @@ function buildGroupsSql(q, p, rules) {
     const bkEvent = bucketExpr("attr_date", q.granularity);
     const whereParts = [];
     if (q.platform !== null) {
-        // groups 无 platform 列：平台过滤按 §2.4 走 utm_source→platform 映射（L3 兜底近似）
-        whereParts.push(`${(0, attribution_1.buildSourcePlatformCase)("ba.attr_source", rules)} = ${p.add(q.platform)}`);
+        // groups 无 platform 列：平台过滤按 §2.4 走 utm_source→platform 映射（L3 兜底近似）；P0-6 多值 → IN
+        const arr = Array.isArray(q.platform) ? q.platform : [q.platform];
+        const phs = arr.map((x) => p.add(x));
+        whereParts.push(`${(0, attribution_1.buildSourcePlatformCase)("ba.attr_source", rules)} IN (${phs.join(", ")})`);
     }
     const whereSql = whereParts.length > 0 ? `WHERE ${whereParts.join(" AND ")}` : "";
     const limitPh = p.add(q.limit);
@@ -300,12 +302,15 @@ function buildRoiSql(q, p, rules) {
     const bkEvent = bucketExpr("attr_date", q.granularity);
     // L3 兜底：utm_source → platform 映射（仅 account 级）
     const mapSourceB = (0, attribution_1.buildSourcePlatformCase)("b.attr_source", rules);
-    // 平台过滤：ad_spend 只认该平台的花费（§2.4 主要用于 roi_by_entity）
-    const spendPlatform = q.platform !== null ? `\n    AND p.platform = ${p.add(q.platform)}` : "";
+    // 平台过滤：ad_spend 只认该平台的花费（§2.4 主要用于 roi_by_entity）；P0-6 多值 → IN
+    const platArr = q.platform !== null ? (Array.isArray(q.platform) ? q.platform : [q.platform]) : [];
+    const platPhs = platArr.map((x) => p.add(x)); // 占位符只计算一次，避免重复 add
+    const platIn = platPhs.join(", ");
+    const spendPlatform = platArr.length ? `\n    AND p.platform IN (${platIn})` : "";
     // 最终过滤：排除 direct/other；平台过滤时只保留「认领实体 platform 等于该值」的行
     const whereParts = ["r.attr_source IS NOT NULL"];
-    if (q.platform !== null) {
-        whereParts.push(`CASE WHEN r.cnt = 1 THEN r.platform ELSE NULL END = ${p.add(q.platform)}`);
+    if (platArr.length) {
+        whereParts.push(`CASE WHEN r.cnt = 1 THEN r.platform ELSE NULL END IN (${platIn})`);
     }
     const whereSql = `WHERE ${whereParts.join(" AND ")}`;
     const limitPh = p.add(q.limit);
@@ -701,13 +706,20 @@ function parseFunnelParams(query) {
         granularity = granularityRaw;
     }
     const strOrNull = (raw) => raw !== undefined && raw.length > 0 ? raw : null;
+    // P0-6：支持逗号分隔多值（前端多选筛选）→ 数组；空串/空数组视同不过滤
+    const strListOrNull = (raw) => {
+        if (raw === undefined || raw === null || String(raw).length === 0) return null;
+        const arr = String(raw).split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+        return arr.length > 0 ? arr : null;
+    };
     const platformRaw = get("platform");
     let platform = null;
     if (platformRaw !== undefined && platformRaw.length > 0) {
-        if (!PLATFORMS.includes(platformRaw)) {
+        const arr = String(platformRaw).split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+        if (arr.length === 0 || arr.some((p) => !PLATFORMS.includes(p))) {
             return { ok: false, message: "platform 需为 meta/google/x 之一" };
         }
-        platform = platformRaw;
+        platform = arr;
     }
     let conversionWindowDays = 0;
     const cwdRaw = get("conversion_window_days");
@@ -739,11 +751,11 @@ function parseFunnelParams(query) {
             from,
             to,
             granularity,
-            country: strOrNull(get("country")),
+            country: strListOrNull(get("country")),
             platform,
-            utmSource: strOrNull(get("utm_source")),
-            utmCampaign: strOrNull(get("utm_campaign")),
-            utmContent: strOrNull(get("utm_content")),
+            utmSource: strListOrNull(get("utm_source")),
+            utmCampaign: strListOrNull(get("utm_campaign")),
+            utmContent: strListOrNull(get("utm_content")),
             conversionWindowDays,
             limit,
         },
@@ -755,8 +767,11 @@ async function queryFreshness(client, tenantId, workspaceId, platform) {
     // 直接置 ads_synced_through = null —— 杜绝跨租户广告数据水位泄漏（此前回落演示工作区会泄出演示租户的 MAX(date)）。
     let adsSyncedThrough = null;
     if (workspaceId !== null && workspaceId !== undefined && workspaceId !== "") {
-        const platformClause = platform === null ? "" : " AND platform = $2";
-        const adsValues = platform === null ? [workspaceId] : [workspaceId, platform];
+        // P0-6：platform 可能是数组（多选），这里做 IN 展开（$1 = workspaceId）
+        const platArr = platform === null || platform === undefined ? [] : (Array.isArray(platform) ? platform : [platform]);
+        const phs = platArr.map((_, i) => `$${2 + i}`);
+        const platformClause = platArr.length ? ` AND platform IN (${phs.join(", ")})` : "";
+        const adsValues = platArr.length ? [workspaceId, ...platArr] : [workspaceId];
         const adsRes = await client.query(`SELECT MAX(date)::text AS m FROM ad_performance_daily WHERE workspace_id = $1${platformClause}`, adsValues);
         adsSyncedThrough = adsRes.rows[0]?.m ?? null;
     }

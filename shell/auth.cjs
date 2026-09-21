@@ -180,7 +180,8 @@ async function initAuth(opts = {}) {
   /** 幂等种子：保证「默认管理员」存在且 role 恒为 admin（不依赖是否首个用户）。 */
   async function ensureDefaultAdmin(username, password) {
     const uname = String(username || "admin").trim();
-    const pass = String(password || "northstar");
+    const pass = String(password || "");
+    if (!pass) throw new Error("默认管理员密码不能为空：必须设置 PT_SHELL_PASSWORD（或由启动逻辑生成随机密码）");
     const exists = await db.query("SELECT 1 FROM users WHERE username = $1", [uname]);
     if (exists.rows.length) return { ok: true, created: false };
     // 直接以显式 role='admin' 落库（服务端种子，不经 register 的 isFirst 逻辑）

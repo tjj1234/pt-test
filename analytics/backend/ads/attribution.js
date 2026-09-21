@@ -88,11 +88,14 @@ function buildCommonCtes(q, p) {
     const addEq = (expr, v) => {
         if (v === null || v === undefined)
             return;
-        const t = v.trim();
-        if (t.length === 0)
+        // P0-6：支持多值（数组 → IN 列表；单值 → 等值），配合前端多选筛选
+        const vals = (Array.isArray(v) ? v : [v])
+            .map((x) => String(x).trim())
+            .filter((x) => x.length > 0);
+        if (vals.length === 0)
             return;
-        const ph = p.add(t);
-        filters.push(`${expr} = ${ph}`);
+        const phs = vals.map((x) => p.add(x));
+        filters.push(`${expr} IN (${phs.join(", ")})`);
     };
     addEq("COALESCE(e.utm_source, ua.utm_source)", q.utmSource);
     addEq("COALESCE(e.utm_campaign, ua.utm_campaign)", q.utmCampaign);

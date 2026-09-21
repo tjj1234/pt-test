@@ -37,7 +37,9 @@ function sendJson(res, code, obj) {
 }
 
 function setSessionCookie(res, token) {
-  res.setHeader("Set-Cookie", COOKIE_NAME + "=" + token + "; HttpOnly; SameSite=Lax; Path=/");
+  // P0-4 安全：PT_COOKIE_SECURE=1 时加 Secure（HSTS 由 server 统一加）
+  const sec = process.env.PT_COOKIE_SECURE === "1" ? "; Secure" : "";
+  res.setHeader("Set-Cookie", COOKIE_NAME + "=" + token + "; HttpOnly; SameSite=Lax; Path=/" + sec);
 }
 function clearSessionCookie(res) {
   res.setHeader("Set-Cookie", COOKIE_NAME + "=; Max-Age=0; Path=/");

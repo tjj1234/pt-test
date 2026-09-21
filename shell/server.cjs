@@ -55,12 +55,31 @@ function arg(name, dflt) {
 const PORT = Number(arg("--port", process.env.PT_SHELL_PORT || 8098));
 const DASH_PORT = Number(arg("--dashboard-port", process.env.PT_DASH_PORT || 8095));
 const DASH_TOKEN = arg("--dashboard-token", process.env.PT_DASH_TOKEN || "pt_ro_delivery_9f3c21");
-const PASSWORD = arg("--password", process.env.PT_SHELL_PASSWORD || "northstar");
+// P0-1 安全：取消固定默认密码。显式提供 PT_SHELL_PASSWORD / --password 才用；
+// 否则生成随机密码；非回环监听 + 无显式密码 → 直接拒绝启动（见下方检查）。
+const PASSWORD_EXPLICIT = process.env.PT_SHELL_PASSWORD
+  || (process.argv.indexOf("--password") >= 0 ? process.argv[process.argv.indexOf("--password") + 1] : null)
+  || null;
+const PASSWORD = PASSWORD_EXPLICIT || crypto.randomBytes(12).toString("base64url");
 const USERNAME = arg("--user", process.env.PT_SHELL_USER || "admin");
 const DSH_TIMEOUT_MS = Number(arg("--timeout", 300000));
 
 // ---- 监听地址（默认 127.0.0.1，容器/反代部署用 0.0.0.0）----
 const LISTEN_HOST = process.env.PT_LISTEN_HOST || "127.0.0.1";
+
+// P0-4 安全：生产 HTTPS 部署设 PT_COOKIE_SECURE=1 → Cookie 加 Secure + 响应加 HSTS
+const COOKIE_SECURE = process.env.PT_COOKIE_SECURE === "1";
+
+// P0-1 安全：非回环监听（0.0.0.0 / 公网）时，必须显式设置管理员密码，否则拒绝启动。
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+if (!PASSWORD_EXPLICIT && !LOOPBACK_HOSTS.has(String(LISTEN_HOST).toLowerCase())) {
+  console.error("【拒绝启动】监听地址 = " + LISTEN_HOST + "（非回环），但未设置 PT_SHELL_PASSWORD。");
+  console.error("  生产环境必须显式设置 PT_SHELL_PASSWORD，禁止用随机/默认密码暴露到非本机网络。");
+  process.exit(1);
+}
+if (!PASSWORD_EXPLICIT) {
+  console.log("★ 未设置 PT_SHELL_PASSWORD，已生成随机管理员密码（仅本次启动打印一次，请记下）: " + PASSWORD);
+}
 
 // 身份库 / master key 落点（可用环境变量覆盖，便于自测用临时目录）
 const DB_DIR = process.env.PT_DB_DIR || path.join(REPO_ROOT, "db");
@@ -389,7 +408,8 @@ async function handleChat(req, res, me, body) {
 /** 反向代理：把看板藏到业务壳后面。 */
 function proxyDashboard(req, res, tenantId) {
   const sub = req.url.replace(/^\/dashboard/, "") || "/";
-  const target = (sub === "/" || sub === "") ? "/?pt_ro_token=" + encodeURIComponent(DASH_TOKEN) : sub;
+  // P0-3 安全：token 不再拼进 URL；前端 API 调用由服务端注入 Authorization（见 /api/analytics 反代）。
+  const target = sub;
   const p = http.request({ host: "127.0.0.1", port: DASH_PORT, path: target, method: req.method,
     headers: dashProxyHeaders(req, tenantId) },
     (up) => { res.writeHead(up.statusCode, up.headers); up.pipe(res); });
@@ -401,7 +421,8 @@ function proxyDashboard(req, res, tenantId) {
 }
 /** 写分享会话 cookie（HttpOnly，供 /api/analytics 匿名只读回退识别）。 */
 function setShareCookie(res, token) {
-  res.setHeader("Set-Cookie", "pt_share=" + encodeURIComponent(token) + "; HttpOnly; SameSite=Lax; Path=/");
+  const sec = COOKIE_SECURE ? "; Secure" : "";
+  res.setHeader("Set-Cookie", "pt_share=" + encodeURIComponent(token) + "; HttpOnly; SameSite=Lax; Path=/" + sec);
 }
 
 const SHARE_CSS =
@@ -441,7 +462,8 @@ function serveShareLanding(res, token) {
 /** 分享只读看板反向代理：藏在 /panel/share/<token>/view/ 后面，注入只读 token。 */
 function proxyShareDashboard(req, res) {
   const sub = req.url.replace(/^\/panel\/share\/[^\/]+\/view/, "") || "/";
-  const target = (sub === "/" || sub === "") ? "/?pt_ro_token=" + encodeURIComponent(DASH_TOKEN) : sub;
+  // P0-3 安全：token 不再拼进 URL；前端 API 调用由服务端注入 Authorization。
+  const target = sub;
   const p = http.request({ host: "127.0.0.1", port: DASH_PORT, path: target, method: req.method,
     headers: dashProxyHeaders(req, null) },
     (up) => { res.writeHead(up.statusCode, up.headers); up.pipe(res); });
@@ -825,6 +847,12 @@ async function main() {
       try { pathname = new URL(req.url, "http://127.0.0.1:" + port).pathname; } catch (e) {}
       const method = req.method || "GET";
       const ip = clientIp(req);
+
+      // P0-3 安全：所有响应禁止把 URL 泄露给第三方（Referrer-Policy）
+      res.setHeader("Referrer-Policy", "no-referrer");
+
+      // P0-4 安全：HTTPS 生产模式对所有响应加 HSTS
+      if (COOKIE_SECURE) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 
       res.on("finish", () => {
         log.info("request", { method, path: pathname, status: res.statusCode, ip, ms: Date.now() - start });

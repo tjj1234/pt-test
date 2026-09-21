@@ -29,6 +29,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const http = require("node:http");
+const crypto = require("node:crypto");
 
 const { createPgCompatPool } = require("./lib/db.cjs");
 const deps = require("./lib/deps.cjs");
@@ -56,9 +57,10 @@ const FRONTEND = path.join(ROOT, "frontend");
 const DIST = path.join(ROOT, "backend");                 // 编译产物目录
 const URL_FILE = path.join(ROOT, ".delivery-url.txt");
 
-const RO_TOKEN = process.env.PT_DASH_TOKEN || "pt_ro_delivery_9f3c21";
-const WEBHOOK_ID = "wh_powertokens_001";
-const WEBHOOK_SECRET = "whsec_delivery_a71b4e";
+// P0-2 安全：token/secret 不再内置默认值，必须从环境变量显式提供，缺失拒绝启动。
+const RO_TOKEN = process.env.PT_DASH_TOKEN || null;
+const WEBHOOK_ID = process.env.PT_DASH_WEBHOOK_ID || "wh_powertokens_001";
+const WEBHOOK_SECRET = process.env.PT_DASH_WEBHOOK_SECRET || null;
 const TENANT_ID = "11111111-1111-1111-1111-111111111111";
 const WORKSPACE_ID = "ws_powertokens_main";
 
@@ -220,6 +222,15 @@ async function main() {
   }
   console.log("  ✅ 编译产物 / 前端 / 迁移脚本 齐备");
 
+  // ---- 0.5 密钥检查（P0-2：缺失拒绝启动，不再内置默认 token/secret）----
+  if (!RO_TOKEN || !WEBHOOK_SECRET) {
+    console.error("\n❌ 缺少密钥，拒绝启动。");
+    console.error("   源码不再内置任何默认 token/secret，请通过环境变量显式提供：");
+    console.error("     PT_DASH_TOKEN          = 看板只读 token（与业务壳 DASH_TOKEN 保持一致）");
+    console.error("     PT_DASH_WEBHOOK_SECRET = 打点 webhook 签名密钥（随机长串）");
+    process.exit(1);
+  }
+
   // ---- 1. 数据库 ----
   console.log("\n[1/6] 启动数据库（真 PostgreSQL · PGlite）");
   if (OPT.reseed && fs.existsSync(DATA_DIR)) {
@@ -327,9 +338,15 @@ async function main() {
   // 前端静态资源（放最后注册，API 路由优先匹配）
   app.get("/*", serveStatic);
 
-  const port = await pickPort(OPT.port);
+  // P0-5：不再自动换端口，端口被占直接失败（避免与业务壳固定端口不一致 → 「看板离线」）。
+  const port = OPT.port;
+  if (!(await isFree(port))) {
+    console.error(`\n❌ 端口 ${port} 已被占用，拒绝启动（P0-5：不自动换端口）。`);
+    process.exit(1);
+  }
   await app.listen({ port, host: "127.0.0.1" });
-  const url = `http://127.0.0.1:${port}/?pt_ro_token=${RO_TOKEN}`;
+  // P0-3：token 不再拼进 URL（避免进浏览器历史/代理日志/Referer）
+  const url = `http://127.0.0.1:${port}/`;
   started = app;
 
   // ---- 6. 就绪自检 ----
@@ -384,14 +401,14 @@ async function main() {
   console.log("");
   console.log("   " + url);
   console.log("");
-  console.log("   只读 token：" + RO_TOKEN);
+  console.log("   只读 token（sha256 前 8 位）：" + crypto.createHash("sha256").update(RO_TOKEN).digest("hex").slice(0, 8) + "（不打印完整值）");
   console.log("   租户：" + TENANT_ID);
   console.log("   工作区：" + WORKSPACE_ID);
   console.log("   TRUST_TENANT_HEADER：" + (TRUST_TENANT_HEADER ? "开" : "关"));
   console.log("");
   console.log("   打点接入地址（POST）：");
   console.log(`     http://127.0.0.1:${port}/api/v1/collect/${WEBHOOK_ID}`);
-  console.log("     Header: x-pt-webhook-secret: " + WEBHOOK_SECRET);
+  console.log("     Header: x-pt-webhook-secret: " + crypto.createHash("sha256").update(WEBHOOK_SECRET).digest("hex").slice(0, 8) + "（sha256 前 8 位，不打印完整值）");
   console.log("");
   console.log("   地址也写到了：" + (urlFileWritten ? path.basename(urlFileWritten) : "（本环境不允许写文件，看上面这行即可）"));
   console.log("   按 Ctrl+C 停止（正常退出，下次启动不需要重建数据库）。");

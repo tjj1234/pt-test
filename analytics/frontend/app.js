@@ -150,11 +150,15 @@ function platformsToUtmSources(platforms) {
   return (platforms || []).map((p) => PLATFORM_UTM[p] && PLATFORM_UTM[p].source).filter(Boolean);
 }
 
-/** 全局筛选 → funnel 请求参数（服务端只传时间 + granularity）。
- *  平台/国家多选走「客户端过滤」——由 3.2/3.3 在渲染层实现（设计 3.2 §2.2 / 3.3 §4.2）。 */
+/** 全局筛选 → funnel 请求参数（P0-6：平台/国家真正传给后端，后端支持逗号分隔多值）。 */
 function buildFunnelParams(granularity, f = state.filters) {
   const { from, to } = resolveRange(f);
-  return { from, to, granularity };
+  const platform = platformsToUtmSources(f.platforms); // ['meta','google','x']
+  return {
+    from, to, granularity,
+    platform: platform.length ? platform.join(",") : undefined,
+    country: (f.countries && f.countries.length) ? f.countries.join(",") : undefined,
+  };
 }
 
 /* ============================ API 对接层 ============================ */
@@ -169,12 +173,13 @@ class ApiError extends Error {
 }
 
 function resolveToken() {
+  // P0-3 安全：不再从 URL 读 pt_ro_token（避免 token 进浏览器历史/代理日志/Referer）。
+  // 经业务壳反代时由服务端注入 Authorization，前端无需持有 token；
+  // 独立部署 analytics 时可用 localStorage["pt_ro_token"] 或 CONFIG.READONLY_TOKEN。
   try {
-    const url = new URLSearchParams(window.location.search).get("pt_ro_token");
-    if (url) return url;
     const ls = window.localStorage.getItem("pt_ro_token");
     if (ls) return ls;
-  } catch (e) { /* 忽略存储/URL 解析异常 */ }
+  } catch (e) { /* 忽略存储异常 */ }
   return CONFIG.READONLY_TOKEN || "";
 }
 
