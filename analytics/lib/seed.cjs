@@ -63,14 +63,14 @@ const COMBOS = [
 ];
 
 /** 广告实体：把素材建成 ad_creatives（name = utm_content，JOIN 靠它）
- *  ★ 注意：ad_* 五表的 platform 有 CHECK 约束，**只允许 meta / google**。
- *    前端筛选栏里的「X Ads」在库层面无处安放 —— 这是已记录的真实缺陷。 */
+ *  ★ P2-3：X（Twitter）平台已补全 —— 003_add_x_platform.sql 放宽 CHECK 到 meta/google/x，
+ *    cr_1005（img_brand_awareness）落在 X 账户上，前端「X Ads」筛选可正常命中。 */
 const CREATIVE_DEFS = [
   { key: "video_hook_15s",      id: "cr_1001", platform: "meta",   account: "act_8812301", campaignId: "c_2001", spendPerDay: 627 },
   { key: "video_testimonial",   id: "cr_1002", platform: "meta",   account: "act_8812301", campaignId: "c_2001", spendPerDay: 443 },
   { key: "img_price_card",      id: "cr_1003", platform: "google", account: "act_5520907", campaignId: "c_2002", spendPerDay: 442 },
   { key: "carousel_features",   id: "cr_1004", platform: "google", account: "act_5520907", campaignId: "c_2002", spendPerDay: 302 },
-  { key: "img_brand_awareness", id: "cr_1005", platform: "google", account: "act_5520908", campaignId: "c_2003", spendPerDay: 137 },
+  { key: "img_brand_awareness", id: "cr_1005", platform: "x",      account: "act_9100011", campaignId: "c_2004", spendPerDay: 137 },
   // ★ 故意重名：与 cr_1003 同名 → SQL 应数出 cnt=2 → 无法唯一归因（roi=null）
   //   注意：必须**也给花费**才会真正发生碰撞 —— JOIN 要求 ad_performance_daily 里有行，
   //   第一版没给花费，结果重名场景静默失效（被真库实测抓出来）。
@@ -130,6 +130,7 @@ async function seed(pool, opts = {}) {
     { platform: "meta",   account: "act_8812301", name: "Meta 主账户",     currency: "USD", tz: "America/New_York" },
     { platform: "google", account: "act_5520907", name: "Google 主账户",   currency: "USD", tz: "America/Los_Angeles" },
     { platform: "google", account: "act_5520908", name: "Google 品牌账户", currency: "USD", tz: "America/Los_Angeles" },
+    { platform: "x",      account: "act_9100011", name: "X 品牌账户",      currency: "USD", tz: "America/Los_Angeles" },
   ];
   for (const a of accounts) {
     await pool.query(
@@ -142,6 +143,7 @@ async function seed(pool, opts = {}) {
     { platform: "meta",   account: "act_8812301", id: "c_2001", name: "pt-launch-us",       objective: "CONVERSIONS" },
     { platform: "google", account: "act_5520907", id: "c_2002", name: "pt-retarget-global", objective: "SEARCH" },
     { platform: "google", account: "act_5520908", id: "c_2003", name: "pt-brand",           objective: "DISPLAY" },
+    { platform: "x",      account: "act_9100011", id: "c_2004", name: "pt-brand",           objective: "AWARENESS" },
   ];
   for (const c of campaigns) {
     await pool.query(

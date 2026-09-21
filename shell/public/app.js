@@ -456,35 +456,60 @@ ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.
 ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 170) + "px"; });
 document.querySelectorAll(".quick button").forEach(b => b.addEventListener("click", () => ask(b.textContent)));
 
-/* ---- 技能 ---- *//* ---- ⑨ 图片上传 ---- */
+/* ---- 技能 ---- *//* ---- ⑨ 图片上传（含 NEW-1 Ctrl+V 粘贴） ---- */
 const imgInput = $("#imgInput"), imgBtn = $("#imgBtn"), imgPreview = $("#imgPreview"), imgThumb = $("#imgThumb"), imgClear = $("#imgClear");
 let pendingImage = null;
 function setPendingImage(url) { pendingImage = url; imgThumb.src = url; imgPreview.hidden = false; }
 function clearPendingImage() { pendingImage = null; imgThumb.removeAttribute("src"); imgPreview.hidden = true; if (imgInput) imgInput.value = ""; }
-if (imgBtn) imgBtn.addEventListener("click", () => imgInput.click());
-if (imgClear) imgClear.addEventListener("click", clearPendingImage);
-if (imgInput) imgInput.addEventListener("change", async () => {
-  const f = imgInput.files && imgInput.files[0];
-  if (!f) return;
-  if (f.size > 15 * 1024 * 1024) { alert("图片太大（≤15MB）"); imgInput.value = ""; return; }
-  let b64;
-  try {
-    b64 = await new Promise((resolve, reject) => {
-      const rd = new FileReader();
-      rd.onload = () => resolve(String(rd.result));
-      rd.onerror = () => reject(new Error("读取失败"));
-      rd.readAsDataURL(f);
-    });
-  } catch (e) { alert("读取失败：" + e.message); return; }
+
+/** 读文件 → dataURL（base64）。 */
+function readFileAsDataUrl(f) {
+  return new Promise((resolve, reject) => {
+    const rd = new FileReader();
+    rd.onload = () => resolve(String(rd.result));
+    rd.onerror = () => reject(new Error("读取失败"));
+    rd.readAsDataURL(f);
+  });
+}
+
+/** 上传一张图片（dataURL）→ setPendingImage。 */
+async function uploadImageDataUrl(b64) {
   try {
     const r = await fetch("/api/upload", {
       method: "POST", credentials: "same-origin",
       headers: { "Content-Type": "application/json" }, body: JSON.stringify({ image: b64 }),
     });
     const j = await r.json().catch(() => null);
-    if (j && j.ok && j.url) setPendingImage(j.url);
-    else alert((j && j.error) || "上传失败");
-  } catch (e) { alert("上传失败：" + e.message); }
+    if (j && j.ok && j.url) { setPendingImage(j.url); return true; }
+    alert((j && j.error) || "上传失败");
+    return false;
+  } catch (e) { alert("上传失败：" + e.message); return false; }
+}
+
+if (imgBtn) imgBtn.addEventListener("click", () => imgInput.click());
+if (imgClear) imgClear.addEventListener("click", clearPendingImage);
+if (imgInput) imgInput.addEventListener("change", async () => {
+  const f = imgInput.files && imgInput.files[0];
+  if (!f) return;
+  if (f.size > 15 * 1024 * 1024) { alert("图片太大（≤15MB）"); imgInput.value = ""; return; }
+  try { await uploadImageDataUrl(await readFileAsDataUrl(f)); }
+  catch (e) { alert("读取失败：" + e.message); }
+});
+
+// NEW-1：Ctrl+V / 右键粘贴图片（读剪贴板 image/* 项，自动上传并预览）
+if (ta) ta.addEventListener("paste", async (e) => {
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  let imgItem = null;
+  for (const it of items) {
+    if (it && it.kind === "file" && /^image\//.test(it.type || "")) { imgItem = it; break; }
+  }
+  if (!imgItem) return; // 剪贴板没有图片：走默认文本粘贴
+  e.preventDefault(); // 拦截，避免图片以 base64 文本污染输入框
+  const f = imgItem.getAsFile();
+  if (!f) return;
+  if (f.size > 15 * 1024 * 1024) { alert("图片太大（≤15MB）"); return; }
+  try { await uploadImageDataUrl(await readFileAsDataUrl(f)); }
+  catch (err) { alert("读取失败：" + (err && err.message)); }
 });
 
 /* ---- ⑦ 搜索 ---- */
@@ -591,32 +616,69 @@ if (memAdd) memAdd.addEventListener("click", async () => {
 
 /* ---- 技能 ---- */
 async function loadSkills() {
-  const g = $("#skillGrid"); g.innerHTML = '<div class="card"><p>读取中…</p></div>';
+  const g = $("#skillGrid");
+  g.textContent = "";
+  const loading = document.createElement("div"); loading.className = "card";
+  const lp = document.createElement("p"); lp.textContent = "读取中…";
+  loading.appendChild(lp); g.appendChild(loading);
   try {
     const j = await (await fetch("/api/skills")).json();
     $("#pSkills").textContent = "技能 " + j.skills.length;
     $("#pSkills").className = "pill ok";
-    g.innerHTML = j.skills.map(s =>
-      '<div class="card"><h4>' + s.title + '</h4><p>' + (s.desc || "（无描述）") + '</p><span class="tag">' + s.id + '</span></div>'
-    ).join("") || '<div class="card"><p>没有技能</p></div>';
-  } catch (x) { g.innerHTML = '<div class="card"><p>读不到：' + x.message + '</p></div>'; }
+    g.textContent = "";
+    const skills = Array.isArray(j.skills) ? j.skills : [];
+    if (!skills.length) {
+      const c = document.createElement("div"); c.className = "card";
+      const p = document.createElement("p"); p.textContent = "没有技能";
+      c.appendChild(p); g.appendChild(c);
+    } else {
+      // P1-3：用 textContent 构建 DOM，杜绝 innerHTML 注入（技能标题/描述/ID 都可能含用户内容）
+      for (const s of skills) {
+        const card = document.createElement("div"); card.className = "card";
+        const h = document.createElement("h4"); h.textContent = s.title || "（无标题）";
+        const d = document.createElement("p"); d.textContent = s.desc || "（无描述）";
+        const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = s.id || "";
+        card.appendChild(h); card.appendChild(d); card.appendChild(tag);
+        g.appendChild(card);
+      }
+    }
+  } catch (x) {
+    g.textContent = "";
+    const c = document.createElement("div"); c.className = "card";
+    const p = document.createElement("p"); p.textContent = "读不到技能列表";
+    c.appendChild(p); g.appendChild(c);
+  }
 }
 
 /* ---- 状态 ---- */
 async function loadStatus() {
+  const kv = $("#statusKv");
   try {
     const j = await (await fetch("/api/status")).json();
     $("#pDash").textContent = "看板 " + (j.dashboardOk ? "在线" : "离线");
     $("#pDash").className = "pill " + (j.dashboardOk ? "ok" : "bad");
-    $("#statusKv").innerHTML = [
+    // P1-3：用 textContent 构建 DOM，杜绝 innerHTML 注入（路径等都可能含特殊字符）
+    const rows = [
       ["产品 DSH_HOME（隔离边界）", j.dshHome],
       ["产品工作区", j.workspace],
-      ["产品技能数", j.skills + " 个"],
+      ["产品技能数", (j.skills == null ? 0 : j.skills) + " 个"],
       ["看板后端 127.0.0.1:" + j.dashboard, j.dashboardOk ? "✅ 在线" : "❌ 离线（先启动北极星后端）"],
       ["DSH 对外端口", "无（headless 不开端口）"],
       ["用户与 DSH 的关系", "用户只跟业务壳说话，永远碰不到 DSH"],
-    ].map(r => '<div class="row"><div class="k">' + r[0] + '</div><div class="v">' + r[1] + '</div></div>').join("");
-  } catch (x) { $("#statusKv").innerHTML = '<div class="row"><div class="v">读不到：' + x.message + '</div></div>'; }
+    ];
+    kv.textContent = "";
+    for (const r of rows) {
+      const row = document.createElement("div"); row.className = "row";
+      const k = document.createElement("div"); k.className = "k"; k.textContent = r[0];
+      const v = document.createElement("div"); v.className = "v"; v.textContent = r[1];
+      row.appendChild(k); row.appendChild(v); kv.appendChild(row);
+    }
+  } catch (x) {
+    kv.textContent = "";
+    const row = document.createElement("div"); row.className = "row";
+    const v = document.createElement("div"); v.className = "v"; v.textContent = "读不到状态";
+    row.appendChild(v); kv.appendChild(row);
+  }
 }
 
 $("#out").addEventListener("click", async e => {

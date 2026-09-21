@@ -434,13 +434,21 @@ function runDshPersistent(spec, opts) {
     const fullTask = parts.join("\n\n");
 
     const t0 = Date.now();
-    // 停止句柄：kill 整个常驻进程（该租户所有会话一并释放；历史靠下次冷启动补回）
+    // 停止句柄（P1-4）：先按 sessionId 优雅取消当前 turn，3 秒没收敛才杀整个常驻进程
     const job = {
       stopped: false,
-      kill() {
+      abort() {
         this.stopped = true;
-        proc.killedByUser = true;
-        try { proc.child.kill(); } catch (e) {}
+        writeJson(proc, { type: "abort", sessionId });
+      },
+      kill() {
+        this.abort();
+        setTimeout(() => {
+          if (proc.waiters.has(sessionId)) {
+            proc.killedByUser = true;
+            try { proc.child.kill(); } catch (e) {}
+          }
+        }, 3000);
       },
     };
     if (typeof opts.onSpawn === "function") { try { opts.onSpawn(job); } catch (e) {} }
@@ -455,7 +463,7 @@ function runDshPersistent(spec, opts) {
           text: frame.text || "",
           ms: frame.ms || (Date.now() - t0),
           error: frame.error || (frame.reasonDetail ? (frame.reasonDetail.code + ": " + frame.reasonDetail.message) : null),
-          stopped: frame.stopped === true,
+          stopped: frame.stopped === true || frame.canceled === true,
           steps: waiter.steps || [],
           fresh,
           workspace: spec.cwd, tenantId: spec.tenantId, userId: spec.userId, keySha256: spec.keySha256,
@@ -468,16 +476,21 @@ function runDshPersistent(spec, opts) {
     // 成功发送后标记 warm（会话在 DSH 侧存活；记录实际 sessionId）
     if (conversationId) warmSessions.set(conversationId, { tenantId: spec.tenantId, sessionId });
 
-    // 超时保护
+    // 超时保护（P1-4）：先按 sessionId 优雅取消，3 秒没收敛再杀进程并返回超时
     setTimeout(() => {
-      if (proc.waiters.has(sessionId)) {
+      if (!proc.waiters.has(sessionId)) return;
+      writeJson(proc, { type: "abort", sessionId });
+      setTimeout(() => {
+        if (!proc.waiters.has(sessionId)) return;
         proc.waiters.delete(sessionId);
+        proc.killedByUser = true;
+        try { proc.child.kill(); } catch (e) {}
         resolve({
           ok: false, code: "TIMEOUT", text: "", ms: Date.now() - t0,
           error: "常驻 DSH 进程响应超时", fresh,
           workspace: spec.cwd, tenantId: spec.tenantId, keySha256: spec.keySha256,
         });
-      }
+      }, 3000);
     }, opts.timeoutMs || PROC_TASK_TIMEOUT_MS);
 
     // 空闲回收：定时扫，超时退出进程

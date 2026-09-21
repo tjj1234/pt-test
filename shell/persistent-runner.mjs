@@ -133,6 +133,7 @@ function apply(ctx) {
           text: outcome.text,
           reason: outcome.reason?.kind ?? null,
           reasonDetail: outcome.reason?.error ? { code: outcome.reason.error.code, message: outcome.reason.error.message } : null,
+          canceled: !!(outcome.reason && (outcome.reason.kind === "user" || outcome.reason.kind === "parent" || outcome.reason.kind === "hook")),
           ms: Date.now() - t0,
         });
       } catch (e) {
@@ -151,6 +152,18 @@ function apply(ctx) {
       emit({ type: "closed", sessionId: sid });
     }
 
+    /** P1-4：按 sessionId 优雅取消当前 turn（agent.cancel 会中止正在跑的一轮）。 */
+    function handleAbort(cmd) {
+      const sid = String(cmd.sessionId || "").trim();
+      const rec = agentMap.get(sid);
+      if (rec) {
+        try { rec.agent.cancel({ kind: "user" }); } catch (e) { /* 忽略 */ }
+        emit({ type: "aborted", sessionId: sid });
+      } else {
+        emit({ type: "aborted", sessionId: sid, note: "no-agent" });
+      }
+    }
+
     function shutdown() {
       emit({ type: "bye" });
       const exit = ctx.get("appExit");
@@ -158,19 +171,15 @@ function apply(ctx) {
       else process.exit(0);
     }
 
-    async function handleLine(line) {
-      let cmd;
-      try { cmd = JSON.parse(line); } catch (e) { emit({ type: "error", message: "bad json: " + line }); return; }
+    async function handleLine(cmd) {
       switch (cmd.type) {
-        case "ping": emit({ type: "pong" }); return;
         case "task": await handleTask(cmd); return;
         case "close": await handleClose(cmd); return;
-        case "exit": shutdown(); return;
         default: emit({ type: "error", message: "unknown cmd: " + cmd.type }); return;
       }
     }
 
-    // stdin 顺序消费（一条命令处理完再处理下一条）
+    // stdin 顺序消费（task/close 排队；abort/ping/exit 立即处理，不被运行中的 task 阻塞）
     let buf = "";
     let queue = Promise.resolve();
     process.stdin.setEncoding("utf8");
@@ -181,7 +190,13 @@ function apply(ctx) {
         const line = buf.slice(0, idx).trim();
         buf = buf.slice(idx + 1);
         if (!line) continue;
-        queue = queue.then(() => handleLine(line)).catch((e) => emit({ type: "error", message: String(e && e.message || e) }));
+        let cmd;
+        try { cmd = JSON.parse(line); } catch (e) { emit({ type: "error", message: "bad json: " + line }); continue; }
+        // P1-4：取消命令立即生效（否则会被当前正在 await whenIdle 的 task 卡住）
+        if (cmd.type === "abort") { handleAbort(cmd); continue; }
+        if (cmd.type === "ping") { emit({ type: "pong" }); continue; }
+        if (cmd.type === "exit") { shutdown(); continue; }
+        queue = queue.then(() => handleLine(cmd)).catch((e) => emit({ type: "error", message: String(e && e.message || e) }));
       }
     });
     process.stdin.on("end", () => { queue.then(() => shutdown()); });

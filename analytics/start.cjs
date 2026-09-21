@@ -297,7 +297,7 @@ async function main() {
     console.log(`  已有 ${existing} 条事件，跳过灌数据（要重灌请加 --reseed）`);
   } else {
     const t1 = Date.now();
-    await seed(pool, { log: (m) => log(m), scale: 1, days: 30, readToken: RO_TOKEN });
+    await seed(pool, { log: (m) => log(m), scale: 1, days: 30, readToken: RO_TOKEN, webhookSecret: WEBHOOK_SECRET, webhookId: WEBHOOK_ID });
     console.log(`  ✅ 灌数据完成（${Date.now() - t1}ms）`);
   }
 

@@ -54,7 +54,7 @@ function arg(name, dflt) {
 }
 const PORT = Number(arg("--port", process.env.PT_SHELL_PORT || 8098));
 const DASH_PORT = Number(arg("--dashboard-port", process.env.PT_DASH_PORT || 8095));
-const DASH_TOKEN = arg("--dashboard-token", process.env.PT_DASH_TOKEN || "pt_ro_delivery_9f3c21");
+const DASH_TOKEN = arg("--dashboard-token", process.env.PT_DASH_TOKEN || null); // P0-2：不再内置默认 token
 // P0-1 安全：取消固定默认密码。显式提供 PT_SHELL_PASSWORD / --password 才用；
 // 否则生成随机密码；非回环监听 + 无显式密码 → 直接拒绝启动（见下方检查）。
 const PASSWORD_EXPLICIT = process.env.PT_SHELL_PASSWORD
@@ -86,7 +86,8 @@ const DB_DIR = process.env.PT_DB_DIR || path.join(REPO_ROOT, "db");
 const MASTER_KEY_FILE = process.env.PT_MASTER_KEY_FILE || path.join(REPO_ROOT, "secrets", "master.key");
 
 // ---- 登记「绝不允许写进日志」的明文串（密码 / 看板只读 token）----
-log.addSecret(PASSWORD, DASH_TOKEN);
+log.addSecret(PASSWORD);
+if (DASH_TOKEN) log.addSecret(DASH_TOKEN);
 
 // 自测开关：PT_CHAT_DRYRUN=1 时 /api/chat 不 spawn DSH
 const DRY_RUN_CHAT = process.env.PT_CHAT_DRYRUN === "1";
@@ -205,10 +206,26 @@ const runningJobs = new Map();
 // dry-run 占位回复的序号（保证「重新生成」能得到不同回答，便于自测断言）
 let dryRunSeq = 0;
 
-/** 从 /uploads/<file> URL 反推本地绝对路径（供 DSH 任务文本引用）。 */
+/** 从 /uploads/<tenantId>/<file> URL 反推本地绝对路径（供 DSH 任务文本引用）。 */
 function uploadsAbsPath(url) {
-  const m = String(url || "").match(/\/uploads\/([^\/?#]+)/);
+  const m = String(url || "").match(/\/uploads\/([^\/?#]+\/[^\/?#]+)/);
   return m ? path.join(RUNTIME, "_uploads", m[1]) : String(url || "");
+}
+
+/** P1-2：启动时清理超过 7 天的上传文件（按租户目录遍历）。 */
+function pruneUploads() {
+  const root = path.join(RUNTIME, "_uploads");
+  try {
+    for (const d of fs.readdirSync(root, { withFileTypes: true })) {
+      if (!d.isDirectory()) continue;
+      for (const fn of fs.readdirSync(path.join(root, d.name))) {
+        const abs = path.join(root, d.name, fn);
+        try {
+          if (Date.now() - fs.statSync(abs).mtimeMs > 7 * 24 * 3600 * 1000) fs.unlinkSync(abs);
+        } catch (e) {}
+      }
+    }
+  } catch (e) {}
 }
 
 /** 导出：带 Content-Disposition 触发浏览器下载。 */
@@ -415,7 +432,7 @@ function proxyDashboard(req, res, tenantId) {
     (up) => { res.writeHead(up.statusCode, up.headers); up.pipe(res); });
   p.on("error", (e) => {
     res.writeHead(502, { "Content-Type": "text/html; charset=utf-8" });
-    res.end("<h2>看板服务没起来</h2><p>请先启动北极星后端（默认 127.0.0.1:" + DASH_PORT + "）。</p><pre>" + e.message + "</pre>");
+    res.end("<h2>看板服务没起来</h2><p>请先启动北极星后端（默认 127.0.0.1:" + DASH_PORT + "）。</p>");
   });
   req.pipe(p);
 }
@@ -469,7 +486,7 @@ function proxyShareDashboard(req, res) {
     (up) => { res.writeHead(up.statusCode, up.headers); up.pipe(res); });
   p.on("error", (e) => {
     res.writeHead(502, { "Content-Type": "text/html; charset=utf-8" });
-    res.end("<h2>看板服务没起来</h2><p>请先启动北极星后端（默认 127.0.0.1:" + DASH_PORT + "）。</p><pre>" + e.message + "</pre>");
+    res.end("<h2>看板服务没起来</h2><p>请先启动北极星后端（默认 127.0.0.1:" + DASH_PORT + "）。</p>");
   });
   req.pipe(p);
 }
@@ -478,6 +495,17 @@ function serveFile(res, f) {
   if (!fs.existsSync(f)) { res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h2>404</h2>"); }
   res.writeHead(200, { "Content-Type": MIME[path.extname(f).toLowerCase()] || "application/octet-stream", "Cache-Control": "no-cache" });
   res.end(fs.readFileSync(f));
+}
+
+/** P1-1 CSRF：写操作校验 Origin/Referer 与 Host 同源（跨站请求 Origin 必为异源，直接拒绝）。 */
+function csrfOk(req) {
+  const host = req.headers.host;
+  if (!host) return true; // 无 Host 的非浏览器场景，放行
+  const refs = [req.headers.origin, req.headers.referer].filter(Boolean);
+  if (refs.length === 0) return true; // 无 Origin/Referer（curl/同源表单），放行
+  return refs.every((r) => {
+    try { return new URL(r).host === host; } catch (e) { return false; }
+  });
 }
 
 async function handle(req, res) {
@@ -489,6 +517,12 @@ async function handle(req, res) {
       ok: true, status: "ok", version: "1.0.0",
       pid: process.pid, uptimeSec: Math.floor(process.uptime()), ts: new Date().toISOString(),
     });
+  }
+
+  // ---- P1-1 CSRF：所有写操作（非 GET/HEAD/OPTIONS）校验同源 ----
+  const method0 = (req.method || "GET").toUpperCase();
+  if (method0 !== "GET" && method0 !== "HEAD" && method0 !== "OPTIONS" && !csrfOk(req)) {
+    return json(res, 403, { ok: false, error: "跨站请求被拒绝" });
   }
 
   // ---- 先交给身份路由与 key 路由（含旧 /api/login|logout|me 别名）----
@@ -518,16 +552,20 @@ async function handle(req, res) {
     if (f.indexOf(PUBLIC) !== 0) return json(res, 403, { ok: false, error: "非法路径" });
     return serveFile(res, f);
   }
-  // ---- ⑨ 上传图片静态服务（随机文件名，无需鉴权，供 <img> 引用）----
+  // ---- ⑨ 上传图片静态服务（P1-2：路径 = /uploads/<tenantId>/<filename>，校验登录用户租户归属）----
   if (p.indexOf("/uploads/") === 0) {
     const rel = decodeURIComponent(p.slice("/uploads/".length));
-    if (!rel || rel.indexOf("..") >= 0 || rel.indexOf("\\") >= 0 || rel.indexOf("/") >= 0) {
-      return json(res, 403, { ok: false, error: "非法路径" });
-    }
-    const f = path.join(RUNTIME, "_uploads", rel);
+    const parts = rel.split("/");
+    if (parts.length !== 2 || !parts[0] || !parts[1]) return json(res, 403, { ok: false, error: "非法路径" });
+    const [tenantId, fname] = parts;
+    if (fname.indexOf("..") >= 0 || fname.indexOf("\\") >= 0) return json(res, 403, { ok: false, error: "非法路径" });
+    // P1-2：必须登录且租户匹配才能读自己的上传
+    const meUp = await authed(req);
+    if (!meUp || !meUp.tenant || meUp.tenant.id !== tenantId) return json(res, 403, { ok: false, error: "无权访问" });
+    const f = path.join(RUNTIME, "_uploads", tenantId, fname);
     if (!fs.existsSync(f)) { res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h2>404</h2>"); }
     const ct = ({ ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" })[path.extname(f).toLowerCase()] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": ct, "Cache-Control": "public, max-age=86400" });
+    res.writeHead(200, { "Content-Type": ct, "Cache-Control": "no-store" });
     return res.end(fs.readFileSync(f));
   }
   if (p === "/dashboard" || p.indexOf("/dashboard/") === 0) {
@@ -562,11 +600,12 @@ async function handle(req, res) {
     if (shareTok) { const sv = await panelShares.check(shareTok); shareOk = !!(sv && sv.valid); }
     if (!meAnalytics && !shareOk) return json(res, 401, { ok: false, error: "没登录" });
     const tenantId = meAnalytics && meAnalytics.tenant ? meAnalytics.tenant.id : null;
+    if (!DASH_TOKEN) return json(res, 503, { ok: false, error: "看板只读 token 未配置（PT_DASH_TOKEN）" });
     const up = http.request({ host: "127.0.0.1", port: DASH_PORT, path: req.url, method: req.method,
       headers: Object.assign(dashProxyHeaders(req, tenantId),
         { authorization: "Bearer " + DASH_TOKEN }) },
       (r2) => { res.writeHead(r2.statusCode, r2.headers); r2.pipe(res); });
-    up.on("error", (e) => json(res, 502, { ok: false, error: "dashboard unreachable: " + e.message }));
+    up.on("error", (e) => { log.error("analytics_proxy_failed", { error: e && e.message ? e.message : String(e) }); json(res, 502, { ok: false, error: "看板服务不可用" }); });
     return req.pipe(up);
   }
 
@@ -590,7 +629,7 @@ async function handle(req, res) {
         }
         list.push({ id: d.name, title, desc });
       }
-    } catch (e) { return json(res, 500, { ok: false, error: e.message }); }
+    } catch (e) { log.error("skills_list_failed", { error: e && e.message ? e.message : String(e) }); return json(res, 500, { ok: false, error: "服务器内部错误" }); }
     return json(res, 200, { ok: true, skills: list });
   }
 
@@ -723,7 +762,7 @@ async function handle(req, res) {
     return json(res, 200, { ok: true, model: r.model });
   }
 
-  // ---- ⑨ 上传图片（base64 JSON，落到 runtime/_uploads/）----
+  // ---- ⑨ 上传图片（base64 JSON；P1-2：按租户目录隔离 + 高熵随机名 + 魔数校验 + 磁盘配额）----
   if (p === "/api/upload" && req.method === "POST") {
     let body = {};
     try { body = JSON.parse((await readBody(req, 20 << 20)) || "{}"); } catch (e) {}
@@ -735,12 +774,27 @@ async function handle(req, res) {
     let buf;
     try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "图片数据无效" }); }
     if (!buf.length || buf.length > 20 * 1024 * 1024) return json(res, 400, { ok: false, error: "图片太大或无效" });
-    const dir = path.join(RUNTIME, "_uploads");
+    // P1-2：按文件魔数校验真实图片类型（拒绝伪装成图片的非图片内容）
+    const magicOk = (() => {
+      if (buf.length >= 8 && buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47) return "png";
+      if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpg";
+      if (buf.length >= 6 && buf.slice(0, 6).toString("ascii").startsWith("GIF8")) return "gif";
+      if (buf.length >= 12 && buf.slice(0, 4).toString("ascii") === "RIFF" && buf.slice(8, 12).toString("ascii") === "WEBP") return "webp";
+      return null;
+    })();
+    if (!magicOk) return json(res, 400, { ok: false, error: "不是有效的图片文件" });
+    ext = magicOk;
+    const dir = path.join(RUNTIME, "_uploads", me.tenant.id);
     fs.mkdirSync(dir, { recursive: true });
-    const name = "u-" + Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex") + "." + ext;
+    // P1-2：租户磁盘配额（默认 100MB，可用 PT_UPLOAD_QUOTA_MB 覆盖）
+    const quotaBytes = Number(process.env.PT_UPLOAD_QUOTA_MB || 100) * 1024 * 1024;
+    let used = 0;
+    try { for (const fn of fs.readdirSync(dir)) { try { used += fs.statSync(path.join(dir, fn)).size; } catch (e) {} } } catch (e) {}
+    if (used + buf.length > quotaBytes) return json(res, 400, { ok: false, error: "上传空间已满（配额 " + Math.round(quotaBytes / 1048576) + "MB）" });
+    const name = crypto.randomBytes(16).toString("hex") + "." + ext; // 128 位高熵随机名
     const abs = path.join(dir, name);
     fs.writeFileSync(abs, buf);
-    return json(res, 200, { ok: true, url: "/uploads/" + name, path: abs });
+    return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs });
   }
 
   // ---- 面板分享 API（需登录 owner；只读 + 整面板）----
@@ -838,6 +892,7 @@ async function main() {
   conversations = await convMod.initConversations(auth.db);
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
+  pruneUploads(); // P1-2：启动清理过期上传
   log.info("init", { stage: "ready", dbDir: DB_DIR, username: USERNAME, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
 
   pickPort(PORT, (port) => {
@@ -851,6 +906,12 @@ async function main() {
       // P0-3 安全：所有响应禁止把 URL 泄露给第三方（Referrer-Policy）
       res.setHeader("Referrer-Policy", "no-referrer");
 
+      // P1-3 安全：CSP + 防嗅探 + 防点击劫持（脚本/连接/图片仅同源 + data/blob；禁内联脚本）
+      res.setHeader("Content-Security-Policy",
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("X-Frame-Options", "DENY");
+
       // P0-4 安全：HTTPS 生产模式对所有响应加 HSTS
       if (COOKIE_SECURE) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 
@@ -861,7 +922,7 @@ async function main() {
       handle(req, res).catch((e) => {
         log.error("request_error", { method, path: pathname, ip, error: e && e.message ? e.message : String(e) });
         console.error("[业务壳] 出错：", e);
-        try { json(res, 500, { ok: false, error: e.message }); } catch (e2) {}
+        try { json(res, 500, { ok: false, error: "服务器内部错误" }); } catch (e2) {}
       });
     }).listen(port, LISTEN_HOST, () => {
       log.info("listening", { port, host: LISTEN_HOST, dbDir: DB_DIR, dashboardPort: DASH_PORT, rateChatPerMin: RATE_CHAT_PER_MIN, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });

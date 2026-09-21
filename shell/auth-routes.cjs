@@ -123,7 +123,8 @@ async function handleAuthRoutes(req, res, auth) {
       return sendJson(res, 200, { ok: true, user: s.user, tenant: s.tenant }), true;
     }
   } catch (e) {
-    sendJson(res, 500, { ok: false, error: e && e.message ? e.message : String(e) });
+    console.error("[auth] 出错：", e && e.message ? e.message : e);
+    sendJson(res, 500, { ok: false, error: "服务器内部错误" });
     return true;
   }
 
