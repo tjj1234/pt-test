@@ -16,7 +16,7 @@ node_modules/
 /db/
 secrets/
 logs/
-runtime/
+/runtime/
 
 # 看板后端 PGlite 数据目录（含 *.pgdata* 各种临时/恢复目录）
 .pgdata*

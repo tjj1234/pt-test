@@ -35,7 +35,7 @@ const c2 = (src, dst) => fs.copyFileSync(path.join(CONV_DIR, src), path.join(tmp
 c2("server-v5.cjs", "server.cjs");
 c2("conversations-v2.cjs", "conversations.cjs");
 c2("memory.cjs", "memory.cjs");
-c2("tenant-v7.cjs", "tenant.cjs");
+c2("tenant-v8.cjs", "tenant.cjs");
 c2("persistent-runner.mjs", "persistent-runner.mjs");
 c2("panel-share.cjs", "panel-share.cjs");
 c2("dsh-settings.yaml", "dsh-settings.yaml");
