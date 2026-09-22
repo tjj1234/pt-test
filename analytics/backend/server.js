@@ -396,6 +396,7 @@ function buildUnifiedServer(options) {
     // A9 广告导出导入（业务线；不碰 shell）
     app.register(async (scope) => {
         (0, import_1.registerImportRoutes)(scope, {
+            pool,
             verifyAnalyticsToken,
             resolveWorkspaceId,
             parseAuthorization: query_1.parseAuthorization,

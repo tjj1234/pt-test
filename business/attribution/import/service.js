@@ -2,11 +2,13 @@
 /**
  * A9 · 导入状态机：pending → validating → ready → importing → completed|partial_failed|failed
  * 复用 A1 parsers；tenant/workspace 只认 Context。
+ * confirm 落库：CanonicalAdRecord → upsertDailyMetric → ad_performance_daily。
  */
-const path = require("node:path");
 const { parseExportFile } = require("../parsers");
 const { PROVIDERS } = require("../contracts/validate");
 const { createImportStore } = require("./store");
+const { toDailyMetricRow } = require("./toDailyMetricRow");
+const { upsertDailyMetric: defaultUpsertDailyMetric } = require("../../../analytics/backend/ads/ingest");
 
 const TERMINAL = new Set(["completed", "partial_failed", "failed", "cancelled"]);
 
@@ -30,8 +32,39 @@ function fileExt(name, kind) {
   return ".csv";
 }
 
+async function persistRecords(pool, records, upsertFn) {
+  if (!pool || typeof pool.connect !== "function") {
+    throw Object.assign(new Error("导入落库需要 pool（query + connect）"), {
+      code: "POOL_REQUIRED",
+    });
+  }
+  const upsert = upsertFn || defaultUpsertDailyMetric;
+  const client = await pool.connect();
+  const persistErrors = [];
+  let persisted = 0;
+  try {
+    for (const rec of records) {
+      try {
+        const row = toDailyMetricRow(rec);
+        await upsert(client, row);
+        persisted += 1;
+      } catch (err) {
+        persistErrors.push({
+          sourceRowNumber: rec && rec.sourceRowNumber,
+          message: err && err.message ? err.message : String(err),
+        });
+      }
+    }
+  } finally {
+    client.release();
+  }
+  return { persisted, persistErrors };
+}
+
 function createImportService(opts = {}) {
   const store = opts.store || createImportStore(opts);
+  const pool = opts.pool || null;
+  const upsertDailyMetric = opts.upsertDailyMetric || defaultUpsertDailyMetric;
 
   async function createAndValidate(context, input) {
     if (!context || !context.tenantId || !context.workspaceId) {
@@ -198,11 +231,61 @@ function createImportService(opts = {}) {
       );
     }
 
-    const status = parsed.partial
-      ? "partial_failed"
-      : parsed.records.length
-        ? "completed"
-        : "failed";
+    if (!parsed.records || !parsed.records.length) {
+      return publicJob(
+        store.updateJob(context.tenantId, importId, {
+          status: "failed",
+          mapping: parsed.mapping,
+          mappingAudit: parsed.mappingAudit,
+          headers: parsed.headers,
+          rowCount: parsed.rowCount,
+          successRows: 0,
+          failedRows: parsed.failedRows,
+          errorDetails: parsed.errors.length ? parsed.errors : null,
+          errorMessage: "无成功行",
+          records: [],
+          finishedAt: new Date().toISOString(),
+        })
+      );
+    }
+
+    let persisted = 0;
+    let persistErrors = [];
+    try {
+      const result = await persistRecords(pool, parsed.records, upsertDailyMetric);
+      persisted = result.persisted;
+      persistErrors = result.persistErrors;
+    } catch (err) {
+      return publicJob(
+        store.updateJob(context.tenantId, importId, {
+          status: "failed",
+          mapping: parsed.mapping,
+          mappingAudit: parsed.mappingAudit,
+          headers: parsed.headers,
+          rowCount: parsed.rowCount,
+          successRows: 0,
+          failedRows: parsed.rowCount,
+          errorMessage: err && err.message ? err.message : String(err),
+          errorDetails: parsed.errors.length ? parsed.errors : null,
+          records: parsed.records,
+          finishedAt: new Date().toISOString(),
+        })
+      );
+    }
+
+    const parseFailed = parsed.failedRows || 0;
+    const persistFailed = persistErrors.length;
+    const successRows = persisted;
+    const failedRows = parseFailed + persistFailed;
+    const allDetails = [
+      ...(parsed.errors && parsed.errors.length ? parsed.errors : []),
+      ...persistErrors,
+    ];
+
+    let status;
+    if (successRows > 0 && failedRows === 0 && !parsed.partial) status = "completed";
+    else if (successRows > 0) status = "partial_failed";
+    else status = "failed";
 
     return publicJob(
       store.updateJob(context.tenantId, importId, {
@@ -211,11 +294,19 @@ function createImportService(opts = {}) {
         mappingAudit: parsed.mappingAudit,
         headers: parsed.headers,
         rowCount: parsed.rowCount,
-        successRows: parsed.successRows,
-        failedRows: parsed.failedRows,
-        errorDetails: parsed.errors.length ? parsed.errors : null,
-        errorMessage: status === "failed" ? "无成功行" : null,
+        successRows,
+        failedRows,
+        errorDetails: allDetails.length ? allDetails : null,
+        errorMessage:
+          status === "failed"
+            ? persistFailed
+              ? "落库失败"
+              : "无成功行"
+            : persistFailed
+              ? "部分行落库失败"
+              : null,
         records: parsed.records,
+        persistedRows: persisted,
         finishedAt: new Date().toISOString(),
       })
     );
@@ -244,4 +335,4 @@ function createImportService(opts = {}) {
   };
 }
 
-module.exports = { createImportService, publicJob };
+module.exports = { createImportService, publicJob, persistRecords };

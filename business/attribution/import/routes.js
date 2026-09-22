@@ -15,7 +15,8 @@ function registerImportRoutes(app, opts = {}) {
     verifyAnalyticsToken,
     resolveWorkspaceId,
     parseAuthorization,
-    importService = createImportService(opts),
+    pool,
+    importService = createImportService({ ...opts, pool }),
   } = opts;
 
   async function authContext(request, reply) {
