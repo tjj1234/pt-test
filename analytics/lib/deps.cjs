@@ -185,7 +185,13 @@ function createConfigFindingsLoader(pool) {
  * @param {(msg:string)=>void} log
  */
 function createCollectWiring(pool, ingestMod, log) {
-  const queue = ingestMod.createInMemoryIngestQueue();
+  const { wrapCollectQueue } = require("../backend/collect/deps.cjs");
+  const queue = wrapCollectQueue(
+    ingestMod.createInMemoryIngestQueue(),
+    pool,
+    log,
+    createWorkspaceResolver(pool)
+  );
   const controller = new AbortController();
 
   const workerPromise = ingestMod

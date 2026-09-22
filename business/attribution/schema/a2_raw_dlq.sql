@@ -52,3 +52,18 @@ BEGIN
     GRANT USAGE, SELECT ON SEQUENCE attribution_event_dlq_id_seq TO pt_app;
   END IF;
 END $$;
+
+-- A13 · 租户隔离 RLS（对齐 analytics/schema/003_delivery.sql）
+ALTER TABLE attribution_raw_events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attribution_raw_events FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON attribution_raw_events;
+CREATE POLICY tenant_isolation ON attribution_raw_events
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+    WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
+
+ALTER TABLE attribution_event_dlq ENABLE ROW LEVEL SECURITY;
+ALTER TABLE attribution_event_dlq FORCE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS tenant_isolation ON attribution_event_dlq;
+CREATE POLICY tenant_isolation ON attribution_event_dlq
+    USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
+    WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);

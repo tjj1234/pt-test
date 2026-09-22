@@ -56,6 +56,7 @@ exports.advanceMetricCursor = advanceMetricCursor;
 exports.computeSyncWindow = computeSyncWindow;
 exports.ingestPullResult = ingestPullResult;
 exports.ingestDailyMetrics = ingestDailyMetrics;
+exports.upsertDailyMetric = upsertDailyMetric;
 const node_crypto_1 = require("node:crypto");
 // ===========================================================================
 // §1 错误类型（全有或全无：映射失败 → 抛错，整批丢弃）
