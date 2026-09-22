@@ -187,6 +187,40 @@ async function pickPort(start) {
 }
 
 // ---------------------------------------------------------------------------
+// MCP 代理（B6）
+// ---------------------------------------------------------------------------
+let mcpProxy = null;
+
+async function startMcpProxy() {
+  const { startMCPProxyServer, createRyzeUpstreamFromEnv, registerProxyShutdown } = require("./backend/ads/mcp-proxy");
+  // B6 门禁③：DSH 环境不允许出现 RYZE_MCP_TOKEN
+  if (process.env.RYZE_MCP_TOKEN) {
+    console.error("\n❌ 启动失败：DSH 环境检测到 RYZE_MCP_TOKEN，违反安全红线（凭证应只存在于后端代理）");
+    process.exit(1);
+  }
+  const proxyToken = process.env.PT_MCP_PROXY_TOKEN || "pt_mcp_proxy_default_token";
+  // B6 门禁③：DSH 环境不允许出现 RYZE_MCP_TOKEN
+  if (process.env.RYZE_MCP_TOKEN) {
+    console.error("\n❌ 启动失败：DSH 环境检测到 RYZE_MCP_TOKEN，违反安全红线（凭证应只存在于后端代理）");
+    process.exit(1);
+  }
+  // 为代理设置替身上游凭证（测试用）
+  process.env.RYZE_MCP_TOKEN = "fake_ryze_token_for_test";
+  const upstream = createRyzeUpstreamFromEnv({ timeoutMs: 30000 });
+  // 清除环境变量，避免污染
+  delete process.env.RYZE_MCP_TOKEN;
+  mcpProxy = await startMCPProxyServer({
+    upstream,
+    proxyToken,
+    audit: null,
+    logger: !OPT.quiet,
+    port: 3001,
+  });
+  registerProxyShutdown(mcpProxy.close);
+  console.log(`  ✅ MCP 代理已启动：http://127.0.0.1:3001/mcp/ryze`);
+}
+
+// ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 let pool = null;
@@ -201,6 +235,10 @@ async function main() {
   console.log("  TRUST_TENANT_HEADER = " + (TRUST_TENANT_HEADER ? "开（可信租户头优先）" : "关（租户只从 token 派生，B 方案）"));
   console.log("  数据目录 = " + DATA_DIR);
   console.log("");
+
+  // ---- B6: 启动 MCP 代理 ----
+  console.log("[B6] 启动 MCP 只读代理");
+  await startMcpProxy();
 
   await reapStaleInstances();
   writeLock();
@@ -417,6 +455,7 @@ async function main() {
   const shutdown = async (sig) => {
     console.log(`\n收到 ${sig}，正在关闭…`);
     try {
+      if (mcpProxy) await mcpProxy.close();
       if (wiring) await wiring.stop();
       if (started) await started.close();
       if (pool) await pool.end();

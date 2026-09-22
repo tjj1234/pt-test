@@ -102,3 +102,11 @@ web-search-pro:
   registerProvider: true
   # 启用 CLI 后端（gh/bili/yt-dlp 等），以便 GitHub/B站/YouTube 平台搜索可用
   enableCliBackends: true
+
+# B6: MCP 服务器配置
+mcpServers:
+  - name: ryze
+    transport: streamable-http
+    url: http://127.0.0.1:3001/mcp/ryze
+    headers:
+      Authorization: "Bearer ${PT_MCP_PROXY_TOKEN}"
