@@ -46,6 +46,7 @@ const query_1 = require("./events/query");
 const funnel_1 = require("./ads/funnel");
 const attribution_1 = require("./ads/attribution");
 const route_1 = require("./audit/route");
+const import_1 = require("../../business/attribution/import/routes");
 // ---- P1 #6：可信租户头注入（默认关；TRUST_TENANT_HEADER=1 且 X-Tenant-Id 为合法 UUID 时生效）----
 // 信任边界：本服务只应由业务壳（同机 127.0.0.1）反代访问；业务壳只透传「其登录会话派生」
 // 的租户。此处是「可信头 → 租户」的唯一收口，供 A 方案每租户隔离（set_config + RLS 已就绪）。
@@ -391,6 +392,14 @@ function buildUnifiedServer(options) {
     // 1.2 webhook 采集
     app.register(async (scope) => {
         registerCollectRoutes(scope, { resolveEndpoint, enqueue });
+    });
+    // A9 广告导出导入（业务线；不碰 shell）
+    app.register(async (scope) => {
+        (0, import_1.registerImportRoutes)(scope, {
+            verifyAnalyticsToken,
+            resolveWorkspaceId,
+            parseAuthorization: query_1.parseAuthorization,
+        });
     });
     return app;
 }

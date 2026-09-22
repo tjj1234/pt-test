@@ -10,6 +10,7 @@ const { createEngineWorkflows, createAnalyticsWorkflows } = require("./workflows
 const { createPanelProjector } = require("./panel/projector");
 const { createMockRegistry } = require("./registry/mock");
 const { productionSeedPolicy } = require("./policy/seed");
+const importApi = require("./import");
 
 module.exports = {
   ...contracts,
@@ -21,8 +22,9 @@ module.exports = {
   createPanelProjector,
   createMockRegistry,
   productionSeedPolicy,
+  import: importApi,
   packageName: "business/attribution",
-  slice: "A7",
+  slice: "A9",
   a8Approved: false,
   baseline: "origin/main@96b7b28",
 };
