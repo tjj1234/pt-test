@@ -1,0 +1,46 @@
+{
+  "$id": "attribution.health-report.v1",
+  "title": "AttributionHealthReport",
+  "description": "A5 queryAttributionHealth 输出。禁止用演示 seed 冒充生产健康。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "workspaceId",
+    "from",
+    "to",
+    "generatedAt",
+    "adsSyncedThrough",
+    "eventsMaxSeq",
+    "unmatchedEventCount",
+    "ambiguousCreativeCount",
+    "missingUtmCount",
+    "badEventIdCount",
+    "webhookLastReceivedAt",
+    "importLastStatus"
+  ],
+  "properties": {
+    "workspaceId": { "type": "string" },
+    "from": { "type": "integer", "minimum": 0 },
+    "to": { "type": "integer", "minimum": 0 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "adsSyncedThrough": { "type": ["string", "null"], "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+    "eventsMaxSeq": { "type": ["string", "null"] },
+    "unmatchedEventCount": { "type": "integer", "minimum": 0 },
+    "ambiguousCreativeCount": { "type": "integer", "minimum": 0 },
+    "missingUtmCount": { "type": "integer", "minimum": 0 },
+    "badEventIdCount": { "type": "integer", "minimum": 0 },
+    "webhookLastReceivedAt": { "type": ["string", "null"], "format": "date-time" },
+    "webhookReceiveLagMs": { "type": ["integer", "null"], "minimum": 0 },
+    "adsLagDays": { "type": ["integer", "null"], "minimum": 0 },
+    "importLastStatus": { "type": ["string", "null"] },
+    "dlqOpenCount": { "type": "integer", "minimum": 0 },
+    "providersPresent": {
+      "type": "array",
+      "items": { "type": "string", "enum": ["google", "meta", "x"] }
+    },
+    "notes": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

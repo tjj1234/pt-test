@@ -1,0 +1,19 @@
+{
+  "name": "@powertokens/business-attribution",
+  "private": true,
+  "version": "0.0.0-a0",
+  "description": "Business-line attribution package (A0 contracts frozen; no shell edits)",
+  "main": "index.js",
+  "scripts": {
+    "validate:contracts": "node contracts/validate.js",
+    "test:a0": "node contracts/validate.js",
+    "test:a1": "node ../../tests/attribution/a1-parsers.test.js",
+    "test:a2": "node ../../tests/attribution/a2-persistence.test.js",
+    "test:a3a6": "node ../../tests/attribution/a3-a6-workflows.test.js",
+    "test:a7": "node ../../tests/attribution/a7-acceptance.test.js",
+    "test": "node ../../tests/attribution/a7-acceptance.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

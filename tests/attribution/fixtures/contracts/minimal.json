@@ -1,0 +1,60 @@
+{
+  "context": {
+    "tenantId": "22222222-2222-4222-8222-222222222222",
+    "workspaceId": "ws_demo",
+    "actorId": "user_fixture",
+    "permissions": ["attribution:read", "attribution:import"],
+    "requestId": "req_fixture_001",
+    "locale": "zh-CN"
+  },
+  "canonicalAd": {
+    "workspaceId": "ws_demo",
+    "provider": "meta",
+    "accountId": "act_fixture",
+    "campaignId": "camp_1",
+    "adGroupId": "ag_1",
+    "creativeId": "ad_1",
+    "creativeName": "hook_a",
+    "campaignName": "launch",
+    "date": "2026-09-01",
+    "currency": "USD",
+    "spend": 12.34,
+    "impressions": 1000,
+    "clicks": 40,
+    "conversions": null,
+    "revenue": null,
+    "rawSource": "csv_export",
+    "importedAt": "2026-09-21T08:00:00.000Z",
+    "sourceFileId": "file_fixture_1",
+    "sourceRowNumber": 2,
+    "sourceProvider": "meta",
+    "sourceVersion": "a0.1"
+  },
+  "canonicalEvent": {
+    "tenantId": "22222222-2222-4222-8222-222222222222",
+    "workspaceId": "ws_demo",
+    "eventId": "7f9c24a0-1111-4111-8111-111111111111",
+    "eventName": "visit",
+    "timestamp": 1720000000000,
+    "visitorId": "v_fixture",
+    "userId": null,
+    "sessionId": "s1",
+    "utmSource": "meta",
+    "utmMedium": "paid",
+    "utmCampaign": "launch",
+    "utmContent": null,
+    "utmTerm": null,
+    "country": "US",
+    "amount": null,
+    "currency": null,
+    "model": null,
+    "totalTokens": null,
+    "rawEvent": {
+      "event_id": "7f9c24a0-1111-4111-8111-111111111111",
+      "event_name": "visit",
+      "timestamp": 1720000000000
+    },
+    "receivedAt": "2026-09-21T08:00:01.000Z",
+    "webhookId": "wh_fixture"
+  }
+}

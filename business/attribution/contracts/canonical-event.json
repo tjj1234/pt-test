@@ -1,0 +1,52 @@
+{
+  "$id": "attribution.canonical-event.v1",
+  "title": "CanonicalEvent",
+  "description": "Server GTM Webhook 经 Normalizer 后的标准事件。tenantId 必须来自 Context，不得来自 body。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "tenantId",
+    "workspaceId",
+    "eventId",
+    "eventName",
+    "timestamp",
+    "rawEvent",
+    "receivedAt"
+  ],
+  "properties": {
+    "tenantId": { "type": "string", "format": "uuid" },
+    "workspaceId": { "type": "string", "minLength": 1 },
+    "eventId": { "type": "string", "format": "uuid" },
+    "eventName": {
+      "type": "string",
+      "enum": [
+        "visit",
+        "signup",
+        "key_created",
+        "model_call",
+        "recharge",
+        "auto_recharge_toggle"
+      ]
+    },
+    "timestamp": { "type": "integer", "minimum": 0 },
+    "visitorId": { "type": ["string", "null"] },
+    "userId": { "type": ["string", "null"] },
+    "sessionId": { "type": ["string", "null"] },
+    "utmSource": { "type": ["string", "null"] },
+    "utmMedium": { "type": ["string", "null"] },
+    "utmCampaign": { "type": ["string", "null"] },
+    "utmContent": { "type": ["string", "null"] },
+    "utmTerm": { "type": ["string", "null"] },
+    "country": { "type": ["string", "null"] },
+    "amount": { "type": ["number", "null"] },
+    "currency": { "type": ["string", "null"] },
+    "model": { "type": ["string", "null"] },
+    "totalTokens": { "type": ["integer", "null"] },
+    "rawEvent": {
+      "type": "object",
+      "description": "原始 webhook body 快照；与标准化字段分开保存（A2 持久化）"
+    },
+    "receivedAt": { "type": "string", "format": "date-time" },
+    "webhookId": { "type": ["string", "null"] }
+  }
+}

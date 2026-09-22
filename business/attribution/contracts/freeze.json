@@ -1,0 +1,13 @@
+{
+  "package": "business/attribution",
+  "slice": "A0",
+  "version": "1.0.0",
+  "frozenAt": "2026-09-21",
+  "branch": "feature/business-attribution-m0",
+  "base": "origin/main@96b7b28",
+  "status": "frozen",
+  "completedThrough": "A7",
+  "nextSlice": "A8",
+  "a8Approved": false,
+  "a1Gate": "A0 frozen; parsers must implement these contracts, not invent fields"
+}

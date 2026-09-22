@@ -1,0 +1,22 @@
+{
+  "$id": "attribution.context.v1",
+  "title": "AttributionContext",
+  "description": "业务线运行时上下文。tenantId / workspaceId 只允许由 Adapter（secret 反查或 session）写入，禁止读客户端 body/query/文件行。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["tenantId", "workspaceId", "source"],
+  "properties": {
+    "tenantId": { "type": "string", "format": "uuid" },
+    "workspaceId": { "type": "string", "minLength": 1 },
+    "userId": { "type": ["string", "null"] },
+    "source": {
+      "type": "string",
+      "enum": ["webhook_secret", "session_adapter", "test_fixture"]
+    },
+    "permissions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    }
+  }
+}

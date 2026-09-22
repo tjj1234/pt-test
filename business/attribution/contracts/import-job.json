@@ -1,0 +1,73 @@
+{
+  "$id": "attribution.import-job.v1",
+  "title": "AdImportJob",
+  "description": "广告导出文件导入任务状态机（A1）。不做官方 Ads API。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "importId",
+    "workspaceId",
+    "provider",
+    "status",
+    "sourceFileId",
+    "originalName",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "importId": { "type": "string", "format": "uuid" },
+    "workspaceId": { "type": "string", "minLength": 1 },
+    "provider": { "type": "string", "enum": ["google", "meta", "x"] },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "validating",
+        "ready",
+        "importing",
+        "completed",
+        "partial_failed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "sourceFileId": { "type": "string", "minLength": 1 },
+    "originalName": { "type": "string" },
+    "idempotencyKey": { "type": ["string", "null"] },
+    "headers": { "type": ["array", "null"], "items": { "type": "string" } },
+    "sampleRows": { "type": ["array", "null"] },
+    "mapping": { "type": ["object", "null"] },
+    "mappingAudit": { "type": ["array", "null"] },
+    "rowCount": { "type": ["integer", "null"] },
+    "successRows": { "type": ["integer", "null"] },
+    "failedRows": { "type": ["integer", "null"] },
+    "errorMessage": { "type": ["string", "null"] },
+    "errorDetails": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["sourceRowNumber", "reason"],
+        "properties": {
+          "sourceRowNumber": { "type": "integer", "minimum": 1 },
+          "reason": { "type": "string" },
+          "field": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "dateRange": {
+      "type": ["object", "null"],
+      "properties": {
+        "from": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+        "to": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+      }
+    },
+    "currencySeen": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "createdBy": { "type": ["string", "null"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}
