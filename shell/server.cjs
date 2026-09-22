@@ -883,6 +883,12 @@ process.on("SIGTERM", gracefulShutdown);
  * 启动：① initAuth（迁移 + 种默认管理员）→ ② initKeys（主密钥）→ ③ initConversations → ④ 监听
  * ========================================================================== */
 async function main() {
+  // B6-fix：门禁③ - 检查 DSH 环境是否泄漏 RYZE_MCP_TOKEN
+  if (process.env.RYZE_MCP_TOKEN) {
+    console.error("\n❌ 启动失败：DSH 环境检测到 RYZE_MCP_TOKEN，违反安全红线（凭证应只存在于后端代理）");
+    process.exit(1);
+  }
+
   auth = await initAuth({
     dataDir: DB_DIR,
     migrationsDir: path.join(SHELL, "db-migrations"),
