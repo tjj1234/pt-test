@@ -182,6 +182,14 @@ function createDshRuntime(opts = {}) {
         }
         break;
       }
+      case "aborted": {
+        const sid = frame.sessionId;
+        if (sid) {
+          const w = proc.waiters.get(sid);
+          if (w) { proc.waiters.delete(sid); w.resolve({ ok: false, error: "已停止", text: "", stopped: true }); }
+        }
+        break;
+      }
     }
   }
 
@@ -302,6 +310,15 @@ function createDshRuntime(opts = {}) {
         abort() {
           this.stopped = true;
           writeJson(proc, { type: "abort", sessionId });
+          // 立即 resolve 为 stopped=true，不依赖 DSH done 帧
+          if (proc.waiters.has(sessionId)) {
+            proc.waiters.delete(sessionId);
+            resolve({
+          ok: false, text: "", ms: Date.now() - t0, error: "已停止",
+          stopped: true, steps: [], fresh: !warm,
+          workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
+        });
+          }
         },
         kill() {
           this.abort();
@@ -327,7 +344,7 @@ function createDshRuntime(opts = {}) {
             error: frame.error || (frame.reasonDetail ? (frame.reasonDetail.code + ": " + frame.reasonDetail.message) : null),
             stopped: frame.stopped === true || frame.canceled === true,
             steps: waiter.steps || [],
-            fresh,
+            fresh: !warm,
             workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
           });
         },
@@ -349,7 +366,7 @@ function createDshRuntime(opts = {}) {
           try { proc.child.kill(); } catch (e) {}
           resolve({
             ok: false, code: "TIMEOUT", text: "", ms: Date.now() - t0,
-            error: "常驻 DSH 进程响应超时", fresh,
+            error: "常驻 DSH 进程响应超时", fresh: !warm,
             workspace, tenantId, keySha256: sha256(String(spec.apiKey || "")),
           });
         }, 3000);
@@ -372,9 +389,11 @@ function createDshRuntime(opts = {}) {
     // 按 sessionKey 优雅取消当前轮（P1-4：agent.cancel）
     const sid = String(sessionKey || "").trim();
     if (!sid) return;
+    const rec = warmSessions.get(sid);
+    const dshSid = (rec && rec.sessionId) || sid;
     for (const proc of persistentProcesses.values()) {
       if (proc && proc.child && proc.child.exitCode === null) {
-        writeJson(proc, { type: "abort", sessionId: sid });
+        writeJson(proc, { type: "abort", sessionId: dshSid });
       }
     }
   }
