@@ -171,7 +171,10 @@ function detectProvider(headers, hint) {
     }
   }
   const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
-  return best && best[1] > 0 ? best[0] : "meta";
+  if (best && best[1] > 0) return best[0];
+  const err = new Error("无法识别平台：表头未匹配 google/meta/x 特征列");
+  err.code = "PROVIDER_UNKNOWN";
+  throw err;
 }
 
 function currencyFromHeaders(headers, mapping) {
@@ -184,6 +187,10 @@ function currencyFromHeaders(headers, mapping) {
   return "USD";
 }
 
+/**
+ * 解析为 YYYY-MM-DD。只认可确定年月日的字面格式，禁止 new Date() 本地时区往返。
+ * 支持：YYYY-MM-DD[...], M/D/YYYY, YYYY/MM/DD
+ */
 function parseDate(v) {
   const s = String(v || "").trim();
   if (!s) return null;
@@ -193,8 +200,6 @@ function parseDate(v) {
   if (m) return `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}`;
   m = /^(\d{4})\/(\d{2})\/(\d{2})/.exec(s);
   if (m) return `${m[1]}-${m[2]}-${m[3]}`;
-  const d = new Date(s);
-  if (!Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
   return null;
 }
 
@@ -206,14 +211,11 @@ function parseNumber(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-/** Google Ads cost_micros → USD spend */
+/** Google Ads cost_micros → 本位币 spend；仅当列名标明 micros 时除以 1e6（不做大数值启发式）。 */
 function normalizeSpend(raw, provider, mappingFieldIsMicros) {
   const n = parseNumber(raw);
   if (n === null) return null;
-  if (provider === "google" && (mappingFieldIsMicros || n > 100000)) {
-    // 启发式：cost micros 通常很大；显式列名含 micros 时除以 1e6
-    if (mappingFieldIsMicros) return n / 1e6;
-  }
+  if (provider === "google" && mappingFieldIsMicros) return n / 1e6;
   return n;
 }
 
@@ -336,6 +338,7 @@ module.exports = {
   currencyFromHeaders,
   parseDate,
   parseNumber,
+  normalizeSpend,
   cell,
   rowToCanonical,
   synthId,
