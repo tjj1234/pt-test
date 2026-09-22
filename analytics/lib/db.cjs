@@ -181,6 +181,16 @@ async function createPgCompatPool(opts) {
       { label: "003_add_x_platform.sql", path: path.join(origDir, "003_add_x_platform.sql"), isPsqlScript: true },
       // 交付版新增的一层（应用角色 / 缺失的表 / 安全自检）
       { label: "003_delivery.sql", path: path.join(deliveryDir, "003_delivery.sql"), isPsqlScript: false },
+      // A2/A13：attribution_raw_events / attribution_event_dlq 建表 + RLS。
+      // 必须在这里（超级用户阶段）建，不能留给运行时 pt_app 身份去补建——
+      // pt_app 只有 003_delivery.sql 授予的 DML 权限，没有 CREATE，运行时补建必然失败
+      // （collect/deps.cjs 里的 ensureSchema() 调用会把这个失败静默吞掉，表就永远建不出来）。
+      // 且必须排在 003_delivery.sql 之后：它的 GRANT ... TO pt_app 依赖 pt_app 角色已存在。
+      {
+        label: "a2_raw_dlq.sql",
+        path: path.join(__dirname, "..", "..", "business", "attribution", "schema", "a2_raw_dlq.sql"),
+        isPsqlScript: false,
+      },
     ];
 
     for (const f of files) {
