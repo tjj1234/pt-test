@@ -50,6 +50,10 @@ const OPT = {
   quiet: argv.includes("--quiet"),
 };
 
+// 监听地址：默认仅回环 127.0.0.1（安全，仅本机可访问）；
+// 如需局域网访问，启动时设 PT_DASH_HOST=0.0.0.0（并配合防火墙放行端口）。
+const HOST = process.env.PT_DASH_HOST || "127.0.0.1";
+
 const ROOT = __dirname;
 const DATA_DIR = process.env.PT_DASH_DATA_DIR || path.join(ROOT, ".pgdata");
 const MIGRATIONS = path.join(ROOT, "backend", "db");
@@ -187,6 +191,37 @@ async function pickPort(start) {
 }
 
 // ---------------------------------------------------------------------------
+// MCP 代理（B6-fix-2）
+// ---------------------------------------------------------------------------
+let mcpProxy = null;
+
+async function startMcpProxy() {
+  // 缺 RYZE_MCP_TOKEN 时优雅跳过 Ryze 代理：它是只读广告数据转发（/mcp/ryze），
+  // 与 webhook 接入 / 看板等核心功能解耦。避免因「可选代理缺凭证」导致整个进程崩溃。
+  if (!process.env.RYZE_MCP_TOKEN) {
+    console.warn("  ⚠️  RYZE_MCP_TOKEN 未设置：跳过 Ryze MCP 只读代理（/mcp/ryze 不可用；webhook 接入与看板不受影响）");
+    return;
+  }
+  const { startMCPProxyServer, createRyzeUpstreamFromEnv, registerProxyShutdown } = require("./backend/ads/mcp-proxy");
+  const proxyToken = process.env.PT_MCP_PROXY_TOKEN || "pt_mcp_proxy_default_token";
+  // B6-fix-3：为代理设置上游凭证（到达此处时 RYZE_MCP_TOKEN 必然存在，见上方守卫）
+  const ryzeToken = process.env.RYZE_MCP_TOKEN;
+  const upstream = createRyzeUpstreamFromEnv({ 
+    timeoutMs: 30000,
+    accessToken: ryzeToken,
+  });
+  mcpProxy = await startMCPProxyServer({
+    upstream,
+    proxyToken,
+    audit: null,
+    logger: !OPT.quiet,
+    port: 3001,
+  });
+  registerProxyShutdown(mcpProxy.close);
+  console.log(`  ✅ MCP 代理已启动：http://127.0.0.1:3001/mcp/ryze`);
+}
+
+// ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 let pool = null;
@@ -316,6 +351,9 @@ async function main() {
 
   // ---- 5. Web 服务 ----
   console.log("\n[5/6] 启动 Web 服务");
+
+  // B6-fix-3：启动 MCP 代理（与 --no-seed 解耦）
+  await startMcpProxy();
   const { buildUnifiedServer } = require(path.join(DIST, "server.js"));
 
   const poolAdapter = {
@@ -344,7 +382,7 @@ async function main() {
     console.error(`\n❌ 端口 ${port} 已被占用，拒绝启动（P0-5：不自动换端口）。`);
     process.exit(1);
   }
-  await app.listen({ port, host: "127.0.0.1" });
+  await app.listen({ port, host: HOST });
   // P0-3：token 不再拼进 URL（避免进浏览器历史/代理日志/Referer）
   const url = `http://127.0.0.1:${port}/`;
   started = app;
@@ -417,6 +455,7 @@ async function main() {
   const shutdown = async (sig) => {
     console.log(`\n收到 ${sig}，正在关闭…`);
     try {
+      if (mcpProxy) await mcpProxy.close();
       if (wiring) await wiring.stop();
       if (started) await started.close();
       if (pool) await pool.end();

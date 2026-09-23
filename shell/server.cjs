@@ -894,6 +894,13 @@ async function main() {
     migrationsDir: path.join(SHELL, "db-migrations"),
     defaultAdmin: { username: USERNAME, password: PASSWORD },
   });
+  
+  // B3-fix：为默认管理员创建 workspace
+  const defaultAdminTenant = await auth.db.query("SELECT tenant_id FROM users WHERE username = $1", [USERNAME]);
+  if (defaultAdminTenant.rows.length > 0) {
+    const { createWorkspace } = require("./workspace");
+    await createWorkspace("ws_" + defaultAdminTenant.rows[0].tenant_id, defaultAdminTenant.rows[0].tenant_id);
+  }
   keys = await keysMod.initKeys({ db: auth.db, masterKeyFile: MASTER_KEY_FILE });
   conversations = await convMod.initConversations(auth.db);
   memory = await memoryMod.initMemory(auth.db);
