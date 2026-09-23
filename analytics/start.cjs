@@ -187,6 +187,27 @@ async function pickPort(start) {
 }
 
 // ---------------------------------------------------------------------------
+// MCP 代理（B6-fix-2）
+// ---------------------------------------------------------------------------
+let mcpProxy = null;
+
+async function startMcpProxy() {
+  const { startMCPProxyServer, createRyzeUpstreamFromEnv, registerProxyShutdown } = require("./backend/ads/mcp-proxy");
+  const proxyToken = process.env.PT_MCP_PROXY_TOKEN || "pt_mcp_proxy_default_token";
+  // B6-fix-2：为代理设置上游凭证（真实或测试用）
+  const upstream = createRyzeUpstreamFromEnv({ timeoutMs: 30000 });
+  mcpProxy = await startMCPProxyServer({
+    upstream,
+    proxyToken,
+    audit: null,
+    logger: !OPT.quiet,
+    port: 3001,
+  });
+  registerProxyShutdown(mcpProxy.close);
+  console.log(`  ✅ MCP 代理已启动：http://127.0.0.1:3001/mcp/ryze`);
+}
+
+// ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 let pool = null;
@@ -316,6 +337,11 @@ async function main() {
 
   // ---- 5. Web 服务 ----
   console.log("\n[5/6] 启动 Web 服务");
+
+  // B6-fix-2：启动 MCP 代理
+  if (!OPT.noSeed) {
+    await startMcpProxy();
+  }
   const { buildUnifiedServer } = require(path.join(DIST, "server.js"));
 
   const poolAdapter = {
@@ -417,6 +443,7 @@ async function main() {
   const shutdown = async (sig) => {
     console.log(`\n收到 ${sig}，正在关闭…`);
     try {
+      if (mcpProxy) await mcpProxy.close();
       if (wiring) await wiring.stop();
       if (started) await started.close();
       if (pool) await pool.end();

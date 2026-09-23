@@ -29,8 +29,9 @@ const WORKSPACE_STATUS = {
   DELETED: "deleted",
 };
 
-// 工作区存储目录
-const WORKSPACES_DIR = path.join(__dirname, "..", "workspaces");
+// 工作区存储目录（与 db/、logs/ 同级）
+const RUNTIME_DIR = path.join(__dirname, "..", "..", "runtime");
+const WORKSPACES_DIR = path.join(RUNTIME_DIR, "workspaces");
 
 // 确保工作区目录存在
 function ensureWorkspacesDir() {
@@ -42,11 +43,12 @@ function ensureWorkspacesDir() {
 /**
  * 创建工作区
  * @param {string} workspaceId - 工作区ID
+ * @param {string} tenantId - 租户ID
  * @param {Object} [options] - 选项
  * @param {Object} [options.quota] - 自定义配额
  * @returns {Object} 工作区信息
  */
-function createWorkspace(workspaceId, options = {}) {
+function createWorkspace(workspaceId, tenantId, options = {}) {
   ensureWorkspacesDir();
 
   const workspacePath = path.join(WORKSPACES_DIR, workspaceId);
@@ -57,6 +59,7 @@ function createWorkspace(workspaceId, options = {}) {
   const quota = options.quota || DEFAULT_QUOTA;
   const workspaceInfo = {
     id: workspaceId,
+    tenantId: tenantId,
     status: WORKSPACE_STATUS.ACTIVE,
     createdAt: new Date().toISOString(),
     quota,
