@@ -16,7 +16,7 @@ async function main() {
 
   // 1. 创建工作区
   console.log(`  创建工作区: ${testWorkspaceId}`);
-  const workspace = createWorkspace(testWorkspaceId);
+  const workspace = createWorkspace(testWorkspaceId, "test-tenant");
   if (!workspace || workspace.id !== testWorkspaceId) {
     console.error("❌ 工作区创建失败");
     process.exit(1);

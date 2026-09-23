@@ -53,7 +53,14 @@ function createWorkspace(workspaceId, tenantId, options = {}) {
 
   const workspacePath = path.join(WORKSPACES_DIR, workspaceId);
   if (fs.existsSync(workspacePath)) {
-    throw new Error(`工作区已存在: ${workspaceId}`);
+    // 如果目录已存在，读取现有的 metadata
+    const metadataPath = path.join(workspacePath, "metadata.json");
+    if (fs.existsSync(metadataPath)) {
+      const metadata = fs.readFileSync(metadataPath, "utf8");
+      return JSON.parse(metadata);
+    }
+    // 如果目录存在但 metadata 不存在，抛错
+    throw new Error(`工作区目录存在但元数据缺失: ${workspaceId}`);
   }
 
   const quota = options.quota || DEFAULT_QUOTA;
