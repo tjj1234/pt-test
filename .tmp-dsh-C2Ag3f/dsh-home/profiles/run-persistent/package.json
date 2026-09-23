@@ -1,0 +1,1 @@
+{"name":"dsh-profile-run-persistent","private":true,"dependencies":{},"dsh":{"profile":{"bundles":["@deepseek-ai/dsh-base"]}}}

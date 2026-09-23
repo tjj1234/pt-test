@@ -1,0 +1,45 @@
+﻿2026-09-23 12:28:14.846  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:28:14.849  collect request failed
+2026-09-23 12:28:14.852  -> 400  5.82ms  request completed
+2026-09-23 12:28:15.782  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:28:15.783  collect request failed
+2026-09-23 12:28:15.783  -> 400  0.42ms  request completed
+2026-09-23 12:31:33.723  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:31:33.723  collect request failed
+2026-09-23 12:31:33.724  -> 400  0.64ms  request completed
+2026-09-23 12:31:40.611  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:31:40.611  collect request failed
+2026-09-23 12:31:40.612  -> 400  0.76ms  request completed
+2026-09-23 12:31:43.268  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:31:43.268  collect request failed
+2026-09-23 12:31:43.269  -> 400  0.42ms  request completed
+2026-09-23 12:31:45.620  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:31:45.620  collect request failed
+2026-09-23 12:31:45.621  -> 400  0.47ms  request completed
+2026-09-23 12:31:46.071  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:31:46.071  collect request failed
+2026-09-23 12:31:46.071  -> 400  0.42ms  request completed
+2026-09-23 12:31:49.776  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:31:49.777  collect request failed
+2026-09-23 12:31:49.777  -> 400  0.83ms  request completed
+2026-09-23 12:32:04.154  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 12:32:04.154  collect request failed
+2026-09-23 12:32:04.155  -> 400  0.66ms  request completed
+2026-09-23 13:37:09.644  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:37:09.645  collect request failed
+2026-09-23 13:37:09.645  -> 400  0.76ms  request completed
+2026-09-23 13:38:30.774  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:38:30.774  collect request failed
+2026-09-23 13:38:30.775  -> 400  0.83ms  request completed
+2026-09-23 13:38:41.002  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:38:41.002  collect request failed
+2026-09-23 13:38:41.002  -> 400  0.41ms  request completed
+2026-09-23 13:39:13.715  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:39:13.715  collect request failed
+2026-09-23 13:39:13.715  -> 400  0.43ms  request completed
+2026-09-23 13:39:18.870  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:39:18.871  collect request failed
+2026-09-23 13:39:18.871  -> 400  0.42ms  request completed
+2026-09-23 13:39:19.108  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:39:19.109  collect request failed
+2026-09-23 13:39:19.109  -> 400  0.64ms  request completed

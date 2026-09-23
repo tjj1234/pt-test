@@ -1,0 +1,7 @@
+- id: hmr
+  disabled: true
+
+- insert:
+    - id: persistent-runner
+      name: './persistent-runner.mjs'
+      inject: [agentDefaultModel, agents, sessions]

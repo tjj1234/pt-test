@@ -898,13 +898,18 @@ async function main() {
   // B3-fix：为默认管理员创建 workspace
   const defaultAdminTenant = await auth.db.query("SELECT tenant_id FROM users WHERE username = $1", [USERNAME]);
   if (defaultAdminTenant.rows.length > 0) {
-    const { createWorkspace } = require("./workspace");
+    const { createWorkspace } = require("./workspace/index.cjs");
     await createWorkspace("ws_" + defaultAdminTenant.rows[0].tenant_id, defaultAdminTenant.rows[0].tenant_id);
   }
   keys = await keysMod.initKeys({ db: auth.db, masterKeyFile: MASTER_KEY_FILE });
   conversations = await convMod.initConversations(auth.db);
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
+  
+  // B4-fix: 初始化默认角色权限
+  const { initializeDefaultRoles } = require("./permissions/index.cjs");
+  await initializeDefaultRoles();
+  
   pruneUploads(); // P1-2：启动清理过期上传
   log.info("init", { stage: "ready", dbDir: DB_DIR, username: USERNAME, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
 

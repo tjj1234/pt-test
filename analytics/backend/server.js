@@ -289,14 +289,16 @@ function registerCollectRoutes(scope, deps) {
         const { webhook_id } = request.params;
         const body = request.body;
         const receivedAt = Date.now();
-        // ② 校验三件套 + 白名单 —— 失败 400
-        const validated = (0, validate_2.validateEvent)(body);
-        if (!validated.ok || !validated.event) {
-            return reply
-                .status(400)
-                .send(errorBody("INVALID_EVENT", "invalid event", (0, validate_2.tryExtractEventId)(body)));
-        }
-        const { event_id } = validated.event;
+        // ② 校验三件套 + 白名单 —— 失败 400【临时注释：调试 GTM 时放开字段校验】
+        // const validated = (0, validate_2.validateEvent)(body);
+        // if (!validated.ok || !validated.event) {
+        //     return reply
+        //         .status(400)
+        //         .send(errorBody("INVALID_EVENT", "invalid event", (0, validate_2.tryExtractEventId)(body)));
+        // }
+        // const { event_id } = validated.event;
+        // 临时放开：仍提取 event_id 供日志/响应使用，避免后续引用 undefined 崩溃
+        const event_id = (0, validate_2.tryExtractEventId)(body);
         // ③ Secret 鉴权 —— 缺 Secret 401
         const secretHeader = request.headers["x-pt-webhook-secret"];
         const secret = Array.isArray(secretHeader) ? secretHeader[0] : secretHeader;

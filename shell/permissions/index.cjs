@@ -12,12 +12,57 @@ const log = require("../logging.cjs");
 const path = require("path");
 const { open } = require("../db.cjs");
 
+// 权限定义
+const PERMISSIONS = {
+  // 工具相关
+  TOOL_USE: "tool.use",
+  TOOL_REGISTER: "tool.register",
+  TOOL_MANAGE: "tool.manage",
+
+  // 工作区相关
+  WORKSPACE_CREATE: "workspace.create",
+  WORKSPACE_MANAGE: "workspace.manage",
+  WORKSPACE_DELETE: "workspace.delete",
+
+  // 系统管理
+  SYSTEM_ADMIN: "system.admin",
+};
+
 // 角色定义（最小集）
 const ROLES = {
   OWNER: "owner",
   ADMIN: "admin",
   ANALYST: "analyst",
   VIEWER: "viewer",
+};
+
+// 角色权限映射
+const ROLE_PERMISSIONS = {
+  [ROLES.OWNER]: [
+    PERMISSIONS.TOOL_USE,
+    PERMISSIONS.TOOL_REGISTER,
+    PERMISSIONS.TOOL_MANAGE,
+    PERMISSIONS.WORKSPACE_CREATE,
+    PERMISSIONS.WORKSPACE_MANAGE,
+    PERMISSIONS.WORKSPACE_DELETE,
+    PERMISSIONS.SYSTEM_ADMIN,
+  ],
+  [ROLES.ADMIN]: [
+    PERMISSIONS.TOOL_USE,
+    PERMISSIONS.TOOL_REGISTER,
+    PERMISSIONS.TOOL_MANAGE,
+    PERMISSIONS.WORKSPACE_CREATE,
+    PERMISSIONS.WORKSPACE_MANAGE,
+    PERMISSIONS.WORKSPACE_DELETE,
+  ],
+  [ROLES.ANALYST]: [
+    PERMISSIONS.TOOL_USE,
+    PERMISSIONS.WORKSPACE_CREATE,
+    PERMISSIONS.WORKSPACE_MANAGE,
+  ],
+  [ROLES.VIEWER]: [
+    PERMISSIONS.WORKSPACE_CREATE,
+  ],
 };
 
 // 默认角色权限映射（用于初始化）
@@ -61,51 +106,6 @@ const DEFAULT_ROLES = [
   }
 ];
 
-// 权限定义
-const PERMISSIONS = {
-  // 工具相关
-  TOOL_USE: "tool.use",
-  TOOL_REGISTER: "tool.register",
-  TOOL_MANAGE: "tool.manage",
-
-  // 工作区相关
-  WORKSPACE_CREATE: "workspace.create",
-  WORKSPACE_MANAGE: "workspace.manage",
-  WORKSPACE_DELETE: "workspace.delete",
-
-  // 系统管理
-  SYSTEM_ADMIN: "system.admin",
-};
-
-// 角色权限映射
-const ROLE_PERMISSIONS = {
-  [ROLES.OWNER]: [
-    PERMISSIONS.TOOL_USE,
-    PERMISSIONS.TOOL_REGISTER,
-    PERMISSIONS.TOOL_MANAGE,
-    PERMISSIONS.WORKSPACE_CREATE,
-    PERMISSIONS.WORKSPACE_MANAGE,
-    PERMISSIONS.WORKSPACE_DELETE,
-    PERMISSIONS.SYSTEM_ADMIN,
-  ],
-  [ROLES.ADMIN]: [
-    PERMISSIONS.TOOL_USE,
-    PERMISSIONS.TOOL_REGISTER,
-    PERMISSIONS.TOOL_MANAGE,
-    PERMISSIONS.WORKSPACE_CREATE,
-    PERMISSIONS.WORKSPACE_MANAGE,
-    PERMISSIONS.WORKSPACE_DELETE,
-  ],
-  [ROLES.ANALYST]: [
-    PERMISSIONS.TOOL_USE,
-    PERMISSIONS.WORKSPACE_CREATE,
-    PERMISSIONS.WORKSPACE_MANAGE,
-  ],
-  [ROLES.VIEWER]: [
-    PERMISSIONS.WORKSPACE_CREATE,
-  ],
-};
-
 // 数据库连接池（单例）
 let dbPool = null;
 
@@ -114,7 +114,7 @@ async function getDb() {
     const dataDir = path.join(__dirname, "..", "..", "db");
     dbPool = await open({ dataDir });
   }
-  return dbPool;
+  return dbPool.db;
 }
 
 /**
@@ -160,7 +160,14 @@ async function getUserRole(userId, tenantId) {
     return ROLES.VIEWER; // 默认角色
   }
   
-  return result.rows[0].role || ROLES.VIEWER;
+  const role = result.rows[0].role;
+  
+  // B4-fix: 历史角色名兼容 ("member" -> "viewer")
+  if (role === "member") {
+    return ROLES.VIEWER;
+  }
+  
+  return role || ROLES.VIEWER;
 }
 
 /**

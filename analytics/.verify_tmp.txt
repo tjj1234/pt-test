@@ -1,0 +1,2 @@
+﻿A -> 错误 BadRequest
+B 错误secret -> 拦截 BadRequest

@@ -1,0 +1,18 @@
+{
+  "id": "test-workspace-1790072770208",
+  "status": "active",
+  "createdAt": "2026-09-22T10:26:10.210Z",
+  "quota": {
+    "storageBytes": 5368709120,
+    "retentionDays": {
+      "tier1": 30,
+      "tier2": 45,
+      "tier3": 60,
+      "tier4": 90
+    }
+  },
+  "usage": {
+    "storageBytes": 5368709121,
+    "lastAccessed": "2026-09-22T10:26:10.228Z"
+  }
+}

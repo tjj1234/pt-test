@@ -1,0 +1,30 @@
+﻿2026-09-23 13:51:23.315  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:23.316  collect request failed
+2026-09-23 13:51:23.316  -> 400  0.39ms  request completed
+2026-09-23 13:51:25.109  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:25.110  collect request failed
+2026-09-23 13:51:25.110  -> 400  0.47ms  request completed
+2026-09-23 13:51:29.289  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:29.289  collect request failed
+2026-09-23 13:51:29.289  -> 400  0.38ms  request completed
+2026-09-23 13:51:34.430  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:34.430  collect request failed
+2026-09-23 13:51:34.431  -> 400  0.36ms  request completed
+2026-09-23 13:51:37.588  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:37.588  collect request failed
+2026-09-23 13:51:37.589  -> 400  0.41ms  request completed
+2026-09-23 13:51:40.508  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:40.509  collect request failed
+2026-09-23 13:51:40.509  -> 400  1.30ms  request completed
+2026-09-23 13:51:41.727  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:41.727  collect request failed
+2026-09-23 13:51:41.727  -> 400  0.42ms  request completed
+2026-09-23 13:51:43.971  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:43.971  collect request failed
+2026-09-23 13:51:43.971  -> 400  0.43ms  request completed
+2026-09-23 13:51:54.659  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:51:54.659  collect request failed
+2026-09-23 13:51:54.659  -> 400  0.37ms  request completed
+2026-09-23 13:52:19.771  POST 192.168.88.84 /api/v1/collect/wh_powertokens_001  incoming request
+2026-09-23 13:52:19.772  collect request failed
+2026-09-23 13:52:19.772  -> 400  0.45ms  request completed

@@ -1,0 +1,15 @@
+﻿StatusCode: 200
+--- Headers ---
+Connection: keep-alive
+cf-cache-status: DYNAMIC
+Server-Timing: cfCacheStatus;desc="DYNAMIC",cfEdge;dur=52,cfOrigin;dur=57
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=GndulamF601YUWyA9e30K55n832EnhqHspmGFo0e%2Bu0x2EjrX2eVzk9YjC77VfFWMP5idERX0jQG9e%2BghTZPAEvO1n0wogNzdZmrmLG2xVPjshSl%2BgY2G%2BrGLQZVP7VGbYpKMzh4dgw%3D"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+CF-RAY: a3f6a24ffe2604c6-HKG
+alt-svc: h3=":443"; ma=86400
+Content-Length: 89
+Content-Type: application/json; charset=utf-8
+Date: Wed, 23 Sep 2026 03:58:58 GMT
+Server: cloudflare
+--- Body ---
+{"ok":true,"event_id":"3d6f7b1a-2c9e-4a11-9f3a-1e6d0c9a7b21","received_at":1790135938637}

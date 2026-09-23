@@ -1,0 +1,20 @@
+{
+  "id": "test-workspace-1790072798190",
+  "status": "suspended",
+  "createdAt": "2026-09-22T10:26:38.191Z",
+  "quota": {
+    "storageBytes": 5368709120,
+    "retentionDays": {
+      "tier1": 30,
+      "tier2": 45,
+      "tier3": 60,
+      "tier4": 90
+    }
+  },
+  "usage": {
+    "storageBytes": 5368709121,
+    "lastAccessed": "2026-09-22T10:26:38.196Z"
+  },
+  "suspendedAt": "2026-09-22T10:26:38.198Z",
+  "suspendReason": "manual_test"
+}

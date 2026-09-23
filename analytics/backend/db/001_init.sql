@@ -165,6 +165,7 @@ CREATE INDEX IF NOT EXISTS idx_pt_events_tenant_seq
 ALTER TABLE pt_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pt_events FORCE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS tenant_isolation ON pt_events;
 CREATE POLICY tenant_isolation ON pt_events
     USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
     WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);

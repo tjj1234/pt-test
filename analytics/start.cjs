@@ -60,6 +60,8 @@ const MIGRATIONS = path.join(ROOT, "backend", "db");
 const FRONTEND = path.join(ROOT, "frontend");
 const DIST = path.join(ROOT, "backend");                 // 编译产物目录
 const URL_FILE = path.join(ROOT, ".delivery-url.txt");
+// 每个接口请求日志落盘位置（不打印到 stdout，避免和启动横幅混在一起）
+const REQUEST_LOG_FILE = path.join(ROOT, ".request.log");
 
 // P0-2 安全：token/secret 不再内置默认值，必须从环境变量显式提供，缺失拒绝启动。
 const RO_TOKEN = process.env.PT_DASH_TOKEN || null;
@@ -370,7 +372,18 @@ async function main() {
     loadConfigFindings: deps.createConfigFindingsLoader(pool),
     resolveWorkspaceId: deps.createWorkspaceResolver(pool),
     now: () => Date.now(),
-    logger: false,
+    // 开启每条请求的 access log，落盘到 .request.log（不进 stdout）。
+    // 自定义序列化：只记 method/url/ip/status，绝不记 headers（含 x-pt-webhook-secret）。
+    logger: {
+      level: process.env.PT_DASH_LOG_LEVEL || "info",
+      stream: fs.createWriteStream(REQUEST_LOG_FILE, { flags: "a" }),
+      base: { service: "pt-analytics" },
+      serializers: {
+        req: (req) => ({ method: req.method, url: req.url, ip: req.ip, id: req.id }),
+        res: (res) => ({ statusCode: res.statusCode }),
+      },
+      redact: ["req.headers"],
+    },
   });
 
   // 前端静态资源（放最后注册，API 路由优先匹配）

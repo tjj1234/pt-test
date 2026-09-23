@@ -151,7 +151,7 @@ function updateWorkspaceUsage(workspaceId, storageBytes) {
   return true;
 }
 
-const { checkPermission } = require("../permissions");
+const { checkPermission } = require("../permissions/index.cjs");
 
 /**
  * 删除工作区（需要 WORKSPACE_DELETE 权限）
