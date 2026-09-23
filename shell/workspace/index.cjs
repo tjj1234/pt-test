@@ -151,11 +151,56 @@ function updateWorkspaceUsage(workspaceId, storageBytes) {
   return true;
 }
 
+const { checkPermission } = require("../permissions");
+
+/**
+ * 删除工作区（需要 WORKSPACE_DELETE 权限）
+ * @param {string} workspaceId - 工作区ID
+ * @param {Object} context - 权限上下文 { userId, tenantId }
+ * @param {boolean} confirmed - 是否已确认（二次确认标志）
+ * @returns {Promise<boolean>} 是否成功
+ */
+async function deleteWorkspace(workspaceId, context, confirmed = false) {
+  // B4: 高风险操作需要二次确认
+  if (!confirmed) {
+    // 返回特殊错误类型，前端可以用这个来提示二次确认
+    const error = new Error("删除工作区需要二次确认");
+    error.code = "CONFIRM_REQUIRED";
+    throw error;
+  }
+
+  // 检查用户是否有删除工作区的权限
+  const hasPermission = await checkPermission(context, "workspace.delete");
+  if (!hasPermission) {
+    throw new Error("没有删除工作区的权限");
+  }
+
+  const workspacePath = path.join(WORKSPACES_DIR, workspaceId);
+  if (!fs.existsSync(workspacePath)) {
+    return false;
+  }
+
+  // 先更新状态为 DELETED
+  const metadataPath = path.join(workspacePath, "metadata.json");
+  if (fs.existsSync(metadataPath)) {
+    const metadata = JSON.parse(fs.readFileSync(metadataPath, "utf8"));
+    metadata.status = WORKSPACE_STATUS.DELETED;
+    metadata.deletedAt = new Date().toISOString();
+    fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf8");
+  }
+
+  // 删除目录
+  fs.rmSync(workspacePath, { recursive: true, force: true });
+
+  return true;
+}
+
 module.exports = {
   createWorkspace,
   getWorkspaceQuota,
   suspendWorkspaceForQuota,
   updateWorkspaceUsage,
+  deleteWorkspace, // B4: 新增删除工作区功能
   DEFAULT_QUOTA,
   WORKSPACE_STATUS,
 };
