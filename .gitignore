@@ -22,6 +22,9 @@ logs/
 .pgdata*
 *.pgdata*
 
+# B3 Workspace å…ƒæ•°æ®ï¼ˆshell/workspace/index.cjs è¿è¡Œæ—¶ç”Ÿæˆï¼Œæœ¬åœ°/æµ‹è¯•äº§ç‰©ï¼‰
+/shell/workspaces/
+
 # ---- æ—¥å¿— / ä¸´æ—¶æ–‡ä»¶ ----
 *.log
 *.tmp
@@ -52,7 +55,7 @@ desktop.ini
 .idea/
 .vscode/
 
-# ---- ±¾µØ²âÊÔ runtime Ä¿Â¼£¨¹¹½¨²úÎï£¬²»Èë¿â£©----
+# ---- ï¿½ï¿½ï¿½Ø²ï¿½ï¿½ï¿½ runtime Ä¿Â¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï£¬ï¿½ï¿½ï¿½ï¿½â£©----
 local-test-runtime*/
 browsertest-runtime/
 _persistent-test-runtime/
@@ -60,7 +63,7 @@ _pg-test/
 conv_frozen/
 fix/
 
-# ---- conv/ ·ÇÈ¨ÍşÎÄ¼ş£¨¾É°æ±¾/²âÊÔ½Å±¾/¹¹½¨½Å±¾£¬²»Èë¿â£»º¬ÃÜÔ¿µÄ _test-*.cjs Ò»²¢ÅÅ³ı£©----
+# ---- conv/ ï¿½ï¿½È¨ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½É°æ±¾/ï¿½ï¿½ï¿½Ô½Å±ï¿½/ï¿½ï¿½ï¿½ï¿½ï¿½Å±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½â£»ï¿½ï¿½ï¿½ï¿½Ô¿ï¿½ï¿½ _test-*.cjs Ò»ï¿½ï¿½ï¿½Å³ï¿½ï¿½ï¿½----
 conv/_test-*.cjs
 conv/_transform-*.cjs
 conv/_build-*.cjs
