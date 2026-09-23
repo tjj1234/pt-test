@@ -110,7 +110,8 @@ async function initAuth(opts = {}) {
     const cnt = await db.query("SELECT count(*)::int AS n FROM users");
     const isFirst = cnt.rows[0].n === 0;
     // P0 修复：role 绝不再从参数/请求体取，只按「是否首个用户」决定
-    const finalRole = isFirst ? "admin" : "member";
+    // B4-fix: 使用 VIEWER 角色替代 MEMBER 角色以保持一致性
+    const finalRole = isFirst ? "admin" : "viewer";
 
     try {
       const created = await _createUser({ username: uname, email: mail, password: pass, role: finalRole });
