@@ -165,6 +165,9 @@ CREATE INDEX IF NOT EXISTS idx_pt_events_tenant_seq
 ALTER TABLE pt_events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE pt_events FORCE ROW LEVEL SECURITY;
 
+-- 迁移按文件重跑、非"已执行则跳过"，CREATE POLICY 本身不是幂等语句，
+-- 重启（第二次及以后跑这个文件）会撞 "policy already exists"，先 DROP 一次。
+DROP POLICY IF EXISTS tenant_isolation ON pt_events;
 CREATE POLICY tenant_isolation ON pt_events
     USING (tenant_id = current_setting('app.current_tenant_id', true)::uuid)
     WITH CHECK (tenant_id = current_setting('app.current_tenant_id', true)::uuid);
