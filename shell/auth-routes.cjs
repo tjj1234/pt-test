@@ -81,7 +81,7 @@ async function handleAuthRoutes(req, res, auth) {
       if (!r.ok) return sendJson(res, r.code === "USERNAME_TAKEN" || r.code === "EMAIL_TAKEN" ? 409 : 400, r), true;
       
       // B3-fix：新建租户时自动创建 workspace
-      const { createWorkspace } = require("./workspace");
+      const { createWorkspace } = require("./workspace/index.cjs");
       await createWorkspace("ws_" + r.tenant.id, r.tenant.id);
       
       return sendJson(res, 200, { ok: true, user: r.user, tenant: r.tenant }), true;
