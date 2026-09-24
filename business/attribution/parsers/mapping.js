@@ -13,6 +13,7 @@ const MAP_FIELDS = Object.freeze([
   "adGroupId",
   "creativeId",
   "creativeName",
+  "country",
   "spend",
   "impressions",
   "clicks",
@@ -22,6 +23,8 @@ const MAP_FIELDS = Object.freeze([
 ]);
 
 const REQUIRED_MAP = Object.freeze(["date", "spend", "impressions", "clicks"]);
+
+const SOURCE_VERSION = "a1.1";
 
 const RULE_ALIASES = {
   date: [
@@ -57,7 +60,14 @@ const RULE_ALIASES = {
     "广告系列",
     "广告活动",
   ],
-  adGroupId: ["ad group id", "adset id", "ad set id", "adgroup id", "广告组 id"],
+  adGroupId: [
+    "ad group id",
+    "adset id",
+    "ad set id",
+    "adgroup id",
+    "广告组 id",
+    "ad group",
+  ],
   creativeId: [
     "ad id",
     "ad_id",
@@ -78,6 +88,17 @@ const RULE_ALIASES = {
     "ad title",
     "tweet text",
   ],
+  country: [
+    "country",
+    "country/territory",
+    "country/territory (matched)",
+    "country territory",
+    "location",
+    "geo",
+    "国家",
+    "地区",
+    "地域",
+  ],
   spend: [
     "spend",
     "amount spent",
@@ -92,7 +113,7 @@ const RULE_ALIASES = {
   ],
   impressions: ["impressions", "impr", "展示", "展示次数", "曝光", "metrics.impressions"],
   clicks: ["clicks", "link clicks", "链接点击", "点击", "点击次数", "metrics.clicks"],
-  conversions: ["conversions", "conv", "转化", "results", "purchases"],
+  conversions: ["conversions", "conv", "转化", "results", "purchases", "leads"],
   revenue: ["revenue", "purchase value", "转化价值", "value", "conv value"],
   currency: ["currency", "currency code", "币种", "货币"],
 };
@@ -242,8 +263,9 @@ function rowToCanonical(rowObj, mapping, meta) {
     sourceRowNumber,
     rawSource,
     importedAt,
-    sourceVersion = "a1.0",
+    sourceVersion = SOURCE_VERSION,
     defaultCurrency = "USD",
+    defaultDate = null,
   } = meta;
 
   if (!workspaceId) {
@@ -253,7 +275,7 @@ function rowToCanonical(rowObj, mapping, meta) {
     return { ok: false, reason: "provider 非法", field: "provider" };
   }
 
-  const date = parseDate(cell(rowObj, mapping, "date"));
+  const date = parseDate(cell(rowObj, mapping, "date")) || (defaultDate ? parseDate(defaultDate) : null);
   if (!date) return { ok: false, reason: "日期无法解析", field: "date" };
 
   const spendCol = mapping.spend && mapping.spend.column;
@@ -283,11 +305,12 @@ function rowToCanonical(rowObj, mapping, meta) {
 
   const creativeIdRaw = String(cell(rowObj, mapping, "creativeId")).trim();
   const creativeNameRaw = String(cell(rowObj, mapping, "creativeName")).trim();
+  const hasAdLevelColumn = Boolean(mapping.creativeId && mapping.creativeId.column);
   let creativeId = creativeIdRaw;
   let creativeName = creativeNameRaw || null;
-  if (!creativeId && campaignNameRaw) {
-    creativeId = synthId("creative", campaignNameRaw + "|" + date);
-    if (!creativeName) creativeName = campaignNameRaw;
+  if (!creativeId && (campaignNameRaw || campaignId)) {
+    creativeId = synthId("creative", (campaignNameRaw || campaignId) + "|" + date);
+    if (!creativeName) creativeName = campaignNameRaw || campaignId;
   } else if (!creativeId) {
     creativeId = synthId("daily", accountId + "|" + date);
     creativeName = creativeName || "未分系列 · 日汇总";
@@ -295,8 +318,16 @@ function rowToCanonical(rowObj, mapping, meta) {
     creativeName = creativeId;
   }
 
+  // Google 且无真实 Ad 列：名称必须标明「系列级近似」，避免前端误当素材
+  if (provider === "google" && !hasAdLevelColumn) {
+    creativeName = `系列级近似 · ${campaignNameRaw || campaignId}`;
+  }
+
   let currency = String(cell(rowObj, mapping, "currency")).trim().toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency)) currency = defaultCurrency;
+
+  const countryRaw = String(cell(rowObj, mapping, "country")).trim();
+  const country = countryRaw || null;
 
   const conversionsRaw = parseNumber(cell(rowObj, mapping, "conversions"));
   const revenueRaw = parseNumber(cell(rowObj, mapping, "revenue"));
@@ -310,6 +341,7 @@ function rowToCanonical(rowObj, mapping, meta) {
     creativeId,
     creativeName,
     campaignName,
+    country,
     date,
     currency,
     spend,
@@ -332,6 +364,7 @@ module.exports = {
   MAP_FIELDS,
   REQUIRED_MAP,
   RULE_ALIASES,
+  SOURCE_VERSION,
   normHeader,
   suggestMapping,
   detectProvider,

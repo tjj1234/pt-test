@@ -81,6 +81,8 @@ function registerImportRoutes(app, opts = {}) {
         provider: body.provider,
         originalName: body.originalName || body.filename,
         contentBase64: body.contentBase64,
+        originalName2: body.originalName2 || body.filename2,
+        contentBase64_2: body.contentBase64_2 || body.contentBase642,
         idempotencyKey: body.idempotencyKey,
         mapping: body.mapping,
       });
@@ -115,6 +117,13 @@ function registerImportRoutes(app, opts = {}) {
         error: { code, message: err && err.message ? err.message : String(err) },
       });
     }
+  });
+
+  app.get("/api/business/attribution/import/workspace", async (request, reply) => {
+    const ctx = await authContext(request, reply);
+    if (reply.sent) return;
+    const meta = importService.getWorkspaceMeta(ctx);
+    return { ok: true, workspace: meta };
   });
 
   return { importService };

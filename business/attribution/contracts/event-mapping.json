@@ -1,0 +1,29 @@
+{
+  "$id": "attribution.event-mapping.v1",
+  "title": "WorkspaceEventMapping",
+  "description": "工作区级事件映射配置（A17）。将上游原始 event_name 映射到 6 个归因白名单事件，或标记为 ignore。不修改 Collect validate.js。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceId", "mappings", "updatedAt"],
+  "properties": {
+    "workspaceId": { "type": "string", "minLength": 1 },
+    "mappings": {
+      "type": "object",
+      "description": "key=原始事件名（大小写敏感，存库原样）；value=白名单事件名或 ignore",
+      "additionalProperties": {
+        "type": "string",
+        "enum": [
+          "visit",
+          "signup",
+          "key_created",
+          "model_call",
+          "recharge",
+          "auto_recharge_toggle",
+          "ignore"
+        ]
+      }
+    },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "updatedBy": { "type": ["string", "null"] }
+  }
+}

@@ -1,7 +1,7 @@
 {
-  "$id": "attribution.import-job.v1",
+  "$id": "attribution.import-job.v1.1",
   "title": "AdImportJob",
-  "description": "广告导出文件导入任务状态机（A1）。不做官方 Ads API。",
+  "description": "广告导出文件导入任务状态机。状态：pending→validating→ready→importing→completed|partial_failed|failed|cancelled。导入完成后用「新导入的广告数据 + 已有 Collect 事件」重新计算归因结果，不是重新拉取广告平台数据。不做官方 Ads API。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -33,6 +33,11 @@
     },
     "sourceFileId": { "type": "string", "minLength": 1 },
     "originalName": { "type": "string" },
+    "sourceFileId2": {
+      "type": ["string", "null"],
+      "description": "可选第二文件（国家拆分 / Location）；与主文件按 (Ad|Campaign ID)+日期 join"
+    },
+    "originalName2": { "type": ["string", "null"] },
     "idempotencyKey": { "type": ["string", "null"] },
     "headers": { "type": ["array", "null"], "items": { "type": "string" } },
     "sampleRows": { "type": ["array", "null"] },
@@ -41,6 +46,7 @@
     "rowCount": { "type": ["integer", "null"] },
     "successRows": { "type": ["integer", "null"] },
     "failedRows": { "type": ["integer", "null"] },
+    "persistedRows": { "type": ["integer", "null"] },
     "errorMessage": { "type": ["string", "null"] },
     "errorDetails": {
       "type": ["array", "null"],
@@ -64,6 +70,26 @@
     "currencySeen": {
       "type": "array",
       "items": { "type": "string" }
+    },
+    "join": {
+      "type": ["object", "null"],
+      "description": "多 sheet / 双文件 join 摘要"
+    },
+    "postImportAction": {
+      "type": ["object", "null"],
+      "description": "导入完成后的归因重算说明（非拉平台）",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["recompute_attribution_with_collect"]
+        },
+        "description": { "type": "string" }
+      }
+    },
+    "firstConnectedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "完成时回显工作区 firstConnectedAt（权威值在 workspace-meta）"
     },
     "createdBy": { "type": ["string", "null"] },
     "createdAt": { "type": "string", "format": "date-time" },
