@@ -172,3 +172,71 @@ node shell/runtime/dsh-live-smoke-test.mjs
 
 > 注意：DSH 入口 `bin.js` 默认指向本机 workbuddy 安装路径，可用环境变量 `DSH_LIVE_ENTRY` 覆盖；
 > 模型可用 `DSH_LIVE_MODEL` 覆盖（默认 `deepseek-v4-pro`）。
+
+---
+
+## 9. 侧边栏插件环境复现（B8 · dsh-better-sidebar）
+
+> 本节由 B8 任务包追加。B8 核实结论：**DSH 核心未升级**（仍 `0.1.1-rc.2`），插件
+> `dsh-better-sidebar` 以**兼容版 0.17.1**（非 `@latest`）安装在全局 `web` profile。
+> 配置快照见 [`docs/dsh-profile-snapshot/`](./dsh-profile-snapshot/)（**非权威源，可能漂移**，
+> 权威源是本机 `~/.dsh/profiles/web/`）。
+
+### 9.1 为什么是 0.17.1 而不是 @latest
+
+| 插件版本 | peerDep `@deepseek-ai/dsh-agent` | 与 DSH `0.1.1-rc.2` |
+|---|---|---|
+| `0.17.1`（已装） | `^0.1.0-rc.8` | ✅ 兼容（0.1.1-rc.2 落在区间内） |
+| `@latest` = `0.21.1` | `^0.1.7-rc.1` | ❌ 不兼容（0.1.1 < 0.1.7） |
+
+强装 `@latest` 会因 peerDep 不满足破坏 profile；升级 DSH 核心到 0.1.7+ 超出 B8 范围。
+故 B8 保留 0.17.1。此偏离已在任务报告中标注，供 PM 复核。
+
+### 9.2 在新机器上复现该配置
+
+前置：Node >= 20、corepack/pnpm 可用、DSH 核心 `@deepseek-ai/dsh@0.1.1-rc.2`
+（仓库 `shell/package.json` 已锁定；全局入口默认 `~/.workbuddy/.../@deepseek-ai/dsh/lib/bin.js`）。
+
+```powershell
+# 1) 官方 CLI 安装兼容版插件到 web profile（注意：钉死 0.17.1，不要用 @latest）
+dsh plugin --profile web add dsh-better-sidebar@0.17.1
+
+# 2) 若提示构建脚本需审批（node-pty 原生构建），批准全部
+pnpm approve-builds --all
+```
+
+安装后 `~/.dsh/profiles/web/package.json` 应出现：
+- `dependencies."dsh-better-sidebar": "0.17.1"`
+- `dsh.profile.bundles` 末尾追加 `"dsh-better-sidebar"`
+
+### 9.3 bundles 顺序要求（重要）
+
+`dsh-better-sidebar` 靠 `dsh.profile.bundles` 触发**插件自带的** `cordis.patch.yml` 自动挂载
+（**不要**在 profile 自己的 `cordis.patch.yml` 里手写 insert，否则会双重挂载、启动报
+`duplicate prefix route`）。
+
+插件 patch 里有一个**双重挂载守卫**（`disabled: !!js "...ctx.loader.entries()..."`），它只能看到
+**排在它之前**的 bundle 行。因此若 profile 里存在聚合 bundle（如 `@linxin666/dsh-web-ui-all`，
+它可能已自带 better-sidebar），**必须让聚合 bundle 排在 `dsh-better-sidebar` 之前**，守卫才能
+正确退避、由聚合实例拥有侧边栏。`dsh plugin add` 默认把新 bundle 追加到末尾，符合此顺序。
+当前 profile 顺序（见快照 `package.json`）：
+
+```
+@deepseek-ai/dsh-base
+@deepseek-ai/dsh-web-app
+@anweat/dsh-browser
+dsh-web-search-pro
+dsh-better-sidebar   ← 末尾
+```
+
+### 9.4 复现后验证
+
+```powershell
+# 契约 26 项 + 冒烟 11 项（需真实 PT key，环境变量注入，不落盘）
+$env:DSH_LIVE_PT_KEY = "<真实 PT key>"
+node shell/runtime/dsh-live-contract-test.mjs   # 期望 26 通过 / 0 失败
+node shell/runtime/dsh-live-smoke-test.mjs      # 期望 11 通过 / 0 失败
+```
+
+插件本身（html/pdf/md 预览能力、清单、挂载）的命令行核验项见 B8 任务报告（19 项）。
+GUI 预览截图需在有图形界面的环境手动打开侧边栏验证（无头环境无法截图）。
