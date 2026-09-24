@@ -4,6 +4,8 @@
 |---|---|---|
 | `contracts/` | Contract 形状样例 JSON | A0 |
 | `providers/` | `google-ads.csv` / `meta-ads.csv` / `x-ads.csv` | A1 |
+| `google/` | 真实 Google 导出 + 双文件 join 派生件 | A15 |
+| `x/` | 真实 X 导出（results + Location） | A15 |
 | `events/` | Collect 合法/非法事件 | A2 |
 | `golden/` | Workflow 期望输出 | A3–A5 |
 | `panels/` | Panel 渲染快照输入（仅 Workflow 输出） | A4 |

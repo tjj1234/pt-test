@@ -11,6 +11,7 @@ const { createPanelProjector } = require("./panel/projector");
 const { createMockRegistry } = require("./registry/mock");
 const { productionSeedPolicy } = require("./policy/seed");
 const importApi = require("./import");
+const ingestionAdapter = require("./ingestion-adapter");
 
 module.exports = {
   ...contracts,
@@ -23,8 +24,9 @@ module.exports = {
   createMockRegistry,
   productionSeedPolicy,
   import: importApi,
+  ingestionAdapter,
   packageName: "business/attribution",
-  slice: "A9",
+  slice: "A17",
   a8Approved: false,
   baseline: "origin/main@96b7b28",
 };

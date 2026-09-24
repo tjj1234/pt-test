@@ -1,7 +1,7 @@
 {
-  "$id": "attribution.canonical-ad.v1",
+  "$id": "attribution.canonical-ad.v1.1",
   "title": "CanonicalAdRecord",
-  "description": "Google / Meta / X 导出文件经 Provider Parser 归一后的广告日指标行。A1 必须产出本结构再写入。",
+  "description": "Google / Meta / X 导出文件经 Provider Parser 归一后的广告日指标行。v1.1 相对 v1 向后兼容：仅新增可选字段 country，不改动任何必填字段。A1+ 须产出本结构再写入。",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -31,6 +31,10 @@
     "creativeId": { "type": "string", "minLength": 1 },
     "creativeName": { "type": ["string", "null"] },
     "campaignName": { "type": ["string", "null"] },
+    "country": {
+      "type": ["string", "null"],
+      "description": "v1.1 新增（可选、向后兼容）。国家/地区，来自导出列或 Location sheet join。"
+    },
     "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
     "currency": { "type": "string", "minLength": 3, "maxLength": 3 },
     "spend": { "type": "number", "minimum": 0 },
@@ -47,6 +51,10 @@
     "sourceFileId": { "type": "string", "minLength": 1 },
     "sourceRowNumber": { "type": "integer", "minimum": 1 },
     "sourceProvider": { "type": "string", "enum": ["google", "meta", "x"] },
-    "sourceVersion": { "type": "string", "minLength": 1 }
+    "sourceVersion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "契约版本标记。含 country 的解析器应写 a1.1（或更高）；旧 a1.0 记录仍合法（country 缺省为 null）。"
+    }
   }
 }

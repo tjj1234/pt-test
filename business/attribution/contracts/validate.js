@@ -30,6 +30,8 @@ const CONTRACTS = Object.freeze({
   canonicalEvent: loadJson("canonical-event.json"),
   attributionResult: loadJson("attribution-result.json"),
   importJob: loadJson("import-job.json"),
+  workspaceMeta: loadJson("workspace-meta.json"),
+  eventMapping: loadJson("event-mapping.json"),
   healthReport: loadJson("health-report.json"),
   panelRegistration: loadJson("panel-registration.json"),
   toolRegistration: loadJson("tool-registration.json"),
