@@ -25,16 +25,16 @@ function fmtShort(ts) {
 
 /* ---- 视图切换 ---- */
 const TITLES = { chat: "对话", dash: "归因看板", skills: "技能", status: "运行状态", memory: "长期记忆" };
-document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => {
-  const v = b.dataset.v;
-  document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("on", x === b));
+function switchView(v) {
+  document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("on", x.dataset.v === v));
   document.querySelectorAll(".view").forEach(x => x.classList.toggle("on", x.id === "v-" + v));
   $("#title").textContent = TITLES[v];
   if (v === "dash" && !dashLoaded) { $("#dashFrame").src = "/dashboard/"; dashLoaded = true; }
   if (v === "skills") loadSkills();
   if (v === "status") loadStatus();
   if (v === "memory") loadMemory();
-}));
+}
+document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => switchView(b.dataset.v)));
 
 /* ---- 气泡 ---- */
 function bubbleSys(text) {
@@ -88,8 +88,10 @@ async function copyText(text, btn) {
       document.body.removeChild(t2);
     } catch (e2) { ok = false; }
   }
-  btn.textContent = ok ? "已复制" : "复制失败";
-  setTimeout(() => { btn.textContent = "复制"; }, 1500);
+  btn.innerHTML = ok ? window.ICONS.check : window.ICONS.close;
+  btn.title = ok ? "已复制" : "复制失败";
+  btn.classList.add("icon-only");
+  setTimeout(() => { btn.innerHTML = window.ICONS.clipboard; btn.title = "复制"; btn.classList.remove("icon-only"); }, 1500);
 }
 
 /* ---- 渲染一条消息（带时间戳 + 复制；可选「重新生成」） ---- */
@@ -134,24 +136,27 @@ function renderMessage(m, opts) {
     meta.appendChild(ts);
   }
   if (m.text) {
-    const copy = document.createElement("button"); copy.className = "msgbtn"; copy.textContent = "复制";
+    const copy = document.createElement("button"); copy.className = "msgbtn"; copy.title = "复制";
+    copy.innerHTML = '<span class="ico" data-ico="clipboard"></span>';
     copy.addEventListener("click", () => copyText(m.text, copy));
     meta.appendChild(copy);
   }
   if (opts && opts.branchable && m.role === "assistant") {
-    const br = document.createElement("button"); br.className = "msgbtn"; br.textContent = "分岔";
-    br.title = "以这条回复之前的上下文重新生成";
+    const br = document.createElement("button"); br.className = "msgbtn"; br.title = "分岔（以这条回复之前的上下文重新生成）";
+    br.innerHTML = '<span class="ico" data-ico="fork"></span>';
     br.addEventListener("click", () => branch(opts.index));
     meta.appendChild(br);
   }
   if (opts && opts.regeneratable) {
-    const regen = document.createElement("button"); regen.className = "msgbtn"; regen.textContent = "重新生成";
+    const regen = document.createElement("button"); regen.className = "msgbtn"; regen.title = "重新生成";
+    regen.innerHTML = '<span class="ico" data-ico="refresh"></span>';
     regen.addEventListener("click", () => regenerate());
     meta.appendChild(regen);
   }
   box.appendChild(meta);
   el.appendChild(av); el.appendChild(box);
   chat.appendChild(el);
+  if (window.initIcons) window.initIcons();  // ← 把新加的 data-ico 占位符替换成 SVG
   chat.scrollTop = chat.scrollHeight;
   return el;
 }
@@ -176,7 +181,8 @@ function showStoppedBar() {
   const bar = document.createElement("div");
   bar.className = "stopped-bar";
   const label = document.createElement("span"); label.textContent = "已停止（你的问题已保存，回答已丢弃）";
-  const btn = document.createElement("button"); btn.className = "msgbtn"; btn.textContent = "重新生成";
+  const btn = document.createElement("button"); btn.className = "msgbtn"; btn.title = "重新生成";
+  btn.innerHTML = '<span class="ico" data-ico="refresh"></span>';
   btn.addEventListener("click", () => regenerate());
   bar.appendChild(label); bar.appendChild(btn);
   chat.appendChild(bar);
@@ -214,19 +220,37 @@ function renderList() {
     return item;
   };
 
-  const section = (label, items) => {
-    const h = document.createElement("div"); h.className = "conv-sec"; h.textContent = label;
-    convListEl.appendChild(h);
+  const chevSvg = (window.ICONS && window.ICONS.chevron) ? window.ICONS.chevron : "";
+
+  const section = (label, items, key) => {
+    const collapsed = localStorage.getItem("pt_conv_collapse_" + key) === "1";
+
+    const det = document.createElement("details");
+    det.className = "conv-group";
+    det.open = !collapsed;
+
+    const sec = document.createElement("summary");
+    sec.className = "conv-sec";
+    sec.innerHTML = '<span class="sec-arrow">' + chevSvg + '</span>' + label;
+    sec.addEventListener("click", () => {
+      // details 会 toggle open，之后持久化
+      setTimeout(() => {
+        localStorage.setItem("pt_conv_collapse_" + key, det.open ? "0" : "1");
+      }, 0);
+    });
+    det.appendChild(sec);
+
     if (!items.length) {
       const e = document.createElement("div"); e.className = "conv-empty"; e.textContent = "（空）";
-      convListEl.appendChild(e);
-      return;
+      det.appendChild(e);
+    } else {
+      for (const c of items) det.appendChild(mkItem(c));
     }
-    for (const c of items) convListEl.appendChild(mkItem(c));
+    convListEl.appendChild(det);
   };
 
-  section("进行中", active);
-  section("已归档", archived);
+  section("进行中", active, "active");
+  section("已归档", archived, "archived");
 }
 
 function openMenu(c, anchor) {
@@ -263,6 +287,7 @@ async function refreshList() {
 
 async function openConversation(id) {
   state.activeId = id;
+  switchView("chat");  // ← 切回对话视图
   renderList();
   try {
     const r = await fetch("/api/conversations/" + encodeURIComponent(id), { credentials: "same-origin" });
@@ -319,6 +344,7 @@ async function deleteConversation(c) {
 function setBusy(b) {
   state.busy = b;
   send.disabled = b;
+  send.hidden = b;
   ta.disabled = b;
   stopBtn.hidden = !b;
   if (!b) ta.focus();
@@ -456,6 +482,32 @@ ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.
 ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 170) + "px"; });
 document.querySelectorAll(".quick button").forEach(b => b.addEventListener("click", () => ask(b.textContent)));
 
+/* ---- 用户菜单（底部头像点击弹出） ---- */
+const userEntry = $("#userEntry"), userMenu = $("#userMenu");
+function closeUserMenu() {
+  userEntry.classList.remove("open");
+  userMenu.hidden = true;
+}
+function openUserMenu() {
+  userEntry.classList.add("open");
+  userMenu.hidden = false;
+}
+if (userEntry && userMenu) {
+  userEntry.addEventListener("click", e => {
+    e.stopPropagation();
+    if (userMenu.hidden) openUserMenu(); else closeUserMenu();
+  });
+  document.addEventListener("click", e => {
+    if (!userMenu.hidden && !userMenu.contains(e.target) && !userEntry.contains(e.target)) {
+      closeUserMenu();
+    }
+  });
+  // 点菜单项（非链接）后自动关闭
+  userMenu.querySelectorAll(".um-item[data-goto]").forEach(it => {
+    it.addEventListener("click", () => closeUserMenu());
+  });
+}
+
 /* ---- 技能 ---- *//* ---- ⑨ 图片上传（含 NEW-1 Ctrl+V 粘贴） ---- */
 const imgInput = $("#imgInput"), imgBtn = $("#imgBtn"), imgPreview = $("#imgPreview"), imgThumb = $("#imgThumb"), imgClear = $("#imgClear");
 let pendingImage = null;
@@ -562,9 +614,67 @@ async function loadModels() {
       if (m.id === j.current) o.selected = true;
       modelSelect.appendChild(o);
     }
+    syncModelCapsule();
   } catch (e) { /* 静默 */ }
 }
+function syncModelCapsule() {
+  const sel = $("#msBtnName");
+  if (!sel || !modelSelect) return;
+  const opt = modelSelect.options[modelSelect.selectedIndex];
+  sel.textContent = opt ? opt.textContent : "—";
+}
+function buildModelMenu() {
+  const menu = $("#modelMenu"); if (!menu || !modelSelect) return;
+  menu.innerHTML = "";
+
+  // 搜索框
+  const search = document.createElement("div"); search.className = "model-search";
+  const si = document.createElement("input"); si.type = "text"; si.placeholder = "搜索模型名、ID…"; si.autocomplete = "off";
+  const clearBtn = document.createElement("button"); clearBtn.type = "button"; clearBtn.className = "ms-clear"; clearBtn.textContent = "×"; clearBtn.hidden = true;
+  search.appendChild(si); search.appendChild(clearBtn);
+  menu.appendChild(search);
+
+  // 列表容器（独立滚动，搜索框固定在 menu 顶部）
+  const list = document.createElement("div"); list.className = "model-list";
+  menu.appendChild(list);
+
+  const allOptions = Array.from(modelSelect.options);
+  const renderList = (keyword) => {
+    list.innerHTML = "";
+    const kw = (keyword || "").trim().toLowerCase();
+    const filtered = kw ? allOptions.filter(o => (o.textContent || "").toLowerCase().includes(kw) || (o.value || "").toLowerCase().includes(kw)) : allOptions;
+    if (!filtered.length) {
+      const e = document.createElement("div"); e.className = "model-menu-empty"; e.textContent = "无匹配模型"; list.appendChild(e); return;
+    }
+    for (const o of filtered) {
+      const item = document.createElement("div");
+      item.className = "model-menu-item" + (o.selected ? " active" : "");
+      item.innerHTML = '<span class="mi-check">' + (o.selected ? "✓" : "") + '</span><span class="mi-label">' + o.textContent + '</span>';
+      item.addEventListener("click", () => {
+        modelSelect.value = o.value;
+        modelSelect.dispatchEvent(new Event("change"));
+        closeModelMenu();
+      });
+      list.appendChild(item);
+    }
+  };
+  renderList("");
+
+  si.addEventListener("input", () => { clearBtn.hidden = !si.value; renderList(si.value); });
+  clearBtn.addEventListener("click", () => { si.value = ""; clearBtn.hidden = true; renderList(""); si.focus(); });
+
+  // 聚焦搜索框
+  setTimeout(() => si.focus(), 0);
+}
+function openModelMenu() { buildModelMenu(); $("#modelMenu").hidden = false; $("#msBtn").classList.add("open"); }
+function closeModelMenu() { $("#modelMenu").hidden = true; $("#msBtn").classList.remove("open"); }
+const msBtn = $("#msBtn");
+if (msBtn) {
+  msBtn.addEventListener("click", (e) => { e.stopPropagation(); const m = $("#modelMenu"); if (m.hidden) openModelMenu(); else closeModelMenu(); });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".model-switcher")) closeModelMenu(); });
+}
 if (modelSelect) modelSelect.addEventListener("change", async () => {
+  syncModelCapsule();
   const model = modelSelect.value;
   if (!model) return;
   try {
