@@ -81,6 +81,9 @@ window.ICONS.brain = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
 
 window.ICONS.key = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="12" r="3.5"/><path d="M11 12h9"/><path d="M17 12v3"/></svg>';
 
+/* 首页（U0 落地页导航入口） */
+window.ICONS.home = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5v-5h4v5"/></svg>';
+
 
 /* 启动 */
 window.initIcons = function(){ document.querySelectorAll('[data-ico]').forEach(function(el){ var n=el.getAttribute('data-ico'); var s=window.ICONS[n]; if(s) el.innerHTML=s; }); };

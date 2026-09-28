@@ -4,7 +4,7 @@
 <title>北极星 · PowerTokens 归因与增长 Agent</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-  /* P0-2：主界面「我的 Key」入口 + 未绑 key 提示条 */
+  /* P0-2：主界面「我的 Key」入口 + 未绑 key 提示条（沿用 styles.css 变量，不新造配色） */
   .nav .keynav{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;margin:1px 0;
     border-radius:8px;color:#5f5f5f;font-size:14px;text-decoration:none;font-family:inherit;
     border:1px solid transparent;transition:background .15s,color .15s,border-color .15s}
@@ -27,7 +27,7 @@
 <body>
 <div class="shell">
   <aside class="side">
-    <div class="brand">
+    <div class="brand" id="brandHome" role="button" tabindex="0" title="返回首页">
       <div class="logo">P</div>
       <div><h1>社媒增长 Agent</h1><p>北极星 · 归因与增长</p></div>
     </div>
@@ -35,21 +35,42 @@
     <button class="side-newconv" id="newConv">＋ 新建对话</button>
 
     <nav class="nav">
-      <button data-v="dash"><span class="ico" data-ico="chartBar"></span>归因看板</button>
-      <button data-v="skills"><span class="ico" data-ico="flow"></span>技能</button>
-      <button data-v="status"><span class="ico" data-ico="shield"></span>运行状态</button>
-      <button data-v="memory"><span class="ico" data-ico="brain"></span>记忆</button>
+      <!-- 首页 -->
+      <button data-v="home"><span class="ico" data-ico="home"></span>首页</button>
+
+      <!-- ① 工作区 -->
+      <div class="nav-group">
+        <div class="nav-group-title">工作区</div>
+        <button data-v="flows"><span class="ico" data-ico="layers"></span>业务流库</button>
+        <button data-v="schedule"><span class="ico" data-ico="schedule"></span>调度与执行</button>
+      </div>
+
+      <!-- ② 数据面板 -->
+      <div class="nav-group">
+        <div class="nav-group-title">数据面板</div>
+        <button data-v="dash"><span class="ico" data-ico="chartBar"></span>PowerTokens 归因面板</button>
+      </div>
+
+      <!-- ③ 对话历史 -->
+      <div class="nav-group">
+        <div class="nav-group-title">对话历史</div>
+        <button data-v="history"><span class="ico" data-ico="chat"></span>对话历史</button>
+      </div>
+
+      <!-- ④ 能力（保留 dc8abfd 既有能力视图） -->
+      <div class="nav-group">
+        <div class="nav-group-title">能力</div>
+        <button data-v="skills"><span class="ico" data-ico="sparkle"></span>技能</button>
+        <button data-v="status"><span class="ico" data-ico="shield"></span>运行状态</button>
+        <button data-v="memory"><span class="ico" data-ico="brain"></span>记忆</button>
+      </div>
+
       <a class="keynav" id="keyNav" href="/settings">
         <span class="ico" data-ico="key"></span><span>我的 Key</span>
         <span class="keydot" id="keyDot" hidden></span>
         <span class="keylast" id="keyLast4" hidden></span>
       </a>
     </nav>
-
-    <!-- 对话列表（整区滚动，分组标题 sticky 吸顶） -->
-    <div class="side-conv">
-      <div class="side-conv-scroll" id="convList"></div>
-    </div>
 
     <div class="side-foot">
       <div class="user-entry" id="userEntry">
@@ -67,9 +88,9 @@
       <span class="ico" data-ico="key"></span><span><b>你还未绑定 PT key</b>，绑定后才能对话 —— 点击前往设置</span>
     </a>
     <header class="top">
-      <h2 id="title">对话</h2>
+      <h2 id="title">首页</h2>
       <div class="search-wrap">
-        <input id="search" type="search" placeholder="🔍 搜索对话…" autocomplete="off">
+        <input id="search" type="search" placeholder="搜索对话…" autocomplete="off">
         <div id="searchResults" class="search-results" hidden></div>
       </div>
       <div class="sp"></div>
@@ -78,7 +99,78 @@
       <span class="pill" id="pDash">看板 —</span>
     </header>
 
-    <section class="view on" id="v-chat">
+    <!-- ============ 首页（默认落地页） ============ -->
+    <section class="view on" id="v-home">
+      <div class="home">
+        <div class="chips" id="quickChips">
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>埋点质量 AI 分析<span class="soon-badge">即将上线</span></button>
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>博主相关性分析<span class="soon-badge">即将上线</span></button>
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>网站智能打点推荐<span class="soon-badge">即将上线</span></button>
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>Workflow · 查询服务<span class="soon-badge">即将上线</span></button>
+        </div>
+
+        <div class="guide-cards">
+          <div class="gcard">
+            <div class="gcard-ico"><span class="ico" data-ico="layers"></span></div>
+            <h3>启用业务流</h3>
+            <p class="gcard-desc">跑完整闭环：skill + mcp + workflow 协作，启用后自动生成数据面板 Tab，适合 A 类客户。</p>
+            <button class="gbtn primary" data-card="flow" type="button">开始配置</button>
+          </div>
+          <div class="gcard">
+            <div class="gcard-ico"><span class="ico" data-ico="sparkle"></span></div>
+            <h3>试用单点能力</h3>
+            <p class="gcard-desc">单独跑一个 skill / mcp / workflow，做一次检查分析，不建面板，适合 B 类客户。</p>
+            <button class="gbtn" data-card="trial" type="button">试用能力</button>
+          </div>
+          <div class="gcard">
+            <div class="gcard-ico"><span class="ico" data-ico="chat"></span></div>
+            <h3>开始对话</h3>
+            <p class="gcard-desc">直接用 LLM 对话，尚未启用业务流时数据上下文有限，但可自由问答。</p>
+            <button class="gbtn" data-card="chat" type="button">进入对话→</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 工作区：业务流库（暂无内容） ============ -->
+    <section class="view" id="v-flows"><div class="page">
+      <div class="empty-state">
+        <div class="es-ico"><span class="ico" data-ico="layers"></span></div>
+        <h3>业务流库</h3>
+        <p>把 skill + mcp + workflow 编排成可复用的业务流。启用后自动生成「数据面板」Tab。</p>
+        <p class="es-sub">当前还没有业务流 —— 去首页「启用业务流」开始配置（U5 任务包交付）。</p>
+      </div>
+    </div></section>
+
+    <!-- ============ 工作区：调度与执行（暂无内容） ============ -->
+    <section class="view" id="v-schedule"><div class="page">
+      <div class="empty-state">
+        <div class="es-ico"><span class="ico" data-ico="schedule"></span></div>
+        <h3>调度与执行</h3>
+        <p>周期性触发业务流、查看运行记录与执行状态。</p>
+        <p class="es-sub">当前还没有调度任务 —— 等业务流启用后再来这里编排定时执行。</p>
+      </div>
+    </div></section>
+
+    <!-- ============ 数据面板（复用现有 /dashboard/ 反代） ============ -->
+    <section class="view" id="v-dash">
+      <div class="dash-toolbar">
+        <span class="dash-toolbar-title"><span class="ico" data-ico="chartBar"></span> 归因面板 · 只读</span>
+        <div class="sp"></div>
+        <button class="toolbar-btn" id="sharePanelBtn">🔗 分享面板</button>
+        <button class="toolbar-btn" id="mySharesBtn">我的分享</button>
+      </div>
+      <iframe id="dashFrame" src="about:blank"></iframe>
+    </section>
+
+    <!-- ============ 对话历史（可折叠列表，复用 /api/conversations） ============ -->
+    <section class="view" id="v-history"><div class="page">
+      <div class="hist-head"><h3>对话历史</h3><span class="hist-hint">按时间分组，点击进入对话</span></div>
+      <div class="hist-list" id="historyList"><div class="side-conv-scroll" id="convList"></div></div>
+    </div></section>
+
+    <!-- ============ 对话（多对话窗口：左对话列表 + 右聊天区） ============ -->
+    <section class="view" id="v-chat">
       <div class="chat-pane">
         <div class="chat" id="chat">
           <div class="empty" id="hello">
@@ -117,16 +209,19 @@
       </div>
     </section>
 
-    <section class="view" id="v-dash">
-      <div class="dash-toolbar">
-        <span class="dash-toolbar-title"><span class="ico" data-ico="chartBar"></span> 归因面板 · 只读</span>
-        <div class="sp"></div>
-        <button class="toolbar-btn" id="sharePanelBtn">🔗 分享面板</button>
-        <button class="toolbar-btn" id="mySharesBtn">我的分享</button>
-      </div>
-      <iframe id="dashFrame" src="about:blank"></iframe>
-    </section>
+    <!-- ============ 能力：技能 ============ -->
+    <section class="view" id="v-skills"><div class="page">
+      <div class="note">这些是<b>产品工作区</b>里的技能。DSH 的开发技能（社媒那 10 个）<b>不在产品里</b> —— 隔离已经生效。</div>
+      <div class="grid" id="skillGrid"></div>
+    </div></section>
 
+    <!-- ============ 能力：运行状态 ============ -->
+    <section class="view" id="v-status"><div class="page">
+      <div class="kv" id="statusKv"></div>
+      <div class="note">业务壳只把问题交给 DSH，DSH 不开任何对外端口 —— 用户永远碰不到 DSH 本身。</div>
+    </div></section>
+
+    <!-- ============ 能力：记忆 ============ -->
     <section class="view" id="v-memory"><div class="page">
       <div class="mem-wrap">
         <div class="mem-add">
@@ -138,14 +233,24 @@
       </div>
     </div></section>
 
-    <section class="view" id="v-skills"><div class="page">
-      <div class="note">这些是<b>产品工作区</b>里的技能。DSH 的开发技能（社媒那 10 个）<b>不在产品里</b> —— 隔离已经生效。</div>
-      <div class="grid" id="skillGrid"></div>
+    <!-- ============ 成员与权限（建设中） ============ -->
+    <section class="view" id="v-members"><div class="page">
+      <div class="empty-state building">
+        <div class="es-ico"><span class="ico" data-ico="users"></span></div>
+        <h3>成员与权限</h3>
+        <p>基于 RBAC 的团队成员管理与权限分配（管理员 / 分析师 / 访客）。</p>
+        <p class="es-sub es-badge">功能建设中</p>
+      </div>
     </div></section>
 
-    <section class="view" id="v-status"><div class="page">
-      <div class="kv" id="statusKv"></div>
-      <div class="note">业务壳只把问题交给 DSH，DSH 不开任何对外端口 —— 用户永远碰不到 DSH 本身。</div>
+    <!-- ============ 用量与日志（建设中） ============ -->
+    <section class="view" id="v-usage"><div class="page">
+      <div class="empty-state building">
+        <div class="es-ico"><span class="ico" data-ico="log"></span></div>
+        <h3>用量与日志</h3>
+        <p>查看调用量、Token 消耗与操作审计日志。</p>
+        <p class="es-sub es-badge">功能建设中</p>
+      </div>
     </div></section>
   </main>
 </div>
