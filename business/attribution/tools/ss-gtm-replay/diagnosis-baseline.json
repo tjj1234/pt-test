@@ -1,0 +1,107 @@
+{
+  "$id": "attribution.ss-gtm-diagnosis.v1",
+  "title": "SS-GTM 五缺陷诊断基线（§6）",
+  "description": "离线回放对照表。仓库内无独立诊断 markdown 时，以本文件为 §6 权威快照：描述「未修复上游」原始样例打到 Collect 的真实状态，以及经 A17 适配后平台侧可做到的缓解。PT 技术侧修好上游后重跑同一工具，对比 repaired_upstream 列。",
+  "defects": [
+    {
+      "id": "D1_502_gateway",
+      "title": "502 网关 / 上游不可达",
+      "raw_sample": "HTTP 探测打到返回 502 的目标",
+      "unrepaired": {
+        "collect_accept": false,
+        "diagnosis_code": "TARGET_BAD_GATEWAY",
+        "note": "事件无法入库；连接测试应报目标地址 502"
+      },
+      "platform_mitigated_a17": {
+        "collect_accept": false,
+        "diagnosis_code": "TARGET_BAD_GATEWAY",
+        "note": "A17 只能翻译人话诊断，不能修复上游 502；需 PT/运维恢复服务"
+      },
+      "repaired_upstream_expect": {
+        "collect_accept": true,
+        "diagnosis_code": "OK",
+        "note": "上游恢复后连接测试 OK，合法事件可入库"
+      }
+    },
+    {
+      "id": "D2_event_name_case",
+      "title": "event_name 大小写/命名不对（如 Visit）",
+      "raw_sample": "{ event_name: \"Visit\", event_id: UUID, timestamp: ms }",
+      "unrepaired": {
+        "collect_accept": false,
+        "collect_error_field": "event_name",
+        "note": "Collect 白名单大小写敏感，Visit ≠ visit → 400"
+      },
+      "platform_mitigated_a17": {
+        "collect_accept": true,
+        "mapped_to": "visit",
+        "note": "工作区映射 Visit→visit 后可过 Collect；未配映射则仍 unmapped"
+      },
+      "repaired_upstream_expect": {
+        "collect_accept": true,
+        "event_name": "visit",
+        "note": "上游直接发白名单小写名，无需映射"
+      }
+    },
+    {
+      "id": "D3_event_id_non_uuid",
+      "title": "event_id 非 UUID 格式",
+      "raw_sample": "{ event_name: \"visit\", event_id: \"gtm-not-a-uuid\", timestamp: ms }",
+      "unrepaired": {
+        "collect_accept": false,
+        "collect_error_field": "event_id",
+        "note": "Collect 要求 UUID → 400"
+      },
+      "platform_mitigated_a17": {
+        "collect_accept": true,
+        "event_id_source": "adapter_fallback",
+        "note": "A17 生成确定性 UUID 兜底后可入库"
+      },
+      "repaired_upstream_expect": {
+        "collect_accept": true,
+        "event_id_source": "client_native",
+        "note": "上游发合法 UUID，质量标记为客户端原生"
+      }
+    },
+    {
+      "id": "D4_missing_timestamp",
+      "title": "缺 timestamp",
+      "raw_sample": "{ event_name: \"visit\", event_id: UUID }（无 timestamp）",
+      "unrepaired": {
+        "collect_accept": false,
+        "collect_error_field": "timestamp",
+        "note": "Collect 三件套缺 timestamp → 400"
+      },
+      "platform_mitigated_a17": {
+        "collect_accept": true,
+        "timestamp_source": "received_at_fallback",
+        "note": "A17 用接收时间兜底后可入库"
+      },
+      "repaired_upstream_expect": {
+        "collect_accept": true,
+        "timestamp_source": "client",
+        "note": "上游带合法 epoch ms"
+      }
+    },
+    {
+      "id": "D5_missing_event_id",
+      "title": "缺 event_id",
+      "raw_sample": "{ event_name: \"visit\", timestamp: ms }（无 event_id）",
+      "unrepaired": {
+        "collect_accept": false,
+        "collect_error_field": "event_id",
+        "note": "Collect 三件套缺 event_id → 400"
+      },
+      "platform_mitigated_a17": {
+        "collect_accept": true,
+        "event_id_source": "adapter_fallback",
+        "note": "A17 确定性 UUID 兜底后可入库"
+      },
+      "repaired_upstream_expect": {
+        "collect_accept": true,
+        "event_id_source": "client_native",
+        "note": "上游必填合法 UUID"
+      }
+    }
+  ]
+}
