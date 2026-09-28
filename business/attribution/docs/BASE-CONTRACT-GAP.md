@@ -5,9 +5,9 @@
 | ID | 需要的基座能力 | 为何需要 | 当前现状 | 临时策略 |
 |---|---|---|---|---|
 | BG-01 | `getCurrentWorkspace()` / AttributionContext 注入 | Workflow 禁止读客户端 tenant | shell session + X-Tenant-Id 透传存在，但业务线不能信任 header | Adapter Mock：测试夹具写 Context；生产等 A8 |
-| BG-02 | `checkPermission("attribution:read")` | Panel/Tool 权限 | 无统一权限服务 | Mock PermissionChecker 恒 true（仅 test） |
-| BG-03 | `registerPanel()` / Panel Registry | A6 注册 powertokens-attribution | 无 | Mock Registry 写内存表 |
-| BG-04 | `registerTool()` / Tool Registry | A6 注册 attribution.query | glue/contract 仅类型 | Mock Registry |
+| BG-02 | `checkPermission("attribution:read")` | Panel/Tool 权限 | B4 有真实 checkPermission，但 ROLE_PERMISSIONS 无 `attribution:read` | A8：`registry/permissions-grant.js` 在注册时把该权挂到 owner/admin/analyst（不改 shell 文件）；Viewer 不授予。长期应由基座正式收录 attribution:* |
+| BG-03 | `registerPanel()` / Panel Registry | A6 注册 powertokens-attribution | **基座从未实现**（全仓无 registerPanel） | A8 明确不做；继续反代 + mock 面板表。若要做需单独开基座任务包 |
+| BG-04 | `registerTool()` / Tool Registry | A6 注册 attribution.query | B2 已有 `shell/tools/registry.cjs` | **A8 已接**：`registry/tool.js` → 真实 `registerTool` + `validateToolCall` |
 | BG-05 | `storage.repository` / `storage.transaction()` | 禁止第二套 DB | analytics 自有 PGlite；shell 另有身份库 | A1–A7 经 analytics pool 读写业务表，但封装在 Repository 接口后；A8 换基座 storage |
 | BG-06 | `audit.record()` | 导入/Collect 审计 | 部分 Token 审计 | 先写业务表字段；A8 接 audit |
 | BG-07 | 设置页「上传广告 / 数据接入」入口归属 | UI 入口在 shell | Part-1 曾改 shell（未进 main） | **不扩 shell**；本地用 analytics 管理 API + 夹具验收；正式入口等基座 Panel 挂载 |
