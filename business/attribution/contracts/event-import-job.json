@@ -1,0 +1,63 @@
+{
+  "$id": "attribution.event-import-job.v1",
+  "title": "EventImportJob",
+  "description": "行为事件 CSV/XLSX 批量导入任务状态机（A18）。状态与 AdImportJob 对齐：pending→validating→ready→importing→completed|partial_failed|failed|cancelled。导入成功行统一走 A17 适配层做事件名映射与归一化，再经 Collect ingestOne 落库；禁止另开一套事件名白名单校验。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "importId",
+    "workspaceId",
+    "status",
+    "sourceFileId",
+    "originalName",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "importId": { "type": "string", "format": "uuid" },
+    "workspaceId": { "type": "string", "minLength": 1 },
+    "kind": { "type": "string", "const": "event" },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "validating",
+        "ready",
+        "importing",
+        "completed",
+        "partial_failed",
+        "failed",
+        "cancelled"
+      ]
+    },
+    "sourceFileId": { "type": "string", "minLength": 1 },
+    "originalName": { "type": "string" },
+    "idempotencyKey": { "type": ["string", "null"] },
+    "headers": { "type": ["array", "null"], "items": { "type": "string" } },
+    "sampleRows": { "type": ["array", "null"] },
+    "mapping": { "type": ["object", "null"] },
+    "mappingAudit": { "type": ["array", "null"] },
+    "rowCount": { "type": ["integer", "null"] },
+    "successRows": { "type": ["integer", "null"] },
+    "failedRows": { "type": ["integer", "null"] },
+    "persistedRows": { "type": ["integer", "null"] },
+    "ignoredRows": { "type": ["integer", "null"] },
+    "errorMessage": { "type": ["string", "null"] },
+    "errorDetails": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "required": ["sourceRowNumber", "reason"],
+        "properties": {
+          "sourceRowNumber": { "type": "integer", "minimum": 1 },
+          "reason": { "type": "string" },
+          "field": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "createdBy": { "type": ["string", "null"] },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

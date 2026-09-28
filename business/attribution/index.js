@@ -12,6 +12,7 @@ const { createMockRegistry } = require("./registry/mock");
 const { productionSeedPolicy } = require("./policy/seed");
 const importApi = require("./import");
 const ingestionAdapter = require("./ingestion-adapter");
+const attributionApi = require("./api");
 
 module.exports = {
   ...contracts,
@@ -25,8 +26,9 @@ module.exports = {
   productionSeedPolicy,
   import: importApi,
   ingestionAdapter,
+  api: attributionApi,
   packageName: "business/attribution",
-  slice: "A17",
+  slice: "A18",
   a8Approved: false,
   baseline: "origin/main@96b7b28",
 };
