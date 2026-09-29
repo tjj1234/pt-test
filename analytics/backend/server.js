@@ -49,6 +49,8 @@ const route_1 = require("./audit/route");
 const import_1 = require("../../business/attribution/import/routes");
 const event_import_1 = require("../../business/attribution/import/event-routes");
 const ingestion_1 = require("../../business/attribution/ingestion-adapter/routes");
+const ingestion_service_1 = require("../../business/attribution/ingestion-adapter/service");
+const raw_ingest_1 = require("../../business/attribution/ingestion-adapter/raw-ingest-routes");
 const attribution_api_1 = require("../../business/attribution/api/routes");
 // ---- P1 #6：可信租户头注入（默认关；TRUST_TENANT_HEADER=1 且 X-Tenant-Id 为合法 UUID 时生效）----
 // 信任边界：本服务只应由业务壳（同机 127.0.0.1）反代访问；业务壳只透传「其登录会话派生」
@@ -369,7 +371,7 @@ function registerCollectRoutes(scope, deps) {
  */
 function buildUnifiedServer(options) {
     const { resolveEndpoint, enqueue, verifyAnalyticsToken, pool, loadAuditLogs, loadConfigFindings, resolveWorkspaceId = (tenantId) => tenantId, sourcePlatformRules = attribution_1.DEFAULT_SOURCE_PLATFORM_RULES, now = Date.now, maxBodyBytes = 1024 * 1024, // 1MB，对齐 collect/server.ts
-    logger = true, } = options;
+    logger = true, adapter = (0, ingestion_service_1.createIngestionAdapter)({}), } = options;
     const app = (0, fastify_1.default)({ logger, bodyLimit: maxBodyBytes });
     // 1.4 事件查询
     app.register(async (scope) => {
@@ -420,6 +422,17 @@ function buildUnifiedServer(options) {
             verifyAnalyticsToken,
             resolveWorkspaceId,
             parseAuthorization: query_1.parseAuthorization,
+            adapter,
+        });
+    });
+    // B12 SS-GTM 原始事件接入（webhook secret 鉴权 → A17 适配 → collect 三件套 → 入队；不改 collect/）
+    app.register(async (scope) => {
+        (0, raw_ingest_1.registerRawIngestRoutes)(scope, {
+            resolveEndpoint,
+            secretMatches,
+            resolveWorkspaceId,
+            enqueue,
+            adapter,
         });
     });
     // A19 归因结果 REST（包装 workflows/engine；保留旧 /api/analytics/funnel）
