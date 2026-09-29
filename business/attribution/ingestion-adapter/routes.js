@@ -18,11 +18,11 @@ function registerIngestionAdapterRoutes(app, opts = {}) {
     const parsedAuth =
       typeof parseAuthorization === "function"
         ? parseAuthorization(raw)
-        : { ok: typeof raw === "string" && raw.startsWith("Bearer "), token: raw && raw.slice(7) };
-    if (!parsedAuth || !parsedAuth.ok) {
+        : typeof raw === "string" && raw.startsWith("Bearer ") ? raw.slice(7) : null;
+    if (typeof parsedAuth !== "string" || parsedAuth.length === 0) {
       return reply.code(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "missing token" } });
     }
-    const auth = await verifyAnalyticsToken(parsedAuth.token);
+    const auth = await verifyAnalyticsToken(parsedAuth);
     if (!auth) {
       return reply.code(403).send({ ok: false, error: { code: "FORBIDDEN", message: "invalid token" } });
     }
