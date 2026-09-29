@@ -15,7 +15,7 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
-const { sha256Hex } = require("../../analytics/lib/db.cjs");
+const { sha256Hex, createPgCompatPool } = require("../../analytics/lib/db.cjs");
 const { buildUnifiedServer } = require("../../analytics/backend/server");
 const {
   createIngestionAdapter,
@@ -82,13 +82,24 @@ async function run() {
   const enqueue = async (env) => { enqueued.push(env); return true; };
   const resolveWorkspaceId = async (tenantId) => (tenantId === TENANT ? WS : null);
 
+  // A22 起 buildUnifiedServer 会把 pool 一路传给 createImportStore，
+  // 后者强制要求真实 pool（带 .connect），空对象会直接抛错。
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-b12-db-"));
+  const pool = await createPgCompatPool({
+    dataDir,
+    migrationsDir: path.join(__dirname, "../../analytics/backend/db"),
+    deliveryMigrationsDir: path.join(__dirname, "../../analytics/schema"),
+    recoverStalePidFile: true,
+    log: () => {},
+  });
+
   const app = buildUnifiedServer({
     resolveEndpoint,
     enqueue,
     resolveWorkspaceId,
     adapter,
     verifyAnalyticsToken: async () => null,
-    pool: {},
+    pool,
     loadAuditLogs: async () => [],
     loadConfigFindings: async () => [],
     logger: false,
@@ -175,6 +186,7 @@ async function run() {
   assert(res.statusCode === 403, "collect wrong secret 403");
 
   await app.close();
+  await pool.end();
 
   console.log(JSON.stringify({
     ok: true,
