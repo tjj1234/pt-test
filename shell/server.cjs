@@ -593,6 +593,7 @@ async function handle(req, res) {
   }
 
   // ---- /api/analytics 反向代理：登录用户 或 有效分享 cookie（均为只读 token）----
+  // B14：不再使用全局 PT_DASH_TOKEN，而是按租户动态计算 HMAC 分析 token。
   if (p.indexOf("/api/analytics/") === 0) {
     const meAnalytics = await authed(req);
     let shareOk = false;
@@ -600,10 +601,13 @@ async function handle(req, res) {
     if (shareTok) { const sv = await panelShares.check(shareTok); shareOk = !!(sv && sv.valid); }
     if (!meAnalytics && !shareOk) return json(res, 401, { ok: false, error: "没登录" });
     const tenantId = meAnalytics && meAnalytics.tenant ? meAnalytics.tenant.id : null;
-    if (!DASH_TOKEN) return json(res, 503, { ok: false, error: "看板只读 token 未配置（PT_DASH_TOKEN）" });
+    // B14：动态计算 HMAC token（无需缓存）
+    const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
+    if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
+    const analyticsToken = createHmac("sha256", INTERNAL_KEY).update(tenantId).digest("hex");
     const up = http.request({ host: "127.0.0.1", port: DASH_PORT, path: req.url, method: req.method,
       headers: Object.assign(dashProxyHeaders(req, tenantId),
-        { authorization: "Bearer " + DASH_TOKEN }) },
+        { authorization: "Bearer " + analyticsToken }) },
       (r2) => { res.writeHead(r2.statusCode, r2.headers); r2.pipe(res); });
     up.on("error", (e) => { log.error("analytics_proxy_failed", { error: e && e.message ? e.message : String(e) }); json(res, 502, { ok: false, error: "看板服务不可用" }); });
     return req.pipe(up);
@@ -611,16 +615,18 @@ async function handle(req, res) {
 
   // ---- /api/business 反向代理：仅登录用户（业务线接口：归因导入 import / 事件接入适配层 ingestion 等）----
   // B13：此前 shell 完全没有 /api/business/ 反代，U1 前端请求到 shell 这层就 404，根本到不了业务线接口。
-  // 照抄上面 /api/analytics/ 的模式（检查登录 session → 取 tenantId → 注入 Bearer token → 转发到 DASH_PORT），
-  // 但业务线含写操作（导入/适配），不接受匿名分享 cookie，只允许登录用户。
+  // B14：不再使用全局 PT_DASH_TOKEN，而是按租户动态计算 HMAC 分析 token。
   if (p.indexOf("/api/business/") === 0) {
     const meBusiness = await authed(req);
     if (!meBusiness) return json(res, 401, { ok: false, error: "没登录" });
     const tenantId = meBusiness.tenant ? meBusiness.tenant.id : null;
-    if (!DASH_TOKEN) return json(res, 503, { ok: false, error: "业务线 token 未配置（PT_DASH_TOKEN）" });
+    // B14：动态计算 HMAC token（无需缓存）
+    const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
+    if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
+    const analyticsToken = createHmac("sha256", INTERNAL_KEY).update(tenantId).digest("hex");
     const up = http.request({ host: "127.0.0.1", port: DASH_PORT, path: req.url, method: req.method,
       headers: Object.assign(dashProxyHeaders(req, tenantId),
-        { authorization: "Bearer " + DASH_TOKEN }) },
+        { authorization: "Bearer " + analyticsToken }) },
       (r2) => { res.writeHead(r2.statusCode, r2.headers); r2.pipe(res); });
     up.on("error", (e) => { log.error("business_proxy_failed", { error: e && e.message ? e.message : String(e) }); json(res, 502, { ok: false, error: "业务线服务不可用" }); });
     return req.pipe(up);
@@ -917,6 +923,11 @@ async function main() {
   if (defaultAdminTenant.rows.length > 0) {
     const { createWorkspace } = require("./workspace/index.cjs");
     await createWorkspace("ws_" + defaultAdminTenant.rows[0].tenant_id, defaultAdminTenant.rows[0].tenant_id);
+    
+    // B14：为演示租户（默认管理员）调用内部接口，签发 HMAC 分析 token
+    const demoTenantId = defaultAdminTenant.rows[0].tenant_id;
+    const { callAnalyticsInternalTokenEndpoint } = require("./auth.cjs");
+    await callAnalyticsInternalTokenEndpoint(demoTenantId, "演示租户分析 token");
   }
   keys = await keysMod.initKeys({ db: auth.db, masterKeyFile: MASTER_KEY_FILE });
   conversations = await convMod.initConversations(auth.db);
