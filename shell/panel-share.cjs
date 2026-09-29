@@ -37,6 +37,7 @@ async function initPanelShares(db) {
       id: row.id,
       token: row.token,
       url: "/panel/share/" + row.token,
+      owner_user_id: row.owner_user_id,
       created_at: iso(row.created_at),
       expires_at: iso(row.expires_at),
       revoked_at: iso(row.revoked_at),
@@ -47,7 +48,7 @@ async function initPanelShares(db) {
     };
   }
 
-  const COLS = "id, token, created_at, expires_at, revoked_at, last_accessed_at";
+  const COLS = "id, token, owner_user_id, created_at, expires_at, revoked_at, last_accessed_at";
 
   /** 创建分享：token 用 192 位随机 hex；expiresInHours 为空 → 永久（expires_at = NULL）。 */
   async function create(ownerUserId, expiresInHours) {

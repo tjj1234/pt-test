@@ -433,6 +433,44 @@ function buildUnifiedServer(options) {
             sourcePlatformRules,
         });
     });
+
+    // B14：内部接口 —— 为租户签发分析 token（仅限 127.0.0.1 + X-Internal-Key）
+    app.post("/internal/tenant-token", async (request, reply) => {
+        // IP 限制：仅 127.0.0.1
+        const clientIp = request.ip || request.socket?.remoteAddress;
+        if (clientIp !== "127.0.0.1" && clientIp !== "::1") {
+            reply.code(403).send({ ok: false, error: "Forbidden: internal endpoint" });
+            return;
+        }
+        // 密钥验证：X-Internal-Key 必须匹配 PT_DASH_INTERNAL_KEY
+        const internalKeyHeader = request.headers["x-internal-key"];
+        if (internalKeyHeader !== options.internalKey) {
+            reply.code(403).send({ ok: false, error: "Invalid internal key" });
+            return;
+        }
+        // 请求体验证
+        const body = request.body;
+        if (!body || typeof body.tenant_id !== "string" || typeof body.label !== "string") {
+            reply.code(400).send({ ok: false, error: "Bad request: {tenant_id:string, label:string}" });
+            return;
+        }
+        // 生成确定性 token
+        const { generateTenantAnalyticsToken } = require("../lib/deps.cjs");
+        const token = generateTenantAnalyticsToken(options.internalKey, body.tenant_id);
+        // 插入 analytics_tokens 表（只存 hash）
+        const { insertAnalyticsToken } = require("../lib/deps.cjs");
+        await insertAnalyticsToken(pool, body.tenant_id, token, body.label, ["analytics:read"]);
+        // B14：同时建立租户 ↔ 工作区映射（一租户一工作区：ws_<tenantId>），
+        // 否则新租户打 /api/business/* 会 403 NO_WORKSPACE
+        await pool.query(
+            `INSERT INTO tenant_workspaces (tenant_id, workspace_id, label)
+             VALUES ($1::uuid,$2,$3) ON CONFLICT (tenant_id) DO NOTHING`,
+            [body.tenant_id, "ws_" + body.tenant_id, body.label]
+        );
+        // 返回成功（实际 shell 不需要 token 明文，但返回便于调试）
+        reply.send({ ok: true, token });
+    });
+
     return app;
 }
 /** 构建并监听，返回已启动的服务与关闭句柄。 */

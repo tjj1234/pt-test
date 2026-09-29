@@ -361,12 +361,19 @@ async function main() {
     query: pool.query.bind(pool),
   };
 
+  // B14：检查内部密钥（缺失则拒绝启动）
+  if (!process.env.PT_DASH_INTERNAL_KEY) {
+    console.error("\n❌ 启动失败：PT_DASH_INTERNAL_KEY 未配置（请在 .env 中设置）");
+    process.exit(1);
+  }
+
   const app = buildUnifiedServer({
     pool: poolAdapter,
     resolveEndpoint: deps.createEndpointResolver(pool),
     enqueue: wiring.enqueue,
     verifyAnalyticsToken: deps.createTokenVerifier(pool),
     loadAuditLogs: deps.createAuditLogLoader(pool),
+    internalKey: process.env.PT_DASH_INTERNAL_KEY,
     loadConfigFindings: deps.createConfigFindingsLoader(pool),
     resolveWorkspaceId: deps.createWorkspaceResolver(pool),
     now: () => Date.now(),

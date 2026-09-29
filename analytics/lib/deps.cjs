@@ -20,6 +20,7 @@
 "use strict";
 
 const { sha256Hex } = require("./db.cjs");
+const { createHash, createHmac } = require("crypto");
 
 // ---------------------------------------------------------------------------
 // ① verifyAnalyticsToken：只读分析 token 反查
@@ -343,6 +344,16 @@ async function insertWebhookEndpoint(pool, tenantId, webhookId, plaintextSecret,
   );
 }
 
+/**
+ * B14：用内部密钥确定性生成租户分析 token（HMAC-SHA256）
+ * @param {string} internalKey - PT_DASH_INTERNAL_KEY
+ * @param {string} tenantId - 租户 UUID
+ * @returns {string} 明文 token
+ */
+function generateTenantAnalyticsToken(internalKey, tenantId) {
+  return createHmac("sha256", internalKey).update(tenantId).digest("hex");
+}
+
 module.exports = {
   createTokenVerifier,
   createEndpointResolver,
@@ -354,4 +365,5 @@ module.exports = {
   insertConfigFindings,
   insertAnalyticsToken,
   insertWebhookEndpoint,
+  generateTenantAnalyticsToken,
 };
