@@ -14,6 +14,11 @@
 const crypto = require("crypto");
 const path = require("path");
 const dbmod = require("./db.cjs");
+// B14：为新租户签发独立分析 token（存 analytics_tokens 表 + 关联 tenant_analytics_tokens 表）
+const { insertAnalyticsToken } = require("../analytics/lib/deps.cjs");
+
+// B14：内存缓存 tenant_id → 明文 analytics token（重启清空，与 session 生命周期一致）
+const tenantAnalyticsTokenCache = new Map();
 
 const SCRYPT_N = 16384;   // 2^14，产品级起步成本，自测跑得动
 const SCRYPT_R = 8;
@@ -78,6 +83,8 @@ async function initAuth(opts = {}) {
   async function _createUser({ username, email, password, role }) {
     const hash = hashPassword(password);
     let user = null, tenant = null;
+    // B14：为新租户生成专属分析 token（明文只在内存短暂存在，落盘只存 SHA-256 哈希）
+    const analyticsToken = crypto.randomBytes(32).toString("hex");
     await db.transaction(async (tx) => {
       const t = await tx.query("INSERT INTO tenants (name) VALUES ($1) RETURNING id, name", [username]);
       tenant = t.rows[0];
@@ -86,7 +93,16 @@ async function initAuth(opts = {}) {
         [tenant.id, username, email, hash, role]
       );
       user = u.rows[0];
+      // B14：插入分析 token 到 analytics_tokens 表（只存哈希）
+      await insertAnalyticsToken(tx, tenant.id, analyticsToken, `租户 ${username} 的分析 token`, ["analytics:read"]);
+      // B14：关联 tenant_id 和 token_hash 到新表（供反代路由查询）
+      await tx.query(
+        "INSERT INTO tenant_analytics_tokens (tenant_id, token_hash) VALUES ($1,$2)",
+        [tenant.id, crypto.createHash("sha256").update(analyticsToken).digest("hex")]
+      );
     });
+    // B14：存入内存缓存（供 shell/server.cjs 反代路由使用）
+    tenantAnalyticsTokenCache.set(tenant.id, analyticsToken);
     return { user: publicUser(user), tenant: publicTenant(tenant) };
   }
 
@@ -190,7 +206,12 @@ async function initAuth(opts = {}) {
     return { ok: true, created: true };
   }
 
-  const api = { db, close, register, login, getSession, logout, me, ensureDefaultAdmin, ttlMs };
+  /** B14：获取租户的明文分析 token（从内存缓存，无则 null） */
+  function getTenantAnalyticsToken(tenantId) {
+    return tenantAnalyticsTokenCache.get(tenantId) || null;
+  }
+
+  const api = { db, close, register, login, getSession, logout, me, ensureDefaultAdmin, ttlMs, getTenantAnalyticsToken };
 
   if (opts.defaultAdmin && opts.defaultAdmin.username) {
     await api.ensureDefaultAdmin(opts.defaultAdmin.username, opts.defaultAdmin.password);
