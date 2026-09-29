@@ -1,0 +1,8 @@
+event_name,user_id,event_time,visitor_id,utm_source,utm_medium,utm_campaign,utm_content,amount,currency
+page_view,usr_a18,2026-09-10 12:00:00,vis_a18,facebook,cpc,camp_a18,ad_a18,,
+CompleteRegistration,usr_a18,2026-09-10 12:01:00,vis_a18,facebook,cpc,camp_a18,ad_a18,,
+recharge,usr_a18,2026-09-10 12:05:00,vis_a18,facebook,cpc,camp_a18,ad_a18,99,USD
+,usr_a18,2026-09-10 12:06:00,vis_a18,facebook,cpc,camp_a18,ad_a18,,
+weird_custom,usr_a18,2026-09-10 12:07:00,vis_a18,facebook,cpc,camp_a18,ad_a18,,
+key_created,,2026-09-10 12:08:00,vis_a18,facebook,cpc,camp_a18,ad_a18,,
+signup,usr_a18,not-a-time,vis_a18,facebook,cpc,camp_a18,ad_a18,,

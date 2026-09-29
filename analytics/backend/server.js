@@ -47,7 +47,9 @@ const funnel_1 = require("./ads/funnel");
 const attribution_1 = require("./ads/attribution");
 const route_1 = require("./audit/route");
 const import_1 = require("../../business/attribution/import/routes");
+const event_import_1 = require("../../business/attribution/import/event-routes");
 const ingestion_1 = require("../../business/attribution/ingestion-adapter/routes");
+const attribution_api_1 = require("../../business/attribution/api/routes");
 // ---- P1 #6：可信租户头注入（默认关；TRUST_TENANT_HEADER=1 且 X-Tenant-Id 为合法 UUID 时生效）----
 // 信任边界：本服务只应由业务壳（同机 127.0.0.1）反代访问；业务壳只透传「其登录会话派生」
 // 的租户。此处是「可信头 → 租户」的唯一收口，供 A 方案每租户隔离（set_config + RLS 已就绪）。
@@ -403,12 +405,32 @@ function buildUnifiedServer(options) {
             parseAuthorization: query_1.parseAuthorization,
         });
     });
+    // A18 事件 CSV 批量导入（A16 状态机 + A17 适配；不改 collect/）
+    app.register(async (scope) => {
+        (0, event_import_1.registerEventImportRoutes)(scope, {
+            pool,
+            verifyAnalyticsToken,
+            resolveWorkspaceId,
+            parseAuthorization: query_1.parseAuthorization,
+        });
+    });
     // A17 事件接入适配层（映射 / 适配 / 连接测试 / 质量统计；不改 collect/）
     app.register(async (scope) => {
         (0, ingestion_1.registerIngestionAdapterRoutes)(scope, {
             verifyAnalyticsToken,
             resolveWorkspaceId,
             parseAuthorization: query_1.parseAuthorization,
+        });
+    });
+    // A19 归因结果 REST（包装 workflows/engine；保留旧 /api/analytics/funnel）
+    app.register(async (scope) => {
+        (0, attribution_api_1.registerAttributionApiRoutes)(scope, {
+            pool,
+            verifyAnalyticsToken,
+            resolveWorkspaceId,
+            parseAuthorization: query_1.parseAuthorization,
+            now,
+            sourcePlatformRules,
         });
     });
     return app;

@@ -185,11 +185,63 @@ function createEngineWorkflows(engine) {
     };
   }
 
+  /**
+   * A19 · 面板兼容形状（对齐旧 GET /api/analytics/funnel 响应字段），
+   * 便于 U2 平移；数据仍走同一套 queryFunnelScoped。
+   */
+  async function queryFunnelPanel(context, input) {
+    if (!context || !context.tenantId || !context.workspaceId) {
+      throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
+    }
+    const platform = normalizePlatform(input && input.platform);
+    const q = {
+      from: String(input.from),
+      to: String(input.to),
+      granularity: (input && input.granularity) || "day",
+    };
+    if (platform) q.platform = platform;
+    else if (input && input.platform) q.platform = String(input.platform);
+    if (input && input.country) q.country = String(input.country);
+    if (input && input.conversion_window_days != null && input.conversion_window_days !== "") {
+      q.conversion_window_days = String(input.conversion_window_days);
+    }
+    if (input && input.limit != null && input.limit !== "") q.limit = String(input.limit);
+    const parsed = engine.parseFunnelParams(q);
+    if (!parsed.ok) {
+      throw Object.assign(new Error(parsed.message || "funnel 参数非法"), { code: "BAD_RANGE" });
+    }
+    const raw = await engine.queryFunnelScoped(
+      engine.pool,
+      context.tenantId,
+      context.workspaceId,
+      parsed.params,
+      engine.sourcePlatformRules ? { sourcePlatformRules: engine.sourcePlatformRules } : undefined
+    );
+    const granularity = parsed.params.granularity;
+    return {
+      from: raw.from,
+      to: raw.to,
+      granularity,
+      platform: parsed.params.platform,
+      country: parsed.params.country,
+      groups: (raw.groups || []).map((g) => engine.serializeFunnelGroup(g, granularity)),
+      roi_by_entity: (raw.roi || []).map((r) => engine.serializeRoiEntity(r, granularity)),
+      data_freshness: {
+        ...(raw.freshness || {}),
+        generated_at: new Date().toISOString(),
+      },
+      workspaceId: context.workspaceId,
+      _engine: "analytics.funnel",
+      _via: "attribution.workflows",
+    };
+  }
+
   return {
     queryAttributionFunnel,
     queryCreativeRoi,
     queryEvents,
     queryAttributionHealth,
+    queryFunnelPanel,
     _engine: true,
   };
 }
@@ -202,6 +254,7 @@ function createAnalyticsWorkflows(pool, extras = {}) {
   return createEngineWorkflows({
     pool,
     persistence: extras.persistence,
+    sourcePlatformRules: extras.sourcePlatformRules,
     parseFunnelParams: funnel.parseFunnelParams,
     queryFunnelScoped: extras.queryFunnelScoped || funnel.queryFunnelScoped,
     serializeFunnelGroup: funnel.serializeFunnelGroup,

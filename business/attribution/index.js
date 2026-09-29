@@ -12,6 +12,7 @@ const registry = require("./registry");
 const { productionSeedPolicy } = require("./policy/seed");
 const importApi = require("./import");
 const ingestionAdapter = require("./ingestion-adapter");
+const attributionApi = require("./api");
 
 module.exports = {
   ...contracts,
@@ -28,9 +29,10 @@ module.exports = {
   productionSeedPolicy,
   import: importApi,
   ingestionAdapter,
+  api: attributionApi,
   registry,
   packageName: "business/attribution",
-  slice: "A8",
+  slice: "A18-A19",
   a8Approved: true,
   baseline: "origin/main@96b7b28",
 };
