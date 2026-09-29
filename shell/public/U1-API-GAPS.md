@@ -1,9 +1,10 @@
 # U1 · 广告数据导入页 —— API 缺口清单
 
 > 交付：U1 导入页前端（`shell/public/` 下 index.html / app.js / styles.css / icons.js）
-> 日期：2026-09-28
-> 范围边界：本次**只碰 `shell/public/`**，未改任何后端文件。以下缺口全部需要后端/业务线 agent 处理。
-> 所有结论均为**实测**（真起服务打接口 / 真跑 service.js），不是读代码推测。
+> 日期：2026-09-28（2026-09-29 复核更新）
+> 范围边界：本次**只碰 `shell/public/`**，未改任何后端文件。
+>
+> **2026-09-29 复核（基于 main `e8c2491` 实测，非读代码推测）**：原 6 条缺口里 **#1/#2/#3/#4 已由 B13 / A9 工作闭环**（详见各条与第六章清单），无需转发业务线。仅 **#5（路由层 `expires_at` 拦截，minor）** 与 **#6（导入任务落库，产品化）** 仍待处理。其中 #2 即用户所述"A21/21d7bb3 已修"——经核对，main 上的等价修复来自 A9 的 `9d64ed9`，`21d7bb3`（"handle token strings…"）是**未合入 main 的并行冗余修复**（`grep origin/main` 计数为 0），不影响结论。所有结论均为**实测**（真起服务打接口 / 真跑 service.js），不是读代码推测。
 
 ---
 
@@ -30,9 +31,13 @@
 
 ## 二、缺口清单（按阻塞程度排序）
 
-### 🔴 #1 shell 没有 `/api/business/` 反代 —— U1 前端现在打不通
+> **2026-09-29 复核**：原 6 条中 **#1/#2/#3/#4 已闭环**（详见各条 ✅），仅 **#5/#6** 待处理。
 
-**实测证据**：`grep -n "business" shell/server.cjs` → **零命中**。
+### ✅ #1 shell 没有 `/api/business/` 反代 —— **已在 main 上修复（B13）**（原 🔴）
+
+> ✅ **修复确认（2026-09-29 复核，main `e8c2491`）**：`shell/server.cjs:612-616` 已新增 `/api/business/` 反向代理（仅登录用户，不给分享 cookie 开口子），注释明写 "B13：此前 shell 完全没有 /api/business/ 反代，U1 前端请求到 shell 这层就 404"。#1 闭合。下方为原始证据留存。
+
+**原始证据**：`grep -n "business" shell/server.cjs` → 零命中（旧快照）。
 shell 的反代只匹配 `/api/analytics/` 前缀（`server.cjs:596`），而 import 路由注册在**无前缀** scope（`analytics/backend/server.js:398-405`），真实路径是 `/api/business/attribution/import/jobs`。
 
 **后果**：前端请求 `/api/business/...` 会落到 shell 的静态文件/404 分支，永远到不了 analytics 服务。
@@ -55,15 +60,15 @@ if (p.indexOf("/api/business/") === 0) {
 }
 ```
 
-⚠️ 注意：`/api/analytics` 反代允许「分享 cookie 匿名只读」回退（`server.cjs:598-600`）。**import 是写操作，不应该给分享会话开放**，所以上面只认 `authed(req)`，不认 `pt_share`。
+⚠️ 注意：`/api/analytics` 反代允许「分享 cookie 匿名只读」回退（`server.cjs:598-600`）。**import 是写操作，不应该给分享会话开放**，所以上面只认 `authed(req)`，不认 `pt_share`。（B13 实现已遵循此原则。）
 
 ---
 
-### 🔴 #2 `parseAuthorization` 返回类型误用 —— import API 对**任何** token 都返回 401
+### ✅ #2 `parseAuthorization` 返回类型误用 —— **已在 main 上修复**（原 🔴，用户所述 A21/21d7bb3）
 
-**这是最严重的 bug：即使补上 #1 的反代，import API 依然完全不可用。**
+> ✅ **复核确认（2026-09-29，main `e8c2491`）**：当前 `business/attribution/import/routes.js:24-30` 与 `ingestion-adapter/routes.js:18-24` 已按**字符串**处理 `parseAuthorization` 返回值（`typeof parsedAuth !== "string"` 才 401），不再读 `.ok`/`.token`。等价修复来自 A9 导入入口 `9d64ed9`；`21d7bb3`（"handle token strings…"）是**未合入 main 的并行冗余修复**（`grep origin/main` 计数为 0），不影响。结论：**不需转发业务线 agent**。下方为原始证据留存。
 
-**实测证据**（单元级，直接调真实模块）：
+**原始证据（单元级，直接调真实模块）**：
 
 ```
 parseAuthorization('Bearer pt_ro_real_token_123')
@@ -75,7 +80,7 @@ routes.js 的判定：parsedAuth.ok = undefined → !parsedAuth.ok = true
   → parsedAuth.token = undefined → verifyAnalyticsToken 收到 undefined
 ```
 
-**HTTP 层实测**（analytics 服务在 8095 跑着，用假 token 打）：
+**HTTP 层实测**（analytics 服务在 8095 跑着，用假 token 打，旧快照）：
 
 ```
 GET  /api/business/attribution/import/jobs      (假token) → 401 {"code":"UNAUTHORIZED","message":"missing token"}
@@ -86,39 +91,22 @@ GET  /api/business/attribution/import/workspace (假token) → 401 {"code":"UNAU
 
 带 token 和不带 token **返回完全一样**，且 message 是 "missing token" 而不是 "invalid token" —— 证明 token 根本没被解析出来。
 
-**根因**：`parseAuthorization` 的权威契约是 **`string | null`**，见 `analytics/backend/server.js:112-115`：
+**根因（旧）**：`parseAuthorization` 的权威契约是 **`string | null`**，见 `analytics/backend/server.js:112-115`：
 
 ```js
 const token = (0, query_1.parseAuthorization)(raw);
 if (token === null) { return reply.status(401)... }
 ```
 
-但 A9/A17 的 routes.js 把它当 `{ok, token}` 对象用：
-
-- `business/attribution/import/routes.js:24-30`（A9）
-- `business/attribution/ingestion-adapter/routes.js:18-24`（A17，**同样的 bug**）
-
-两处的 fallback 分支（`typeof parseAuthorization === "function" ? ... : { ok: ..., token: ... }`）写的是对象形状，而 `analytics/backend/server.js:403` 和 `:411` 偏偏把真的 `query_1.parseAuthorization` 注入了进去，于是走进 `parsedAuth.ok === undefined` 的死路。
-
-**建议修法**（两个文件同样改，兼容两种返回形状，不破坏 fallback）：
-
-```js
-const parsed = typeof parseAuthorization === "function" ? parseAuthorization(raw) : null;
-// parseAuthorization 的契约是 string|null（见 analytics/backend/server.js:112）
-const token = typeof parsed === "string" ? parsed : (parsed && parsed.token);
-if (!token) {
-  return reply.code(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "missing token" } });
-}
-const auth = await verifyAnalyticsToken(token);
-```
-
-**为什么测试没抓到**：`tests/attribution/a9-import.test.js` 和 `a17-ingestion-adapter.test.js` **只测 service 层，从不走 HTTP 路由层**（实测：两个文件里 `registerImportRoutes` / `registerIngestionAdapterRoutes` / `fastify` / `inject` / `http.request` 全部零命中，直接调 `createImportService` / `createIngestionAdapter`）。建议补一个路由层测试。
+但 A9/A17 的 routes.js 曾把它当 `{ok, token}` 对象用（旧快照），现已修正为字符串处理。**为什么测试没抓到**：`tests/attribution/a9-import.test.js` 和 `a17-ingestion-adapter.test.js` **只测 service 层，从不走 HTTP 路由层**——建议补一个路由层测试（B13/A9 修复后此测试能直接通过）。
 
 ---
 
-### 🟠 #3 Fastify `bodyLimit` 1MB vs service 层 20MB —— 稍大的文件必 413
+### ✅ #3 Fastify `bodyLimit` 1MB vs service 层 20MB —— **已在 main 上修复**（原 🟠）
 
-**实测证据**（真打 8095，发 1.43MB body）：
+> ✅ **修复确认（2026-09-29 复核，main `e8c2491`）**：`business/attribution/import/routes.js:69` 的 `POST /api/business/attribution/import/jobs` 已显式设置 `bodyLimit: 20 * 1024 * 1024`（路由级覆盖全局 1MB）。`21d7bb3` 的 "raise import route body limit" 即指此。#3 闭合。下方为原始证据留存。
+
+**原始证据（真打 8095，发 1.43MB body，旧快照）**：
 
 ```
 请求体大小: 1.43 MB
@@ -126,29 +114,22 @@ HTTP 413
 {"statusCode":413,"code":"FST_ERR_CTP_BODY_TOO_LARGE","error":"Payload Too Large","message":"Request body is too large"}
 ```
 
-**根因**：
+**根因（旧）**：
 - `analytics/backend/server.js:369` → `maxBodyBytes = 1024 * 1024`（1MB，注释写「对齐 collect/server.ts」）
 - `analytics/backend/server.js:371` → `fastify({ logger, bodyLimit: maxBodyBytes })` 全局生效
-- 但 `business/attribution/import/service.js:106` 允许 **20MB**：`if (buf.length > 20 * 1024 * 1024) throw ... code: "TOO_LARGE"`
+- 但 `business/attribution/import/service.js:106` 允许 **20MB**
 
-**后果**：文件本体只要超过约 **750KB**（base64 膨胀 4/3 + JSON 包装），就会在 Fastify 层被 413 挡掉，**根本到不了 service 的 20MB 校验**。而广告平台导出的 CSV/XLSX 很容易超过 750KB —— 仓库里 `tests/attribution/fixtures/x/ads-export-results-location.xlsx` 就已经是 **49967 字节**，真实导出通常大得多。
+**后果（旧）**：文件本体只要超过约 **750KB**（base64 膨胀 4/3 + JSON 包装），就会在 Fastify 层被 413 挡掉。而广告平台导出的 CSV/XLSX 很容易超过 750KB。
 
-**建议修法**：给 import 路由单独放宽 bodyLimit，不要动全局（collect 的 1MB 限制是有意的）：
-
-```js
-// analytics/backend/server.js:398-405
-app.register(async (scope) => {
-    (0, import_1.registerImportRoutes)(scope, { ... });
-}, { bodyLimit: 21 * 1024 * 1024 });   // ← 21MB，略大于 service 的 20MB，让 service 的错误信息先命中
-```
-
-前端已按 20MB 做本地预检（`app.js` 的 `IMP_MAX_BYTES`），并对 413 给了明确文案，不会让用户以为是自己的文件太大。
+**现状**：路由级 `bodyLimit: 20MB` 已生效，前端 `IMP_MAX_BYTES` 预检与 413 文案无需改动。建议真环境复测一个 >1MB 文件确认体感。
 
 ---
 
-### 🟡 #4 `verifyAnalyticsToken` 不返回 `label`，`actorId` 永远是 null
+### ✅ #4 `verifyAnalyticsToken` 不返回 `label`，`actorId` 永远是 null —— **已在 main 上修复（B13）**（原 🟡）
 
-**实测证据**：`analytics/lib/deps.cjs:57-61` 的返回对象只有三个字段：
+> ✅ **修复确认（2026-09-29 复核，main `e8c2491`）**：`analytics/lib/deps.cjs:37` 已 SELECT `label`，`:66` 返回 `label: row.label ?? null`；`routes.js:46` 的 `actorId: auth.label || null` 现在能拿到值。B13 修复。#4 闭合。下方为原始证据留存。
+
+**原始证据**：`analytics/lib/deps.cjs:57-61` 的返回对象只有三个字段：
 
 ```js
 return {
@@ -166,13 +147,13 @@ return { tenantId, workspaceId, actorId: auth.label || null };
 
 SQL 里明明 SELECT 了 `status` 却没 SELECT `label`（`deps.cjs:37`），而 `analytics_tokens` 表是有 `label` 列的（`deps.cjs:324` 的 INSERT 就写了 label）。
 
-**后果**：`job.createdBy` 永远是 `null`，导入任务无法追溯是谁传的。U1 前端目前**没有展示 createdBy**（因为知道它是 null），修好后可以补上。
-
-**建议修法**：`deps.cjs:37` 的 SELECT 加 `label`，返回对象加 `label: row.label || null`。
+**后果（旧）**：`job.createdBy` 永远是 `null`，导入任务无法追溯是谁传的。U1 前端目前**没有展示 createdBy**（因为知道它是 null），修好后可以补上。（B13 修复后 `actorId` 已可用，前端可后续补 createdBy 展示。）
 
 ---
 
-### 🟡 #5 import 路由缺 `expires_at` 过期校验
+### 🟡 #5 import 路由缺 `expires_at` 过期校验 —— **数据层已修（B13），路由层仍缺（minor）**
+
+> ⚠️ **部分修复（2026-09-29 复核）**：`analytics/lib/deps.cjs:47-51` 已计算并返回 `expires_at`（B13，注释 "expires_at 此前查出却从未比对"），但 `business/attribution/import/routes.js` 的 `authContext` 拿到 `auth` 后**仍未做 `expires_at` 过期 401 拦截**（`grep` 该文件无 `expires_at` 比对）。属于安全加固的剩余尾巴，优先级低。
 
 **对比证据**：`analytics/backend/server.js:131-134` 的 events 路由**有**过期校验：
 
@@ -197,7 +178,9 @@ if (auth.expires_at !== null && auth.expires_at <= Date.now()) {
 
 ---
 
-### 🟡 #6 导入任务是**纯内存**存储，重启即丢
+### 🟡 #6 导入任务是**纯内存**存储，重启即丢 —— **仍待处理（产品化前必须）**
+
+> 2026-09-29：此为 6 条缺口中**仅剩的两个待处理项之一**（另一个是 #5）。它是产品化阻断项，不是 U1 验收阻断项。
 
 **证据**：`business/attribution/import/store.js:14` → `const jobs = new Map();`，注释也写明「A9 · 导入任务内存仓储（同进程）」。只有上传的**原始文件**落盘（`store.js:45-50`，写到 `analytics/data/imports/<tenantId>/`）。
 
@@ -226,7 +209,7 @@ if (auth.expires_at !== null && auth.expires_at <= Date.now()) {
 
 ## 四、U1 前端已交付内容（`shell/public/`，未碰后端）
 
-**IA 位置**（已与你确认）：侧栏「② 数据面板」分组下新增「广告数据导入」，与「PowerTokens 归因面板」并列 —— 归因面板是数据出口（只读看），广告导入是数据入口（喂数据），成对才完整。U0 定的三段结构未动，只在第 ② 段加了一项。
+**IA 位置**（已与用户确认）：侧栏「② 数据面板」分组下新增「广告数据导入」，与「PowerTokens 归因面板」并列 —— 归因面板是数据出口（只读看），广告导入是数据入口（喂数据），成对才完整。U0 定的三段结构未动，只在第 ② 段加了一项。
 
 **页面结构**：
 1. **两步进度条** —— 常驻顶部，明确「① 上传并结构校验 → ② 确认导入入库」是两个独立步骤
@@ -263,8 +246,8 @@ if (auth.expires_at !== null && auth.expires_at <= Date.now()) {
 
 用**真实的** `business/attribution/import/service.js` + **真实的** `tests/attribution/fixtures/` 样例文件起 mock HTTP 层（复刻 `routes.js` 的路径与响应形状），按前端 `app.js` 的请求构造方式逐字打一遍。
 
-> 说明：mock 层绕过了 `routes.js` 的 `authContext`（因为它有缺口 #2 的 bug），直接注入 ctx。
-> 目的是验证**「前端 ↔ service 契约」**，不是验证鉴权 —— 鉴权问题已单独记为缺口 #1/#2。
+> 说明：mock 层绕过了 `routes.js` 的 `authContext`（原快照里它有 #2 的 bug，现已随 A9/B13 修复），直接注入 ctx。
+> 目的是验证**「前端 ↔ service 契约」**，不是验证鉴权 —— 鉴权已于 2026-09-29 复核确认在 main 闭环。
 
 **验收标准 1 —— 三平台各上传一次，页面状态与后端一致**（15 项全过）
 
@@ -294,24 +277,25 @@ confirm  → partial_failed
 
 **附加检查**（6 项全过）：`GET /jobs` 返回 4 个任务；`publicJob` 不泄漏 `tenantId` / `fileAbs`；8 个状态枚举在前端全部有中文文案。
 
-### 5.3 尚未验证的部分（需要缺口 #1/#2 修好才能做）
+### 5.3 尚未验证的部分
 
-- [ ] 浏览器里真点一遍（需要 shell 服务起来 + 反代补上）
-- [ ] 真库落库（本次 mock pool 只收集 upsert 调用，没写真 PG）
-- [ ] 413 场景的真实用户体感（缺口 #3 修好后复测大文件）
+> 原 "需要缺口 #1/#2 修好才能做" 的前提已不成立：#1/#2/#3/#4 经 2026-09-29 复核确认已在 main 闭环。以下仍需真环境验证：
+
+- [ ] 浏览器里真点一遍（需 shell + analytics 真实联调；U1 预览服务只验证了前端契约 + mock，非真后端）
+- [ ] 真库落库（本次 mock pool 只收集 upsert 调用，没写真 PG）—— 依赖 #6
+- [ ] 大文件 413 真实体感（#3 路由级 20MB 已设，建议真打一个 >1MB 文件复测）
 - [ ] `MAPPING_INCOMPLETE` 场景（必填列没映射上 → ready 但 rowCount=0）—— 前端已写 `imp-mapwarn` 分支，但没有现成 fixture 能触发，需要造一个表头缺 `Cost` 列的文件
 
 ---
 
-## 六、给后端 agent 的最小修复清单
+## 六、给后端 agent 的修复清单（2026-09-29 复核后更新）
 
-按这个顺序修，U1 就能真联调：
+> 复核结论：原 6 条里 **#1/#2/#3/#4 已在 main（`e8c2491`）由 B13 / A9 闭环**，无需转发。仅 **#5（路由层 `expires_at` 拦截，minor）** 与 **#6（导入任务落库，产品化）** 待处理。
 
-1. **#2** `parseAuthorization` 返回类型误用 —— 改 `business/attribution/import/routes.js:24-30` 和 `business/attribution/ingestion-adapter/routes.js:18-24`（**不修这条，其他都白搭**）
-2. **#1** shell 补 `/api/business/` 反代 —— 改 `shell/server.cjs`，照抄 `:596-610`，**但不要给分享 cookie 开口子**
-3. **#3** import 路由单独放宽 bodyLimit 到 21MB —— 改 `analytics/backend/server.js:398-405`
-4. **#5** 补 `expires_at` 过期校验（安全）
-5. **#4** `verifyAnalyticsToken` 返回 `label`（可追溯性）
-6. **#6** 导入任务落库（产品化前）
+按优先级：
 
-修完 1-3 就能跑通 U1 的三条验收标准；4-6 是质量项。
+1. **#6** 导入任务落库（`import_jobs` 表）—— 产品化前必须，否则 analytics 重启丢历史（U1 前端已做 404 / 读取失败容错，不会白屏）
+2. **#5** import / ingestion 路由补 `expires_at` 过期 401 拦截 —— 数据层 B13 已返回该字段（`deps.cjs:47-51`），仅路由未用；安全加固，优先级低
+3. **（已闭环，记录备查）** **#2** parseAuthorization 字符串处理 → A9 `9d64ed9` 已正确；**#1** shell `/api/business` 反代 → B13 `shell/server.cjs:612` 已加；**#3** 路由级 20MB bodyLimit → A9 `routes.js:69` 已设；**#4** label 透传 → B13 `deps.cjs:66` 已返回
+
+修完 #6 即可让导入历史在重启后保留；#5 是安全加固尾巴。
