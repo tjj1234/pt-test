@@ -621,6 +621,24 @@ async function handle(req, res) {
     return req.pipe(up);
   }
 
+  // ---- /api/attribution 反向代理：仅登录用户（归因结果 REST，只读）----
+  // U2 前置：补上此前 B14 沟通时遗漏的前缀分支。模式同 /api/business/。
+  if (p.indexOf("/api/attribution/") === 0) {
+    const meAttribution = await authed(req);
+    if (!meAttribution) return json(res, 401, { ok: false, error: "没登录" });
+    const tenantId = meAttribution.tenant ? meAttribution.tenant.id : null;
+    // B14：动态计算 HMAC token（无需缓存）
+    const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
+    if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
+    const analyticsToken = crypto.createHmac("sha256", INTERNAL_KEY).update(tenantId).digest("hex");
+    const up = http.request({ host: "127.0.0.1", port: DASH_PORT, path: req.url, method: req.method,
+      headers: Object.assign(dashProxyHeaders(req, tenantId),
+        { authorization: "Bearer " + analyticsToken }) },
+      (r2) => { res.writeHead(r2.statusCode, r2.headers); r2.pipe(res); });
+    up.on("error", (e) => { log.error("attribution_proxy_failed", { error: e && e.message ? e.message : String(e) }); json(res, 502, { ok: false, error: "归因服务不可用" }); });
+    return req.pipe(up);
+  }
+
   // ---- /api/business 反向代理：仅登录用户（业务线接口：归因导入 import / 事件接入适配层 ingestion 等）----
   // B13：此前 shell 完全没有 /api/business/ 反代，U1 前端请求到 shell 这层就 404，根本到不了业务线接口。
   // B14：不再使用全局 PT_DASH_TOKEN，而是按租户动态计算 HMAC 分析 token。
