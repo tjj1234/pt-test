@@ -460,6 +460,13 @@ function buildUnifiedServer(options) {
         // 插入 analytics_tokens 表（只存 hash）
         const { insertAnalyticsToken } = require("../lib/deps.cjs");
         await insertAnalyticsToken(pool, body.tenant_id, token, body.label, ["analytics:read"]);
+        // B14：同时建立租户 ↔ 工作区映射（一租户一工作区：ws_<tenantId>），
+        // 否则新租户打 /api/business/* 会 403 NO_WORKSPACE
+        await pool.query(
+            `INSERT INTO tenant_workspaces (tenant_id, workspace_id, label)
+             VALUES ($1::uuid,$2,$3) ON CONFLICT (tenant_id) DO NOTHING`,
+            [body.tenant_id, "ws_" + body.tenant_id, body.label]
+        );
         // 返回成功（实际 shell 不需要 token 明文，但返回便于调试）
         reply.send({ ok: true, token });
     });

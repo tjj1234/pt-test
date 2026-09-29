@@ -16,44 +16,6 @@ const path = require("path");
 const http = require("http");
 const dbmod = require("./db.cjs");
 
-/** B14：调用 analytics /internal/tenant-token 接口 */
-async function callAnalyticsInternalTokenEndpoint(tenantId, label) {
-  const DASH_PORT = process.env.PT_DASH_PORT || 8095;
-  const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
-  if (!INTERNAL_KEY) {
-    console.error("B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发");
-    return;
-  }
-  const body = JSON.stringify({ tenant_id: tenantId, label });
-  const req = http.request({
-    host: "127.0.0.1",
-    port: DASH_PORT,
-    path: "/internal/tenant-token",
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Content-Length": Buffer.byteLength(body),
-      "X-Internal-Key": INTERNAL_KEY,
-    },
-  });
-  return new Promise((resolve, reject) => {
-    req.on("response", (res) => {
-      let data = "";
-      res.on("data", (chunk) => data += chunk);
-      res.on("end", () => {
-        if (res.statusCode >= 200 && res.statusCode < 300) {
-          resolve(JSON.parse(data));
-        } else {
-          reject(new Error(`Internal token endpoint failed: ${res.statusCode} ${data}`));
-        }
-      });
-    });
-    req.on("error", reject);
-    req.write(body);
-    req.end();
-  });
-}
-
 const SCRYPT_N = 16384;   // 2^14，产品级起步成本，自测跑得动
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
@@ -233,7 +195,7 @@ async function initAuth(opts = {}) {
     return { ok: true, created: true };
   }
 
-  const api = { db, close, register, login, getSession, logout, me, ensureDefaultAdmin, ttlMs, callAnalyticsInternalTokenEndpoint };
+  const api = { db, close, register, login, getSession, logout, me, ensureDefaultAdmin, ttlMs };
 
   if (opts.defaultAdmin && opts.defaultAdmin.username) {
     await api.ensureDefaultAdmin(opts.defaultAdmin.username, opts.defaultAdmin.password);
@@ -241,4 +203,42 @@ async function initAuth(opts = {}) {
   return api;
 }
 
-module.exports = { initAuth, hashPassword, verifyPassword, sha256, DEFAULT_TTL_MS };
+/** B14：调用 analytics /internal/tenant-token 接口 */
+async function callAnalyticsInternalTokenEndpoint(tenantId, label) {
+  const DASH_PORT = process.env.PT_DASH_PORT || 8095;
+  const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
+  if (!INTERNAL_KEY) {
+    console.error("B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发");
+    return;
+  }
+  const body = JSON.stringify({ tenant_id: tenantId, label });
+  const req = http.request({
+    host: "127.0.0.1",
+    port: DASH_PORT,
+    path: "/internal/tenant-token",
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(body),
+      "X-Internal-Key": INTERNAL_KEY,
+    },
+  });
+  return new Promise((resolve, reject) => {
+    req.on("response", (res) => {
+      let data = "";
+      res.on("data", (chunk) => data += chunk);
+      res.on("end", () => {
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(JSON.parse(data));
+        } else {
+          reject(new Error(`Internal token endpoint failed: ${res.statusCode} ${data}`));
+        }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+module.exports = { initAuth, hashPassword, verifyPassword, sha256, DEFAULT_TTL_MS, callAnalyticsInternalTokenEndpoint };

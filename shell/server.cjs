@@ -604,7 +604,7 @@ async function handle(req, res) {
     // B14：动态计算 HMAC token（无需缓存）
     const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
     if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
-    const analyticsToken = createHmac("sha256", INTERNAL_KEY).update(tenantId).digest("hex");
+    const analyticsToken = crypto.createHmac("sha256", INTERNAL_KEY).update(tenantId).digest("hex");
     const up = http.request({ host: "127.0.0.1", port: DASH_PORT, path: req.url, method: req.method,
       headers: Object.assign(dashProxyHeaders(req, tenantId),
         { authorization: "Bearer " + analyticsToken }) },
@@ -623,7 +623,7 @@ async function handle(req, res) {
     // B14：动态计算 HMAC token（无需缓存）
     const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
     if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
-    const analyticsToken = createHmac("sha256", INTERNAL_KEY).update(tenantId).digest("hex");
+    const analyticsToken = crypto.createHmac("sha256", INTERNAL_KEY).update(tenantId).digest("hex");
     const up = http.request({ host: "127.0.0.1", port: DASH_PORT, path: req.url, method: req.method,
       headers: Object.assign(dashProxyHeaders(req, tenantId),
         { authorization: "Bearer " + analyticsToken }) },
