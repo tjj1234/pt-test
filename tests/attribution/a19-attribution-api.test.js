@@ -7,9 +7,13 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const fastify = require("../../analytics/node_modules/fastify");
 const { createPgCompatPool } = require("../../analytics/lib/db.cjs");
+const { createTokenVerifier, insertAnalyticsToken } = require("../../analytics/lib/deps.cjs");
+const { parseAuthorization } = require("../../analytics/backend/events/query.js");
 const { createAnalyticsWorkflows } = require("../../business/attribution/workflows/engine");
 const { createAttributionApi } = require("../../business/attribution/api");
+const { registerAttributionApiRoutes } = require("../../business/attribution/api/routes");
 const { upsertDailyMetric } = require("../../analytics/backend/ads/ingest");
 
 const TENANT = "22222222-2222-4222-8222-222222222222";
@@ -138,12 +142,61 @@ async function run() {
   const health = await api.health(ctx, query);
   assert(health.workspaceId === WS, "health workspace");
 
+  // Real Fastify route + Authorization parser + database-backed token verifier.
+  const token = crypto.randomBytes(32).toString("hex");
+  await insertAnalyticsToken(pool, TENANT, token, "a19-http-test");
+  await pool.query(
+    `INSERT INTO tenant_workspaces (tenant_id, workspace_id) VALUES ($1::uuid, $2)
+     ON CONFLICT (tenant_id) DO UPDATE SET workspace_id = EXCLUDED.workspace_id`,
+    [TENANT, WS]
+  );
+  const app = fastify({ logger: false });
+  registerAttributionApiRoutes(app, {
+    pool,
+    attributionApi: api,
+    verifyAnalyticsToken: createTokenVerifier(pool),
+    resolveWorkspaceId: async (tenantId) => (tenantId === TENANT ? WS : null),
+    parseAuthorization,
+  });
+  try {
+    const url = "/api/attribution/funnel?" + new URLSearchParams(query).toString();
+    const missingToken = await app.inject({ method: "GET", url });
+    assert(missingToken.statusCode === 401, "HTTP missing token returns 401");
+
+    const invalidToken = await app.inject({
+      method: "GET",
+      url,
+      headers: { authorization: "Bearer invalid-a19-token" },
+    });
+    assert(invalidToken.statusCode === 403, "HTTP invalid token returns 403");
+
+    const validToken = await app.inject({
+      method: "GET",
+      url,
+      headers: { authorization: "Bearer " + token },
+    });
+    assert(validToken.statusCode === 200, "HTTP valid token returns 200: " + validToken.body);
+    const httpPanel = validToken.json();
+    const normalizeGeneratedAt = (panel) => ({
+      ...panel,
+      data_freshness: { ...panel.data_freshness, generated_at: null },
+    });
+    assert(
+      JSON.stringify(normalizeGeneratedAt(httpPanel)) ===
+        JSON.stringify(normalizeGeneratedAt(enginePanel)),
+      "HTTP funnel matches engine query"
+    );
+  } finally {
+    await app.close();
+  }
+
   await pool.end();
   console.log(
     JSON.stringify(
       {
         ok: true,
         engineEqualsApi: true,
+        httpAuth: { missingToken: 401, invalidToken: 403, validToken: 200 },
         groups: apiPanel.groups.length,
         roi: apiPanel.roi_by_entity.length,
         sampleFunnel: apiPanel.groups[0] && apiPanel.groups[0].funnel,

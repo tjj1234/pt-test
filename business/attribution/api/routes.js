@@ -29,16 +29,13 @@ function registerAttributionApiRoutes(app, opts = {}) {
     const parsedAuth =
       typeof parseAuthorization === "function"
         ? parseAuthorization(raw)
-        : {
-            ok: typeof raw === "string" && raw.startsWith("Bearer "),
-            token: raw && String(raw).slice(7),
-          };
-    if (!parsedAuth || !parsedAuth.ok) {
+        : typeof raw === "string" && raw.startsWith("Bearer ") ? raw.slice(7) : null;
+    if (typeof parsedAuth !== "string" || parsedAuth.length === 0) {
       return reply.code(401).send({ error: { code: "UNAUTHORIZED", message: "unauthorized" } });
     }
     let auth;
     try {
-      auth = await verifyAnalyticsToken(parsedAuth.token);
+      auth = await verifyAnalyticsToken(parsedAuth);
     } catch (err) {
       request.log.error({ err }, "attribution api token verify failed");
       return reply.code(500).send({ error: { code: "INTERNAL_ERROR", message: "internal error" } });
