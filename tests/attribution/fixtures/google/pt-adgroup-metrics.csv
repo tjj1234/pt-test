@@ -1,0 +1,7 @@
+Day,Customer ID,Campaign ID,Campaign,Ad group ID,Ad group,Cost,Impressions,Clicks,Currency code
+2026-09-13,9982705242,21000001,PMax | Wan 3.0 | 60% Off | W,2100000101,PMax | Wan 3.0 | 60% Off | W · AG,4.99,3814,666,USD
+2026-09-13,9982705242,21000002,Display | W | 新落地页| 注册 |,2100000201,Display | W | 新落地页| 注册 | · AG,0.86,809,179,USD
+2026-09-13,9982705242,21000003,Search | Kling,2100000301,Search | Kling · AG,2.60,40,6,USD
+2026-09-13,9982705242,21000004,Search | qwen+minimax+chatglm+deepseek | 欧美巴泰,2100000401,Search | qwen+minimax+chatglm+deepseek | 欧美巴泰 · AG,5.35,117,12,USD
+2026-09-13,9982705242,21000005,Search | Brand,2100000501,Search | Brand · AG,1.87,21,8,USD
+2026-09-13,9982705242,21000006,Search | qwen+minimax+chatglm+deepseek | W除欧美,2100000601,Search | qwen+minimax+chatglm+deepseek | W除欧美 · AG,3.68,202,15,USD

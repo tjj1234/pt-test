@@ -1,0 +1,105 @@
+/* ==========================================================================
+   PowerTokens 归因面板 · 单元 3.2 总览 + 素材 Tab 样式
+   只新增本单元需要的样式；根目录 styles.css（骨架样式与 CSS 变量）继续生效。
+   ========================================================================== */
+
+/* ---------- 数据新鲜度条 ---------- */
+.freshness-bar { font-size: 12px; margin-bottom: 12px; }
+
+/* ---------- KPI 卡 ---------- */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+}
+.kpi-label { font-size: 12px; }
+.kpi-value { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 4px 0; }
+.kpi-sub { font-size: 11px; }
+
+/* ---------- 图表卡片 ---------- */
+.chart-card { margin-bottom: 16px; }
+.chart-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+/* ---------- 转化漏斗（横向 bar） ---------- */
+.funnel { display: flex; flex-direction: column; gap: 10px; }
+.funnel-row { display: grid; grid-template-columns: 44px 1fr 130px; align-items: center; gap: 10px; }
+.funnel-label { font-size: 12.5px; color: var(--text-2); text-align: right; }
+.funnel-track { height: 20px; background: var(--surface-2); border-radius: 6px; overflow: hidden; }
+.funnel-bar { height: 100%; border-radius: 6px; }
+.funnel-val { font-size: 12.5px; color: var(--text-2); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.funnel-rate { margin-left: 6px; font-size: 11px; }
+
+/* ---------- 折线图 ---------- */
+.trend-svg { width: 100%; height: auto; display: block; }
+.legend { display: flex; flex-wrap: wrap; gap: 12px; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-2); }
+.legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+
+/* ---------- 素材 ROI 表 ---------- */
+.creatives-head { margin-bottom: 10px; }
+.creatives-head .section-title { margin-bottom: 6px; }
+.caliber { font-size: 12px; line-height: 1.6; }
+
+/* 素材很多时：横向可滚动 + 竖向可滚动 + 表头吸顶 */
+.table-scroll {
+  overflow: auto;
+  max-height: 560px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+  min-width: 1040px;
+}
+.data-table th, .data-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.data-table th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-2);
+  font-weight: 600;
+  color: var(--text-2);
+  z-index: 1;
+  white-space: nowrap;
+}
+.data-table th.sortable { cursor: pointer; user-select: none; }
+.data-table th.sortable:hover { color: var(--brand-strong); }
+.data-table tbody tr:hover { background: var(--surface-2); }
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.entity-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ROI 单元格配色（设计 3.2 §4.3） */
+.roi-pos { color: #059669; font-weight: 600; }
+.roi-neg { color: #dc2626; font-weight: 600; }
+.roi-zero { color: var(--zinc); font-weight: 600; }
+.roi-null { color: var(--muted-2); font-weight: 600; }
+.roi-note { font-size: 11px; max-width: 170px; line-height: 1.4; }
+
+.table-footnote { font-size: 12px; margin-top: 8px; line-height: 1.6; }
+
+/* ---------- badge 色板补充（根目录 styles.css 只有 violet/zinc/emerald） ---------- */
+.badge-indigo { background: var(--brand-soft); color: var(--brand-strong); }
+.badge-amber { background: var(--amber-soft); color: var(--amber); }
+.badge-rose { background: var(--rose-soft); color: var(--rose); }
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 720px) {
+  .funnel-row { grid-template-columns: 36px 1fr 96px; gap: 6px; }
+  .funnel-val { font-size: 11px; }
+  .kpi-value { font-size: 20px; }
+}

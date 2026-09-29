@@ -1,0 +1,40 @@
+{
+  "$id": "attribution.panel-registration.v1",
+  "title": "AttributionPanelRegistration",
+  "description": "A6 Panel 注册 Contract。本期只提交定义 + Mock Registry，不接 DSH、不改基座。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "businessLine",
+    "template",
+    "requiredPermissions",
+    "tabs",
+    "dataSource"
+  ],
+  "properties": {
+    "id": { "const": "powertokens-attribution" },
+    "businessLine": { "const": "attribution" },
+    "template": { "const": "saas_token_marketplace" },
+    "version": { "type": "string", "default": "1.0.0" },
+    "requiredPermissions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1
+    },
+    "tabs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["overview", "creatives", "users", "product", "health"]
+      },
+      "minItems": 5,
+      "maxItems": 5
+    },
+    "dataSource": {
+      "type": "string",
+      "const": "workflow",
+      "description": "面板只能消费 Workflow；禁止前端算 ROI / 填演示数"
+    }
+  }
+}

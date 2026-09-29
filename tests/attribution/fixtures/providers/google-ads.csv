@@ -1,0 +1,4 @@
+Day,Customer ID,Campaign ID,Campaign,Ad ID,Ad name,Cost,Impressions,Clicks,Currency
+2026-09-01,123-456-7890,111,Search Brand,ad_g1,brand_exact,45.10,9000,210,USD
+2026-09-01,123-456-7890,222,Search Generic,ad_g2,generic_wide,62.00,12000,180,USD
+2026-09-02,123-456-7890,111,Search Brand,ad_g1,brand_exact,38.50,8100,195,USD

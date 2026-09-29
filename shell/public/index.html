@@ -1,0 +1,382 @@
+﻿<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>北极星 · PowerTokens 归因与增长 Agent</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  /* P0-2：主界面「我的 Key」入口 + 未绑 key 提示条（沿用 styles.css 变量，不新造配色） */
+  .nav .keynav{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;margin:1px 0;
+    border-radius:8px;color:#5f5f5f;font-size:14px;text-decoration:none;font-family:inherit;
+    border:1px solid transparent;transition:background .15s,color .15s,border-color .15s}
+  .nav .keynav:hover{background:#fff;color:#1a1a1a;border-color:#e8e8e8}
+  .nav .keynav .ico{width:18px;text-align:center;flex-shrink:0}
+  .keydot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:#dc2626;
+    box-shadow:0 0 0 2px rgba(220,38,38,.15)}
+  .keylast{flex:0 0 auto;font-size:11px;color:#b8b8b8;font-family:ui-monospace,Consolas,monospace}
+  .keybanner{display:flex;align-items:center;gap:10px;padding:10px 24px;
+    background:linear-gradient(90deg,#fdf6e7,#fdeaea);border-bottom:1px solid #f5d9b8;
+    color:#9a5b13;font-size:13px;text-decoration:none}
+  .keybanner:hover{filter:brightness(.98)}
+  .keybanner b{font-weight:600}
+  .keygo{display:inline-block;margin-top:10px;padding:8px 14px;border:0;border-radius:9px;cursor:pointer;
+    font-weight:600;font-family:inherit;font-size:13px;color:#fff;background:#1a1a1a}
+  .keygo:hover{background:#333}
+  [hidden]{display:none!important}
+</style>
+<script src="/assets/icons.js" defer></script></head>
+<body>
+<div class="shell">
+  <aside class="side">
+    <div class="brand" id="brandHome" role="button" tabindex="0" title="返回首页">
+      <div class="logo">P</div>
+      <div><h1>社媒增长 Agent</h1><p>北极星 · 归因与增长</p></div>
+    </div>
+
+    <button class="side-newconv" id="newConv">＋ 新建对话</button>
+
+    <nav class="nav">
+      <!-- 首页 -->
+      <button data-v="home"><span class="ico" data-ico="home"></span>首页</button>
+
+      <!-- ① 工作区 -->
+      <div class="nav-group">
+        <div class="nav-group-title">工作区</div>
+        <button data-v="flows"><span class="ico" data-ico="layers"></span>业务流库</button>
+        <button data-v="schedule"><span class="ico" data-ico="schedule"></span>调度与执行</button>
+      </div>
+
+      <!-- ② 数据面板 -->
+      <div class="nav-group">
+        <div class="nav-group-title">数据面板</div>
+        <button data-v="dash"><span class="ico" data-ico="chartBar"></span>PowerTokens 归因面板</button>
+        <button data-v="import"><span class="ico" data-ico="upload"></span>广告数据导入</button>
+      </div>
+
+      <!-- ③ 对话历史 -->
+      <div class="nav-group">
+        <div class="nav-group-title">对话历史</div>
+        <button data-v="history"><span class="ico" data-ico="chat"></span>对话历史</button>
+      </div>
+
+      <!-- ④ 能力（保留 dc8abfd 既有能力视图） -->
+      <div class="nav-group">
+        <div class="nav-group-title">能力</div>
+        <button data-v="skills"><span class="ico" data-ico="sparkle"></span>技能</button>
+        <button data-v="status"><span class="ico" data-ico="shield"></span>运行状态</button>
+        <button data-v="memory"><span class="ico" data-ico="brain"></span>记忆</button>
+      </div>
+
+      <a class="keynav" id="keyNav" href="/settings">
+        <span class="ico" data-ico="key"></span><span>我的 Key</span>
+        <span class="keydot" id="keyDot" hidden></span>
+        <span class="keylast" id="keyLast4" hidden></span>
+      </a>
+    </nav>
+
+    <div class="side-foot">
+      <div class="user-entry" id="userEntry">
+        <span class="avatar ue-avatar">A</span>
+        <div class="ue-meta">
+          <div class="ue-name">Alex Chen</div>
+        </div>
+        <span class="ue-arrow" id="ueArrow"><span class="ico" data-ico="chevron"></span></span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <a class="keybanner" id="keyBanner" href="/settings" hidden>
+      <span class="ico" data-ico="key"></span><span><b>你还未绑定 PT key</b>，绑定后才能对话 —— 点击前往设置</span>
+    </a>
+    <header class="top">
+      <h2 id="title">首页</h2>
+      <div class="search-wrap">
+        <input id="search" type="search" placeholder="搜索对话…" autocomplete="off">
+        <div id="searchResults" class="search-results" hidden></div>
+      </div>
+      <div class="sp"></div>
+      <select id="modelSelect" hidden></select>
+      <span class="pill" id="pSkills">技能 —</span>
+      <span class="pill" id="pDash">看板 —</span>
+    </header>
+
+    <!-- ============ 首页（默认落地页） ============ -->
+    <section class="view on" id="v-home">
+      <div class="home">
+        <div class="chips" id="quickChips">
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>埋点质量 AI 分析<span class="soon-badge">即将上线</span></button>
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>博主相关性分析<span class="soon-badge">即将上线</span></button>
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>网站智能打点推荐<span class="soon-badge">即将上线</span></button>
+          <button class="chip soon" disabled type="button"><span class="ico" data-ico="hourglass"></span>Workflow · 查询服务<span class="soon-badge">即将上线</span></button>
+        </div>
+
+        <div class="guide-cards">
+          <div class="gcard">
+            <div class="gcard-ico"><span class="ico" data-ico="layers"></span></div>
+            <h3>启用业务流</h3>
+            <p class="gcard-desc">跑完整闭环：skill + mcp + workflow 协作，启用后自动生成数据面板 Tab，适合 A 类客户。</p>
+            <button class="gbtn primary" data-card="flow" type="button">开始配置</button>
+          </div>
+          <div class="gcard">
+            <div class="gcard-ico"><span class="ico" data-ico="sparkle"></span></div>
+            <h3>试用单点能力</h3>
+            <p class="gcard-desc">单独跑一个 skill / mcp / workflow，做一次检查分析，不建面板，适合 B 类客户。</p>
+            <button class="gbtn" data-card="trial" type="button">试用能力</button>
+          </div>
+          <div class="gcard">
+            <div class="gcard-ico"><span class="ico" data-ico="chat"></span></div>
+            <h3>开始对话</h3>
+            <p class="gcard-desc">直接用 LLM 对话，尚未启用业务流时数据上下文有限，但可自由问答。</p>
+            <button class="gbtn" data-card="chat" type="button">进入对话→</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 工作区：业务流库（暂无内容） ============ -->
+    <section class="view" id="v-flows"><div class="page">
+      <div class="empty-state">
+        <div class="es-ico"><span class="ico" data-ico="layers"></span></div>
+        <h3>业务流库</h3>
+        <p>把 skill + mcp + workflow 编排成可复用的业务流。启用后自动生成「数据面板」Tab。</p>
+        <p class="es-sub">当前还没有业务流 —— 去首页「启用业务流」开始配置（U5 任务包交付）。</p>
+      </div>
+    </div></section>
+
+    <!-- ============ 工作区：调度与执行（暂无内容） ============ -->
+    <section class="view" id="v-schedule"><div class="page">
+      <div class="empty-state">
+        <div class="es-ico"><span class="ico" data-ico="schedule"></span></div>
+        <h3>调度与执行</h3>
+        <p>周期性触发业务流、查看运行记录与执行状态。</p>
+        <p class="es-sub">当前还没有调度任务 —— 等业务流启用后再来这里编排定时执行。</p>
+      </div>
+    </div></section>
+
+    <!-- ============ 数据面板（复用现有 /dashboard/ 反代） ============ -->
+    <section class="view" id="v-dash">
+      <div class="dash-toolbar">
+        <span class="dash-toolbar-title"><span class="ico" data-ico="chartBar"></span> 归因面板 · 只读</span>
+        <div class="sp"></div>
+        <button class="toolbar-btn" id="sharePanelBtn">🔗 分享面板</button>
+        <button class="toolbar-btn" id="mySharesBtn">我的分享</button>
+      </div>
+      <iframe id="dashFrame" src="about:blank"></iframe>
+    </section>
+
+    <!-- ============ 数据面板：广告数据导入（U1） ============ -->
+    <section class="view" id="v-import"><div class="page imp-page">
+
+      <!-- 两步说明：结构校验 ≠ 最终入库，这是 A18 两阶段设计 -->
+      <div class="imp-steps">
+        <div class="imp-step" id="impStep1">
+          <span class="imp-step-n">1</span>
+          <div class="imp-step-t">
+            <b>上传并结构校验</b>
+            <span>检查表头、列映射、每行格式是否合法</span>
+          </div>
+        </div>
+        <span class="imp-step-arrow"><span class="ico" data-ico="chevronRight"></span></span>
+        <div class="imp-step" id="impStep2">
+          <span class="imp-step-n">2</span>
+          <div class="imp-step-t">
+            <b>确认导入入库</b>
+            <span>再做一次语义校验，可能刷掉部分行</span>
+          </div>
+        </div>
+      </div>
+      <p class="imp-note">
+        <span class="ico" data-ico="bulb"></span>
+        两步的行数<b>可能不一样</b>，这是设计如此、不是 bug：第 1 步只保证「格式读得懂」，
+        第 2 步才会按业务规则（如事件名不在映射表里）再筛一遍。以第 2 步的最终结果为准。
+      </p>
+
+      <!-- 表单：选平台 → 选文件 -->
+      <div class="imp-card">
+        <div class="imp-card-h"><span class="ico" data-ico="upload"></span> 新建导入</div>
+        <div class="imp-form">
+          <div class="imp-field">
+            <label for="impProvider">广告平台</label>
+            <div class="imp-provs" id="impProvs">
+              <button type="button" class="imp-prov on" data-prov="google"><span class="ico" data-ico="search"></span>Google Ads</button>
+              <button type="button" class="imp-prov" data-prov="meta"><span class="ico" data-ico="facebook"></span>Meta Ads</button>
+              <button type="button" class="imp-prov" data-prov="x"><span class="ico" data-ico="bolt"></span>X (Twitter)</button>
+            </div>
+            <p class="imp-hint">选错平台不会导入错数据 —— 后端会按表头特征列自动识别，这里的选择只作为提示。</p>
+          </div>
+
+          <div class="imp-field">
+            <label for="impFile">导出文件</label>
+            <div class="imp-drop" id="impDrop">
+              <input type="file" id="impFile" accept=".csv,.xlsx,.xls,text/csv" hidden>
+              <div class="imp-drop-in" id="impDropIn">
+                <span class="ico" data-ico="fileText"></span>
+                <b>点击选择文件</b>
+                <span class="imp-drop-sub">支持 CSV / XLSX / XLS，单个文件上限 20MB</span>
+              </div>
+              <div class="imp-file-on" id="impFileOn" hidden>
+                <span class="ico" data-ico="fileText"></span>
+                <span class="imp-file-name" id="impFileName"></span>
+                <span class="imp-file-size" id="impFileSize"></span>
+                <button type="button" class="imp-file-x" id="impFileClear" title="移除"><span class="ico" data-ico="close"></span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="imp-actions">
+            <button type="button" class="gbtn primary" id="impUpload" disabled>
+              <span class="ico" data-ico="upload"></span> 上传并结构校验
+            </button>
+            <span class="imp-busy" id="impBusy" hidden><span class="ico spin" data-ico="spinner"></span> 正在校验…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 当前任务结果 -->
+      <div class="imp-card" id="impResultCard" hidden>
+        <div class="imp-card-h">
+          <span class="ico" data-ico="clipboard"></span> 本次任务
+          <span class="imp-jobid" id="impJobId"></span>
+        </div>
+        <div id="impResult"></div>
+      </div>
+
+      <!-- 历史任务 -->
+      <div class="imp-card">
+        <div class="imp-card-h">
+          <span class="ico" data-ico="clock"></span> 最近导入任务
+          <div class="sp"></div>
+          <button type="button" class="imp-refresh" id="impRefresh"><span class="ico" data-ico="refresh"></span> 刷新</button>
+        </div>
+        <div id="impHistory"><div class="imp-empty">加载中…</div></div>
+      </div>
+
+    </div></section>
+
+    <!-- ============ 对话历史（可折叠列表，复用 /api/conversations） ============ -->
+    <section class="view" id="v-history"><div class="page">
+      <div class="hist-head"><h3>对话历史</h3><span class="hist-hint">按时间分组，点击进入对话</span></div>
+      <div class="hist-list" id="historyList"><div class="side-conv-scroll" id="convList"></div></div>
+    </div></section>
+
+    <!-- ============ 对话（多对话窗口：左对话列表 + 右聊天区） ============ -->
+    <section class="view" id="v-chat">
+      <div class="chat-pane">
+        <div class="chat" id="chat">
+          <div class="empty" id="hello">
+            <h3>你好，我是社媒增长 Agent 👋</h3>
+            <p>我可以帮你把社媒流量运营 + 广告归因两件事闭环起来</p>
+            <p class="empty-hint">直接在下面提问，或点左侧「＋ 新建对话」开始。</p>
+          </div>
+        </div>
+        <div class="compose">
+          <div class="quick">
+            <button>近7天哪些素材在烧钱？</button>
+            <button>哪几个国家表现最好？</button>
+            <button>埋点质量帮我体检一下</button>
+            <button>这周整体干得怎么样？</button>
+          </div>
+          <div class="empty-input" id="emptyInput">
+            <div class="img-preview" id="imgPreview" hidden><img id="imgThumb" alt="待发图片"><button id="imgClear" type="button">×</button></div>
+            <input type="file" id="imgInput" accept="image/*" hidden>
+            <button class="composer-add-btn" id="imgBtn" type="button" title="添加图片 / 文件"><span class="ico" data-ico="plus"></span></button>
+            <textarea id="ta" rows="1" placeholder="输入问题，或用 @引用数据面板内容… (Enter 发送 / Shift+Enter 换行)"></textarea>
+            <div class="foot-bar">
+              <div class="model-switcher" id="modelSwitcher">
+                <button class="ms-btn" id="msBtn" type="button" title="切换模型">
+                  <span class="ico" data-ico="sparkle"></span>
+                  <span class="ms-btn-t" id="msBtnName">—</span>
+                  <span class="ms-caret"><span class="ico" data-ico="chevron"></span></span>
+                </button>
+                <div class="model-menu" id="modelMenu" hidden></div>
+              </div>
+              <button class="send" id="send" title="发送"><span class="ico" data-ico="send"></span></button>
+              <button class="stop" id="stop" hidden title="停止"><span class="ico" data-ico="close"></span></button>
+            </div>
+          </div>
+          <div class="meta" style="max-width:820px;margin:8px auto 0" id="cm"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 能力：技能 ============ -->
+    <section class="view" id="v-skills"><div class="page">
+      <div class="note">这些是<b>产品工作区</b>里的技能。DSH 的开发技能（社媒那 10 个）<b>不在产品里</b> —— 隔离已经生效。</div>
+      <div class="grid" id="skillGrid"></div>
+    </div></section>
+
+    <!-- ============ 能力：运行状态 ============ -->
+    <section class="view" id="v-status"><div class="page">
+      <div class="kv" id="statusKv"></div>
+      <div class="note">业务壳只把问题交给 DSH，DSH 不开任何对外端口 —— 用户永远碰不到 DSH 本身。</div>
+    </div></section>
+
+    <!-- ============ 能力：记忆 ============ -->
+    <section class="view" id="v-memory"><div class="page">
+      <div class="mem-wrap">
+        <div class="mem-add">
+          <input id="memKey" placeholder="记忆名（如：老板偏好）">
+          <input id="memVal" placeholder="记忆内容（如：优先关注美国市场）">
+          <button id="memAdd">添加 / 更新</button>
+        </div>
+        <div id="memList" class="mem-list"></div>
+      </div>
+    </div></section>
+
+    <!-- ============ 成员与权限（建设中） ============ -->
+    <section class="view" id="v-members"><div class="page">
+      <div class="empty-state building">
+        <div class="es-ico"><span class="ico" data-ico="users"></span></div>
+        <h3>成员与权限</h3>
+        <p>基于 RBAC 的团队成员管理与权限分配（管理员 / 分析师 / 访客）。</p>
+        <p class="es-sub es-badge">功能建设中</p>
+      </div>
+    </div></section>
+
+    <!-- ============ 用量与日志（建设中） ============ -->
+    <section class="view" id="v-usage"><div class="page">
+      <div class="empty-state building">
+        <div class="es-ico"><span class="ico" data-ico="log"></span></div>
+        <h3>用量与日志</h3>
+        <p>查看调用量、Token 消耗与操作审计日志。</p>
+        <p class="es-sub es-badge">功能建设中</p>
+      </div>
+    </div></section>
+  </main>
+</div>
+
+  <!-- 用户菜单（点击底部用户入口弹出） -->
+  <div class="user-menu" id="userMenu" hidden>
+    <div class="um-head">
+      <span class="avatar ue-avatar">A</span>
+      <div>
+        <div style="font-weight:600;font-size:13px">Alex Chen</div>
+        <div style="font-size:11px;color:#8c8c8c">@alex</div>
+      </div>
+    </div>
+    <a class="um-item" href="/settings"><span class="ico" data-ico="gear"></span> 账户与授权</a>
+    <div class="um-item" data-goto="members"><span class="ico" data-ico="users"></span> 成员与权限</div>
+    <div class="um-item" data-goto="usage"><span class="ico" data-ico="log"></span> 用量与日志</div>
+    <div class="um-divider"></div>
+    <div class="um-item um-item-danger" id="out">
+      <span class="ico" data-ico="logout"></span> 退出登录
+    </div>
+  </div>
+
+  <!-- 面板分享弹窗 -->
+  <div class="modal-mask" id="shareModal" hidden>
+    <div class="modal">
+      <div class="modal-head"><h3>分享归因面板</h3><button class="modal-x" data-close="shareModal" type="button">×</button></div>
+      <div class="modal-body" id="shareModalBody"></div>
+    </div>
+  </div>
+  <!-- 我的分享弹窗 -->
+  <div class="modal-mask" id="mySharesModal" hidden>
+    <div class="modal">
+      <div class="modal-head"><h3>我的分享</h3><button class="modal-x" data-close="mySharesModal" type="button">×</button></div>
+      <div class="modal-body" id="mySharesBody"></div>
+    </div>
+  </div>
+<script src="/assets/key-drawer.js"></script>
+<script src="/assets/app.js"></script>
+</body></html>

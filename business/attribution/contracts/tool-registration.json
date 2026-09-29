@@ -1,0 +1,56 @@
+{
+  "$id": "attribution.tool-registration.v1",
+  "title": "AttributionToolRegistration",
+  "description": "A6 Tool 注册 Contract 示例（attribution.query）。riskLevel=read。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "name",
+    "type",
+    "version",
+    "description",
+    "inputSchema",
+    "outputType",
+    "riskLevel",
+    "requiredPermissions"
+  ],
+  "properties": {
+    "name": { "const": "attribution.query" },
+    "type": { "const": "workflow" },
+    "version": { "type": "string" },
+    "description": { "type": "string" },
+    "inputSchema": { "type": "object" },
+    "outputType": { "const": "data" },
+    "riskLevel": { "const": "read" },
+    "requiredPermissions": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "requiredCredentials": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "examples": [
+    {
+      "name": "attribution.query",
+      "type": "workflow",
+      "version": "1.0.0",
+      "description": "查询指定时间范围内的归因漏斗和素材表现",
+      "inputSchema": {
+        "type": "object",
+        "required": ["from", "to"],
+        "properties": {
+          "from": { "type": "string", "format": "date" },
+          "to": { "type": "string", "format": "date" },
+          "platform": { "type": "string", "enum": ["google", "meta", "x"] },
+          "country": { "type": "string" }
+        }
+      },
+      "outputType": "data",
+      "riskLevel": "read",
+      "requiredPermissions": ["attribution:read"],
+      "requiredCredentials": ["attribution-data:read"]
+    }
+  ]
+}

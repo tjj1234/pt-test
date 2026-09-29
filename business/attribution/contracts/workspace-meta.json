@@ -1,0 +1,17 @@
+{
+  "$id": "attribution.workspace-meta.v1",
+  "title": "WorkspaceAttributionMeta",
+  "description": "工作区级归因元数据（与单次 AdImportJob 分开）。firstConnectedAt 为该工作区首次成功配置广告数据源的一次性时间戳，之后不再改写。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["workspaceId"],
+  "properties": {
+    "workspaceId": { "type": "string", "minLength": 1 },
+    "firstConnectedAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "首次导入成功（status=completed|partial_failed 且 persistedRows>0）时写入；后续导入不得覆盖。"
+    },
+    "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+  }
+}

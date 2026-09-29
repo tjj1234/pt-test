@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>归因广告导入 · A9</title>
+  <style>
+    :root { --bg:#f6f4ef; --ink:#1c1917; --line:#d6d3d1; --accent:#0f766e; }
+    body { font-family: "IBM Plex Sans", "Source Han Sans SC", sans-serif; margin:0; background:var(--bg); color:var(--ink); }
+    main { max-width:720px; margin:0 auto; padding:2rem 1.25rem 4rem; }
+    h1 { font-size:1.5rem; margin:0 0 .35rem; }
+    p.lead { margin:0 0 1.5rem; color:#57534e; }
+    label { display:block; font-size:.85rem; margin:1rem 0 .35rem; }
+    select, input[type=text], input[type=password] { width:100%; padding:.55rem .65rem; border:1px solid var(--line); border-radius:6px; background:#fff; box-sizing:border-box; }
+    button { margin-top:1rem; margin-right:.5rem; padding:.6rem 1rem; border:0; border-radius:6px; background:var(--accent); color:#fff; cursor:pointer; }
+    button.secondary { background:#44403c; }
+    pre { background:#1c1917; color:#e7e5e4; padding:1rem; border-radius:8px; overflow:auto; font-size:.75rem; }
+    .row { display:flex; gap:1rem; flex-wrap:wrap; }
+    .row > * { flex:1 1 200px; }
+    .hint { font-size:.8rem; color:#78716c; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>广告导出导入</h1>
+    <p class="lead">选平台 → 上传 CSV/XLSX → 校验 ready → 确认 importing。复用 A1 Parser；tenant 来自分析 Token，勿在表单填租户。</p>
+
+    <div class="row">
+      <div>
+        <label>Analytics Token（Bearer）</label>
+        <input id="token" type="password" placeholder="只读分析 token" autocomplete="off" />
+      </div>
+      <div>
+        <label>平台</label>
+        <select id="provider">
+          <option value="meta">Meta</option>
+          <option value="google">Google</option>
+          <option value="x">X</option>
+        </select>
+      </div>
+    </div>
+
+    <label>导出文件</label>
+    <input id="file" type="file" accept=".csv,.xlsx,.xls,text/csv" />
+    <p class="hint">大文件经浏览器转 base64 上传；上限 20MB。</p>
+
+    <button id="upload" type="button">上传并校验</button>
+    <button id="confirm" class="secondary" type="button" disabled>确认导入</button>
+
+    <label>任务结果</label>
+    <pre id="out">等待操作…</pre>
+  </main>
+  <script>
+    let lastImportId = null;
+    const out = document.getElementById("out");
+    function show(obj) { out.textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2); }
+    function authHeaders() {
+      const t = document.getElementById("token").value.trim();
+      return {
+        "Content-Type": "application/json",
+        Authorization: t ? ("Bearer " + t) : "",
+      };
+    }
+    function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => {
+          const s = String(r.result || "");
+          const i = s.indexOf(",");
+          resolve(i >= 0 ? s.slice(i + 1) : s);
+        };
+        r.onerror = reject;
+        r.readAsDataURL(file);
+      });
+    }
+    document.getElementById("upload").onclick = async () => {
+      const file = document.getElementById("file").files[0];
+      if (!file) return show("请选择文件");
+      try {
+        const contentBase64 = await fileToBase64(file);
+        const res = await fetch("/api/business/attribution/import/jobs", {
+          method: "POST",
+          headers: authHeaders(),
+          body: JSON.stringify({
+            provider: document.getElementById("provider").value,
+            originalName: file.name,
+            contentBase64,
+          }),
+        });
+        const data = await res.json();
+        show(data);
+        if (data && data.job && data.job.importId) {
+          lastImportId = data.job.importId;
+          document.getElementById("confirm").disabled = data.job.status !== "ready";
+        }
+      } catch (e) {
+        show(String(e && e.message ? e.message : e));
+      }
+    };
+    document.getElementById("confirm").onclick = async () => {
+      if (!lastImportId) return show("没有可确认的任务");
+      try {
+        const res = await fetch("/api/business/attribution/import/jobs/" + encodeURIComponent(lastImportId) + "/confirm", {
+          method: "POST",
+          headers: authHeaders(),
+          body: "{}",
+        });
+        const data = await res.json();
+        show(data);
+        document.getElementById("confirm").disabled = true;
+      } catch (e) {
+        show(String(e && e.message ? e.message : e));
+      }
+    };
+  </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+Day,Customer ID,Campaign ID,Campaign,Ad group ID,Ad group,Cost,Impressions,Clicks,Currency code
+2026-09-13,9982705242,21000001,PMax | Wan 3.0 | 60% Off | W,2100000101,PMax AG,5.00,1000,50,USD
+2026-09-13,9982705242,21000002,Display | W | 新落地页| 注册 |,2100000201,Display AG,not-a-number,200,10,USD
+2026-09-13,9982705242,21000003,Search | Kling,2100000301,Search AG,1.32,13,3,USD

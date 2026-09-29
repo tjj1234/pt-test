@@ -1,0 +1,45 @@
+{
+  "$id": "attribution.attribution-result.v1",
+  "title": "AttributionResultRow",
+  "description": "归因查询 Workflow 输出行。ROI 等指标只允许由 Workflow/Query 层计算，禁止前端或 Prompt 计算。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "workspaceId",
+    "attributionModel",
+    "from",
+    "to",
+    "conversions",
+    "revenue",
+    "spend",
+    "roi",
+    "confidence",
+    "unmatchedReason"
+  ],
+  "properties": {
+    "workspaceId": { "type": "string", "minLength": 1 },
+    "attributionModel": { "type": "string", "enum": ["last_touch"] },
+    "from": { "type": "integer", "minimum": 0 },
+    "to": { "type": "integer", "minimum": 0 },
+    "provider": { "type": ["string", "null"], "enum": ["google", "meta", "x", null] },
+    "campaignId": { "type": ["string", "null"] },
+    "creativeId": { "type": ["string", "null"] },
+    "utmSource": { "type": ["string", "null"] },
+    "utmCampaign": { "type": ["string", "null"] },
+    "utmContent": { "type": ["string", "null"] },
+    "eventName": { "type": ["string", "null"] },
+    "conversions": { "type": "number", "minimum": 0 },
+    "revenue": { "type": ["number", "null"] },
+    "spend": { "type": ["number", "null"] },
+    "roi": { "type": ["number", "null"] },
+    "confidence": {
+      "type": "string",
+      "enum": ["matched", "ambiguous_name", "no_match", "partial"]
+    },
+    "unmatchedReason": { "type": ["string", "null"] },
+    "matchedEntities": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  }
+}

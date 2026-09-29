@@ -1,0 +1,45 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  syntax-check:
+    name: 语法检查（node --check）
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 语法检查（遍历所有 JS 源文件）
+        run: node scripts/ci-check.mjs
+
+  # 后端 SQL 自检：analytics 起库时会跑 pt_security_selfcheck()（fail-closed）。
+  # 这里再补一层「迁移脚本可被提取」的冒烟检查，避免 psql 脚本语法坏掉才在运行时发现。
+  migrate-smoke:
+    name: 迁移脚本冒烟
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 校验 001/002/003 迁移文件存在且非空
+        run: |
+          for f in analytics/backend/db/001_init.sql \
+                   analytics/backend/db/002_attribution_index.sql \
+                   analytics/backend/db/003_add_x_platform.sql \
+                   analytics/schema/003_delivery.sql; do
+            test -s "$f" || { echo "缺失或为空：$f"; exit 1; }
+          done
+          echo "迁移脚本齐备"

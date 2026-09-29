@@ -1,0 +1,87 @@
+{
+  "$id": "attribution.workflows.v1",
+  "title": "AttributionWorkflowSurface",
+  "description": "A3/A5 Workflow 表面。平台筛选必须在后端生效；前端不得重算核心指标。",
+  "workflows": [
+    {
+      "name": "importCanonicalAdData",
+      "slice": "A1",
+      "input": ["workspaceId", "records", "source"],
+      "output": "AdImportJob"
+    },
+    {
+      "name": "detectAdFile",
+      "slice": "A1",
+      "input": ["file"],
+      "output": "{ providerGuess, headers, warnings }"
+    },
+    {
+      "name": "previewAdImport",
+      "slice": "A1",
+      "input": ["workspaceId", "provider", "file"],
+      "output": "{ headers, sampleRows, suggestedMapping }"
+    },
+    {
+      "name": "validateAdImport",
+      "slice": "A1",
+      "input": ["workspaceId", "provider", "file", "mapping?"],
+      "output": "{ ok, errorDetails }"
+    },
+    {
+      "name": "importAdData",
+      "slice": "A1",
+      "input": ["workspaceId", "provider", "file", "idempotencyKey", "mapping?"],
+      "output": "AdImportJob"
+    },
+    {
+      "name": "listImportJobs",
+      "slice": "A1",
+      "input": ["workspaceId"],
+      "output": "AdImportJob[]"
+    },
+    {
+      "name": "getImportJob",
+      "slice": "A1",
+      "input": ["workspaceId", "importId"],
+      "output": "AdImportJob"
+    },
+    {
+      "name": "queryEvents",
+      "slice": "A3",
+      "input": ["workspaceId", "from", "to", "filters"],
+      "output": "CanonicalEvent[] | page"
+    },
+    {
+      "name": "queryAttributionFunnel",
+      "slice": "A3",
+      "input": ["workspaceId", "from", "to", "granularity", "platform?", "country?"],
+      "output": "{ groups, data_freshness }",
+      "notes": "platform/country 过滤必须在 SQL/后端完成"
+    },
+    {
+      "name": "queryCreativeRoi",
+      "slice": "A3",
+      "input": ["workspaceId", "from", "to", "platform?", "campaignId?", "creativeId?"],
+      "output": "AttributionResultRow[]"
+    },
+    {
+      "name": "queryAttributionHealth",
+      "slice": "A5",
+      "input": ["workspaceId", "from", "to"],
+      "output": "AttributionHealthReport"
+    },
+    {
+      "name": "runAttributionAudit",
+      "slice": "A5",
+      "input": ["workspaceId", "from", "to"],
+      "output": "token audit report | AttributionHealthReport"
+    }
+  ],
+  "httpCompatibility": {
+    "collect": {
+      "preferred": "POST /api/business/attribution/collect/:webhookId",
+      "compatible": "POST /api/v1/collect/:webhook_id",
+      "note": "A2 不重写 Collect 主干；内部统一进 Collector Service"
+    }
+  }
+}

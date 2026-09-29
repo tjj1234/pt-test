@@ -1,0 +1,54 @@
+# User patch layer for the `web` dsh profile.
+#
+# Why: the shipped bundle mounts `directory-picker-auto`, which on Windows
+# resolves to the renderless NATIVE interaction pair (host-native backend +
+# renderless client surface that drives the host OS chooser). A browser tab
+# cannot drive an OS chooser, so the workspace "add" entry never appears and
+# there is no usable directory flow.
+#
+# Fix: disable the auto row and pin the BROWSE interaction pair directly
+# (the official recipe — see dsh-web-app/cordis.patch.yml: "Mount -native or
+# -browse directly in an overlay to pin the interaction"). Browse renders an
+# in-app directory browser with listing AND child-directory creation
+# (mkdir), which is exactly what creating a workspace from the Web UI needs.
+- id: directory-picker
+  disabled: true
+
+- insert:
+    - id: directory-picker-browse
+      name: '@deepseek-ai/dsh-host-directory-picker-browse'
+
+    - id: ui-directory-picker-browse
+      name: '@deepseek-ai/dsh-client-ui-directory-picker-browse'
+
+# Model routing: disable the built-in DeepSeek-official provider.
+#
+# Why: this profile has no DEEPSEEK_API_KEY and is not going to get one — all
+# model traffic goes through the PowerTokens aggregator (powertokens route,
+# configured in settings.yaml). But the shipped bundle still registers the
+# `deepseek-official` route, and the Web UI model selector offers the same
+# model names under BOTH categories ("DeepSeek" official vs the aggregator).
+# Picking the official one fails with MISSING_CREDENTIAL because there is no
+# key for it. Disabling this row removes the official route entirely, so the
+# selector only ever offers the powertokens-backed models.
+- id: llm-deepseek
+  disabled: true
+
+# Web search: route the built-in web_search/web_fetch tools through
+# dsh-web-search-pro (free DuckDuckGo/Bing engines + platform search),
+# so no DEEPSEEK_API_KEY is needed.
+#
+# NOTE: the browser (dsh-web-search-pro -> @anweat/dsh-browser) and
+# web-search-pro rows are mounted by the plugins' own bundle patches
+# (both are in dsh.profile.bundles), so no insert is needed here.
+- id: web
+  config:
+    searchProvider: web-search-pro
+
+# Browser runtime: point dsh-browser at the manually installed Chrome
+# (workspace tools dir), because the default %LOCALAPPDATA%\ms-playwright
+# cache is not writable in this sandbox and playwright's own installer is
+# blocked. Takes effect after the profile restarts.
+- id: browser
+  config:
+    executablePath: 'C:\Users\admin\WorkBuddy\2026-08-17-13-57-38\dsh-workspace\tools\chrome\chrome-win64\chrome.exe'

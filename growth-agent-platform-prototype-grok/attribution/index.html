@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PowerTokens 归因面板</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwind.config = { theme: { extend: { colors: { zinc: { 850: "#1f1f23", 950: "#09090b" } } } } };</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="styles.css?v=1788769502" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar px-3 py-4 flex flex-col gap-2">
+      <div class="flex items-center gap-3 px-2 mb-4">
+        <div class="logo-mark">P</div>
+        <div class="brand-text">
+          <div class="text-sm font-semibold text-zinc-100 leading-tight">PowerTokens</div>
+          <div class="text-[11px] text-zinc-500">归因面板</div>
+        </div>
+      </div>
+      <nav class="flex flex-col gap-1 flex-1">
+        <button type="button" class="nav-item active" data-page="overview">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+          <span class="nav-label">总览 Overview</span>
+        </button>
+        <button type="button" class="nav-item" data-page="creatives">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M4 12h10M4 17h14"/><circle cx="18" cy="12" r="2"/></svg>
+          <span class="nav-label">素材归因 Creatives</span>
+        </button>
+        <button type="button" class="nav-item" data-page="users">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span class="nav-label">用户行为 Users</span>
+        </button>
+        <button type="button" class="nav-item" data-page="product">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/><circle cx="12" cy="12" r="3"/></svg>
+          <span class="nav-label">产品行为 Product</span>
+        </button>
+        <button type="button" class="nav-item" data-page="ads">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+          <span class="nav-label">投放/接入健康</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer px-2 pt-3 border-t border-zinc-800 mt-2">
+        <div class="text-[10px] text-zinc-600 leading-relaxed">Internal · Demo Prototype<br/>PowerTokens.ai Attribution</div>
+      </div>
+    </aside>
+    <div class="main-area">
+      <div class="filter-bar">
+        <div class="flex flex-wrap items-center gap-2 mb-1">
+          <h1 class="text-base font-semibold text-zinc-100 mr-2">PowerTokens 归因面板</h1>
+          <span class="badge badge-violet">末触 UTM</span>
+          <span class="badge badge-zinc">Demo · Mock Data</span>
+          <span class="badge badge-emerald" id="proto-build">build 769502</span>
+          <div id="creative-filter-chip" class="hidden ml-1"></div>
+          <button type="button" id="filter-collapse-btn" class="preset-btn ml-auto" aria-expanded="true">收起筛选</button>
+        </div>
+        <div class="caliber-line muted">口径：SS-GTM→Collect + 广告落库（Demo · Mock）</div>
+        <div id="filter-collapsed-summary" class="filter-collapsed-summary hidden"></div>
+        <div id="filter-tag-wall" class="filter-tag-wall"></div>
+      </div>
+      <main id="main-scroll">
+        <section id="page-overview" class="page active">
+          <div id="overview-kpis" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-4"></div>
+          <div class="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+            <div class="card"><h2 class="section-title">转化漏斗 <span class="muted" style="font-weight:400;font-size:11px">事件侧 · 注册→Key→调用→充值</span></h2><div class="chart-wrap"><canvas id="chart-funnel"></canvas></div></div>
+            <div class="card"><h2 class="section-title">平台对比（消耗 / 充值 / 注册×10）</h2><div class="chart-wrap"><canvas id="chart-platform"></canvas></div></div>
+          </div>
+          <div class="card mb-4"><h2 class="section-title">每日趋势：消耗 vs 注册 vs 充值（随筛选）</h2><div class="chart-wrap" style="height:300px"><canvas id="chart-trend"></canvas></div></div>
+          <div id="overview-models" class="mb-4">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div class="card">
+                <h2 class="section-title">调用渠道</h2>
+                <div class="chart-wrap" style="height:220px"><canvas id="chart-overview-channels"></canvas></div>
+                <div id="overview-channel-stats" class="mt-2 text-xs muted"></div>
+              </div>
+              <div class="card lg:col-span-2">
+                <h2 class="section-title mb-0">全局模型明细</h2>
+                <div id="overview-models-filter-hint" class="muted text-xs mb-2">筛选：调用来源 = 全部</div>
+                <div id="overview-models-table" class="table-scroll"></div>
+              </div>
+            </div>
+          </div>
+          <div id="overview-countries" class="card mb-4">
+                <h2 class="section-title">国家漏斗对比</h2>
+            <p class="muted text-xs mb-3">广告侧（落地UV/点击/消耗）与事件侧（注册/Key/调用/充值）分列展示。点击国家行展开下钻；再点漏斗阶段数字展开用户列表（user_id 可跳转 Users）。</p>
+            <div id="overview-countries-table" class="table-scroll"></div>
+            <div id="overview-country-detail" class="country-detail hidden mt-4"></div>
+          </div>
+        </section>
+        <section id="page-creatives" class="page">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="section-title mb-0">素材归因明细</h2>
+            <span class="muted text-xs">平台 → 计划 → 素材 → 落地 URL（UTM）</span>
+          </div>
+          <p class="muted text-xs mb-3">缩略图来自广告同步入库的 thumbnail_url（Demo 为占位图）</p>
+          <div id="creatives-table-wrap"></div>
+        </section>
+        <section id="page-users" class="page">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="section-title mb-0">用户行为</h2>
+            <span id="users-count" class="muted text-xs"></span>
+          </div>
+          <div id="users-cohort-summary" class="hidden mb-4"></div>
+          <div id="users-list"></div>
+        </section>
+        <section id="page-product" class="page">
+          <div id="product-empty" style="display:none"></div>
+          <div id="product-content">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+              <div class="card"><h2 class="section-title">注册方式分布</h2><div class="chart-wrap"><canvas id="chart-reg-method"></canvas></div></div>
+              <div class="card"><h2 class="section-title">Key 创建页面分布</h2><div class="chart-wrap"><canvas id="chart-key-page"></canvas></div></div>
+            </div>
+            <div id="product-call-stats" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4"></div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+              <div class="card"><h2 class="section-title">调用渠道</h2><div class="chart-wrap"><canvas id="chart-call-source"></canvas></div></div>
+              <div class="card"><h2 class="section-title">模型 Top</h2><div class="chart-wrap"><canvas id="chart-models"></canvas></div></div>
+              <div class="card"><h2 class="section-title">API Tools</h2><div class="chart-wrap"><canvas id="chart-tools"></canvas></div></div>
+            </div>
+            <div class="card">
+              <div class="flex items-center justify-between mb-2">
+                <h2 class="section-title mb-0">充值档位分布</h2>
+                <div class="text-xs muted">自动充值开通率 <strong id="auto-recharge-rate" class="text-emerald-300">—</strong></div>
+              </div>
+              <div class="chart-wrap" style="height:220px"><canvas id="chart-recharge"></canvas></div>
+            </div>
+          </div>
+        </section>
+        <section id="page-ads" class="page">
+          <!-- filled entirely by renderAdsHealth on navigate -->
+        </section>
+      </main>
+    </div>
+  </div>
+  <div id="drawer-overlay" class="drawer-overlay"></div>
+  <aside id="user-drawer" class="drawer drawer-wide" aria-hidden="true">
+    <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-zinc-700">
+      <div>
+        <div id="drawer-title" class="text-lg font-semibold">用户详情</div>
+        <div id="drawer-subtitle" class="text-xs text-zinc-500 mt-0.5"></div>
+      </div>
+      <button type="button" id="drawer-close" class="preset-btn" aria-label="关闭">关闭</button>
+    </div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </aside>
+  <script src="app.js?v=1788769502"></script>
+</body>
+</html>
