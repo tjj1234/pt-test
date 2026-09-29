@@ -48,10 +48,7 @@ function createTokenVerifier(pool) {
       const d = row.expires_at instanceof Date ? row.expires_at : new Date(row.expires_at);
       if (!Number.isNaN(d.getTime())) expiresAt = d.getTime();
     }
-    // B13：expires_at 此前查出却从未比对，导致过期 token 永久有效。
-    // 已设置过期时间且已到/超过该时刻 → 视为无效（返回 null，路由层按 403 处理）。
-    if (expiresAt !== null && expiresAt <= Date.now()) return null;
-
+    // Return expiry metadata so each protected route can reject expired tokens with HTTP 401.
     // 异步更新 last_used_at（失败不影响鉴权）
     pool
       .query(`UPDATE analytics_tokens SET last_used_at = now() WHERE token_hash = $1`, [hash])

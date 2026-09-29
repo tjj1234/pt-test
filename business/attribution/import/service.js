@@ -124,7 +124,7 @@ function createImportService(opts = {}) {
       abs2 = store.saveFile(context.tenantId, sourceFileId2, buf2, fileExt(originalName2));
     }
 
-    store.createJob({
+    await store.createJob({
       importId,
       tenantId: context.tenantId,
       workspaceId: context.workspaceId,
@@ -158,7 +158,7 @@ function createImportService(opts = {}) {
       records: null,
     });
 
-    store.updateJob(context.tenantId, importId, { status: "validating" });
+    await store.updateJob(context.tenantId, importId, { status: "validating" });
 
     try {
       const parsed = parseExportFile({
@@ -175,7 +175,7 @@ function createImportService(opts = {}) {
 
       if (parsed.code === "MAPPING_INCOMPLETE") {
         return publicJob(
-          store.updateJob(context.tenantId, importId, {
+          await store.updateJob(context.tenantId, importId, {
             status: "ready",
             headers: parsed.headers,
             sampleRows: [],
@@ -203,7 +203,7 @@ function createImportService(opts = {}) {
       }));
 
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "ready",
           headers: parsed.headers,
           mapping: parsed.mapping,
@@ -222,7 +222,7 @@ function createImportService(opts = {}) {
       );
     } catch (err) {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           errorMessage: err && err.message ? err.message : String(err),
           finishedAt: new Date().toISOString(),
@@ -235,7 +235,7 @@ function createImportService(opts = {}) {
     if (!context || !context.tenantId || !context.workspaceId) {
       throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
     }
-    const job = store.getJob(context.tenantId, importId);
+    const job = await store.getJob(context.tenantId, importId);
     if (!job) return null;
     if (TERMINAL.has(job.status)) return publicJob(job);
     if (job.status !== "ready" && job.status !== "pending" && job.status !== "validating") {
@@ -244,11 +244,11 @@ function createImportService(opts = {}) {
       });
     }
 
-    store.updateJob(context.tenantId, importId, { status: "importing" });
+    await store.updateJob(context.tenantId, importId, { status: "importing" });
     const file = store.readFile(context.tenantId, job.sourceFileId);
     if (!file) {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           errorMessage: "原文件缺失",
           finishedAt: new Date().toISOString(),
@@ -264,7 +264,7 @@ function createImportService(opts = {}) {
 
     if (!parsed.ok && parsed.code === "MAPPING_INCOMPLETE") {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           mapping: parsed.mapping,
           errorMessage: "映射不完整",
@@ -276,7 +276,7 @@ function createImportService(opts = {}) {
 
     if (!parsed.records || !parsed.records.length) {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           mapping: parsed.mapping,
           mappingAudit: parsed.mappingAudit,
@@ -300,7 +300,7 @@ function createImportService(opts = {}) {
       persistErrors = result.persistErrors;
     } catch (err) {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           mapping: parsed.mapping,
           mappingAudit: parsed.mappingAudit,
@@ -337,7 +337,7 @@ function createImportService(opts = {}) {
     }
 
     return publicJob(
-      store.updateJob(context.tenantId, importId, {
+      await store.updateJob(context.tenantId, importId, {
         status,
         mapping: parsed.mapping,
         mappingAudit: parsed.mappingAudit,
@@ -364,18 +364,18 @@ function createImportService(opts = {}) {
     );
   }
 
-  function getJob(context, importId) {
+  async function getJob(context, importId) {
     if (!context || !context.tenantId) {
       throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
     }
-    return publicJob(store.getJob(context.tenantId, importId));
+    return publicJob(await store.getJob(context.tenantId, importId));
   }
 
-  function listJobs(context, limit) {
+  async function listJobs(context, limit) {
     if (!context || !context.tenantId) {
       throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
     }
-    return store.listJobs(context.tenantId, limit).map(publicJob);
+    return (await store.listJobs(context.tenantId, limit)).map(publicJob);
   }
 
   function getWorkspaceMeta(context) {

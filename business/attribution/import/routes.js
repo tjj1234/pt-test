@@ -15,6 +15,7 @@ function registerImportRoutes(app, opts = {}) {
     verifyAnalyticsToken,
     resolveWorkspaceId,
     parseAuthorization,
+    now = Date.now,
     pool,
     importService = createImportService({ ...opts, pool }),
   } = opts;
@@ -31,6 +32,9 @@ function registerImportRoutes(app, opts = {}) {
     const auth = await verifyAnalyticsToken(parsedAuth);
     if (!auth) {
       return reply.code(403).send({ ok: false, error: { code: "FORBIDDEN", message: "invalid token" } });
+    }
+    if (auth.expires_at != null && auth.expires_at <= now()) {
+      return reply.code(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "expired token" } });
     }
     const tenantId = auth.tenant_id;
     if (!isUuid(tenantId)) {
@@ -54,14 +58,14 @@ function registerImportRoutes(app, opts = {}) {
   app.get("/api/business/attribution/import/jobs", async (request, reply) => {
     const ctx = await authContext(request, reply);
     if (reply.sent) return;
-    const jobs = importService.listJobs(ctx, 50);
+    const jobs = await importService.listJobs(ctx, 50);
     return { ok: true, jobs };
   });
 
   app.get("/api/business/attribution/import/jobs/:importId", async (request, reply) => {
     const ctx = await authContext(request, reply);
     if (reply.sent) return;
-    const job = importService.getJob(ctx, request.params.importId);
+    const job = await importService.getJob(ctx, request.params.importId);
     if (!job) return reply.code(404).send({ ok: false, error: { code: "NOT_FOUND", message: "job not found" } });
     return { ok: true, job };
   });

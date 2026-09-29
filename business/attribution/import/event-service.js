@@ -97,7 +97,7 @@ function createEventImportService(opts = {}) {
   );
   const storageDir =
     opts.storageDir || process.env.PT_EVENT_IMPORT_STORAGE_DIR || defaultEventStorage;
-  const store = opts.store || createImportStore({ storageDir });
+  const store = opts.store || createImportStore({ storageDir, pool: opts.pool });
   const pool = opts.pool || null;
   const adapter =
     opts.adapter ||
@@ -126,7 +126,7 @@ function createEventImportService(opts = {}) {
     const originalName = (input && input.originalName) || "events.csv";
     const abs = store.saveFile(context.tenantId, sourceFileId, buf, fileExt(originalName));
 
-    store.createJob({
+    await store.createJob({
       importId,
       kind: "event",
       tenantId: context.tenantId,
@@ -154,7 +154,7 @@ function createEventImportService(opts = {}) {
       records: null,
     });
 
-    store.updateJob(context.tenantId, importId, { status: "validating" });
+    await store.updateJob(context.tenantId, importId, { status: "validating" });
 
     try {
       const parsed = parseEventExportFile({
@@ -167,7 +167,7 @@ function createEventImportService(opts = {}) {
 
       if (parsed.code === "MAPPING_INCOMPLETE") {
         return publicJob(
-          store.updateJob(context.tenantId, importId, {
+          await store.updateJob(context.tenantId, importId, {
             status: "ready",
             headers: parsed.headers,
             sampleRows: [],
@@ -189,7 +189,7 @@ function createEventImportService(opts = {}) {
       }));
 
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "ready",
           headers: parsed.headers,
           mapping: parsed.mapping,
@@ -208,7 +208,7 @@ function createEventImportService(opts = {}) {
       );
     } catch (err) {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           errorMessage: err && err.message ? err.message : String(err),
           finishedAt: new Date().toISOString(),
@@ -221,7 +221,7 @@ function createEventImportService(opts = {}) {
     if (!context || !context.tenantId || !context.workspaceId) {
       throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
     }
-    const job = store.getJob(context.tenantId, importId);
+    const job = await store.getJob(context.tenantId, importId);
     if (!job) return null;
     if (TERMINAL.has(job.status)) return publicJob(job);
     if (job.status !== "ready" && job.status !== "pending" && job.status !== "validating") {
@@ -230,11 +230,11 @@ function createEventImportService(opts = {}) {
       });
     }
 
-    store.updateJob(context.tenantId, importId, { status: "importing" });
+    await store.updateJob(context.tenantId, importId, { status: "importing" });
     const file = store.readFile(context.tenantId, job.sourceFileId);
     if (!file) {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           errorMessage: "原文件缺失",
           finishedAt: new Date().toISOString(),
@@ -244,7 +244,7 @@ function createEventImportService(opts = {}) {
 
     if (!pool || typeof pool.connect !== "function") {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           errorMessage: "导入落库需要 pool",
           finishedAt: new Date().toISOString(),
@@ -263,7 +263,7 @@ function createEventImportService(opts = {}) {
 
     if (!parsed.ok && parsed.code === "MAPPING_INCOMPLETE") {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           mapping: parsed.mapping,
           errorMessage: "映射不完整",
@@ -275,7 +275,7 @@ function createEventImportService(opts = {}) {
 
     if (!parsed.records || !parsed.records.length) {
       return publicJob(
-        store.updateJob(context.tenantId, importId, {
+        await store.updateJob(context.tenantId, importId, {
           status: "failed",
           mapping: parsed.mapping,
           mappingAudit: parsed.mappingAudit,
@@ -313,7 +313,7 @@ function createEventImportService(opts = {}) {
     else status = "failed";
 
     return publicJob(
-      store.updateJob(context.tenantId, importId, {
+      await store.updateJob(context.tenantId, importId, {
         status,
         mapping: parsed.mapping,
         mappingAudit: parsed.mappingAudit,
@@ -340,21 +340,21 @@ function createEventImportService(opts = {}) {
     );
   }
 
-  function getJob(context, importId) {
+  async function getJob(context, importId) {
     if (!context || !context.tenantId) {
       throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
     }
-    const job = store.getJob(context.tenantId, importId);
+    const job = await store.getJob(context.tenantId, importId);
     if (job && job.kind && job.kind !== "event") return null;
     return publicJob(job);
   }
 
-  function listJobs(context, limit) {
+  async function listJobs(context, limit) {
     if (!context || !context.tenantId) {
       throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
     }
-    return store
-      .listJobs(context.tenantId, limit)
+    return (await store
+      .listJobs(context.tenantId, limit))
       .filter((j) => !j.kind || j.kind === "event")
       .map(publicJob);
   }

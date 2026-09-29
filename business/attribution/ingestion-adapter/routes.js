@@ -10,6 +10,7 @@ function registerIngestionAdapterRoutes(app, opts = {}) {
     verifyAnalyticsToken,
     resolveWorkspaceId,
     parseAuthorization,
+    now = Date.now,
     adapter = createIngestionAdapter(opts),
   } = opts;
 
@@ -25,6 +26,9 @@ function registerIngestionAdapterRoutes(app, opts = {}) {
     const auth = await verifyAnalyticsToken(parsedAuth);
     if (!auth) {
       return reply.code(403).send({ ok: false, error: { code: "FORBIDDEN", message: "invalid token" } });
+    }
+    if (auth.expires_at != null && auth.expires_at <= now()) {
+      return reply.code(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "expired token" } });
     }
     const tenantId = auth.tenant_id;
     if (!isUuid(tenantId)) {
