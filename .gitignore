@@ -55,6 +55,9 @@ desktop.ini
 .idea/
 .vscode/
 
+# ---- agent 本地 memory / scratch（绝不提交；曾发生明文密钥误提交）----
+.workbuddy/
+
 # ---- ���ز��� runtime Ŀ¼�������������⣩----
 local-test-runtime*/
 browsertest-runtime/

@@ -24,11 +24,11 @@ function registerImportRoutes(app, opts = {}) {
     const parsedAuth =
       typeof parseAuthorization === "function"
         ? parseAuthorization(raw)
-        : { ok: typeof raw === "string" && raw.startsWith("Bearer "), token: raw && raw.slice(7) };
-    if (!parsedAuth || !parsedAuth.ok) {
+        : typeof raw === "string" && raw.startsWith("Bearer ") ? raw.slice(7) : null;
+    if (typeof parsedAuth !== "string" || parsedAuth.length === 0) {
       return reply.code(401).send({ ok: false, error: { code: "UNAUTHORIZED", message: "missing token" } });
     }
-    const auth = await verifyAnalyticsToken(parsedAuth.token);
+    const auth = await verifyAnalyticsToken(parsedAuth);
     if (!auth) {
       return reply.code(403).send({ ok: false, error: { code: "FORBIDDEN", message: "invalid token" } });
     }
@@ -66,7 +66,7 @@ function registerImportRoutes(app, opts = {}) {
     return { ok: true, job };
   });
 
-  app.post("/api/business/attribution/import/jobs", async (request, reply) => {
+  app.post("/api/business/attribution/import/jobs", { bodyLimit: 20 * 1024 * 1024 }, async (request, reply) => {
     const ctx = await authContext(request, reply);
     if (reply.sent) return;
     const body = request.body || {};

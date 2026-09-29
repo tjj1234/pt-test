@@ -1,6 +1,6 @@
 "use strict";
 /**
- * business/attribution · A0–A7 入口（A8 未批准）
+ * business/attribution · A0–A8 入口（A8：真实 Tool Registry；Panel 仍反代）
  */
 const contracts = require("./contracts/validate");
 const parsers = require("./parsers");
@@ -8,7 +8,7 @@ const persistence = require("./persistence");
 const workflows = require("./workflows");
 const { createEngineWorkflows, createAnalyticsWorkflows } = require("./workflows/engine");
 const { createPanelProjector } = require("./panel/projector");
-const { createMockRegistry } = require("./registry/mock");
+const registry = require("./registry");
 const { productionSeedPolicy } = require("./policy/seed");
 const importApi = require("./import");
 const ingestionAdapter = require("./ingestion-adapter");
@@ -22,13 +22,17 @@ module.exports = {
   createEngineWorkflows,
   createAnalyticsWorkflows,
   createPanelProjector,
-  createMockRegistry,
+  createMockRegistry: registry.createMockRegistry,
+  createAttributionRegistry: registry.createAttributionRegistry,
+  registerAttributionQueryTool: registry.registerAttributionQueryTool,
+  callAttributionQuery: registry.callAttributionQuery,
   productionSeedPolicy,
   import: importApi,
   ingestionAdapter,
   api: attributionApi,
+  registry,
   packageName: "business/attribution",
-  slice: "A18",
-  a8Approved: false,
+  slice: "A18-A19",
+  a8Approved: true,
   baseline: "origin/main@96b7b28",
 };

@@ -24,7 +24,7 @@ function fmtShort(ts) {
 }
 
 /* ---- 视图切换 ---- */
-const TITLES = { chat: "对话", dash: "归因看板", skills: "技能", status: "运行状态", memory: "长期记忆" };
+const TITLES = { home: "首页", flows: "业务流库", schedule: "调度与执行", dash: "归因看板", history: "对话历史", chat: "对话", skills: "技能", status: "运行状态", memory: "长期记忆", members: "成员与权限", usage: "用量与日志" };
 function switchView(v) {
   document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("on", x.dataset.v === v));
   document.querySelectorAll(".view").forEach(x => x.classList.toggle("on", x.id === "v-" + v));
@@ -33,8 +33,26 @@ function switchView(v) {
   if (v === "skills") loadSkills();
   if (v === "status") loadStatus();
   if (v === "memory") loadMemory();
+  if (v === "history") refreshList();
 }
 document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => switchView(b.dataset.v)));
+
+/* ---- U0：首页品牌点击返回 + 三张引导卡片 ---- */
+const brandHome = $("#brandHome");
+if (brandHome) {
+  brandHome.addEventListener("click", () => switchView("home"));
+  brandHome.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); switchView("home"); } });
+}
+document.querySelectorAll(".gbtn[data-card]").forEach(b => b.addEventListener("click", () => {
+  const c = b.dataset.card;
+  if (c === "flow") switchView("flows");
+  else if (c === "trial") switchView("skills");           // 试用单点能力 → 技能面板
+  else if (c === "chat") {                                  // 开始对话 → 进入对话
+    if (state.activeId) switchView("chat");
+    else if (state.list.length) openConversation(state.list[0].id);
+    else newConversation();
+  }
+}));
 
 /* ---- 气泡 ---- */
 function bubbleSys(text) {
@@ -502,9 +520,9 @@ if (userEntry && userMenu) {
       closeUserMenu();
     }
   });
-  // 点菜单项（非链接）后自动关闭
+  // 点菜单项（非链接）后自动关闭并跳转对应视图
   userMenu.querySelectorAll(".um-item[data-goto]").forEach(it => {
-    it.addEventListener("click", () => closeUserMenu());
+    it.addEventListener("click", () => { closeUserMenu(); switchView(it.dataset.goto); });
   });
 }
 
@@ -909,8 +927,6 @@ if (mySharesBtn) mySharesBtn.addEventListener("click", openMyShares);
   try { const j = await (await fetch("/api/status")).json(); $("#pDash").textContent = "看板 " + (j.dashboardOk ? "在线" : "离线"); $("#pDash").className = "pill " + (j.dashboardOk ? "ok" : "bad"); } catch (e) {}
   loadKeyState();
   loadModels();
-  await refreshList();
-  if (state.list.length) await openConversation(state.list[0].id);
-  else renderChat([]);
-  ta.focus();
+  await refreshList();   // 预拉对话列表，对话历史视图打开即见
+  switchView("home");    // 默认落地首页（U0 三卡片 + chip 行）
 })();

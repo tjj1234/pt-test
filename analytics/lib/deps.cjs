@@ -27,14 +27,14 @@ const { sha256Hex } = require("./db.cjs");
 
 /**
  * @param {object} pool pg 兼容连接池
- * @returns {(token: string) => Promise<{tenant_id:string, scopes:string[], expires_at:number|null}|null>}
+ * @returns {(token: string) => Promise<{tenant_id:string, scopes:string[], expires_at:number|null, label:string|null}|null>}
  */
 function createTokenVerifier(pool) {
   return async function verifyAnalyticsToken(token) {
     if (typeof token !== "string" || token.length === 0) return null;
     const hash = sha256Hex(token);
     const res = await pool.query(
-      `SELECT tenant_id::text AS tenant_id, scopes, expires_at, status
+      `SELECT tenant_id::text AS tenant_id, scopes, expires_at, status, label
          FROM analytics_tokens
         WHERE token_hash = $1`,
       [hash]
@@ -48,6 +48,9 @@ function createTokenVerifier(pool) {
       const d = row.expires_at instanceof Date ? row.expires_at : new Date(row.expires_at);
       if (!Number.isNaN(d.getTime())) expiresAt = d.getTime();
     }
+    // B13：expires_at 此前查出却从未比对，导致过期 token 永久有效。
+    // 已设置过期时间且已到/超过该时刻 → 视为无效（返回 null，路由层按 403 处理）。
+    if (expiresAt !== null && expiresAt <= Date.now()) return null;
 
     // 异步更新 last_used_at（失败不影响鉴权）
     pool
@@ -58,6 +61,9 @@ function createTokenVerifier(pool) {
       tenant_id: row.tenant_id,
       scopes: Array.isArray(row.scopes) ? row.scopes : ["analytics:read"],
       expires_at: expiresAt,
+      // B13：透传 label，供业务线路由（import / ingestion）记录 actorId（发起人），
+      // 此前缺失导致 import 任务的 actorId 永远为 null。
+      label: row.label ?? null,
     };
   };
 }

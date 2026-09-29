@@ -1,6 +1,12 @@
 "use strict";
 /**
- * A6 · Mock Panel / Tool Registry（不接 DSH、不改基座）
+ * A6 · Mock Panel / Tool Registry（历史路径）
+ *
+ * A8 起：attribution.query 生产注册请用 ./tool.js → shell registerTool。
+ * 本文件仅保留：
+ *   - Panel 内存注册（基座无 Panel Registry，A8 明确不做面板接入）
+ *   - DEFAULT_PANEL / DEFAULT_TOOL 常量
+ *   - A3–A7 单测兼容（createMockRegistry）
  */
 const panelContract = require("../contracts/panel-registration.json");
 const toolContract = require("../contracts/tool-registration.json");
