@@ -191,6 +191,11 @@ async function createPgCompatPool(opts) {
         path: path.join(__dirname, "..", "..", "business", "attribution", "schema", "a2_raw_dlq.sql"),
         isPsqlScript: false,
       },
+      {
+        label: "a22_import_jobs.sql",
+        path: path.join(__dirname, "..", "..", "business", "attribution", "schema", "a22_import_jobs.sql"),
+        isPsqlScript: false,
+      },
     ];
 
     for (const f of files) {

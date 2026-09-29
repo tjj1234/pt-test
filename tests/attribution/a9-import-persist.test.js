@@ -5,7 +5,11 @@
 const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
+const fastify = require("../../analytics/node_modules/fastify");
 const { createImportService } = require("../../business/attribution/import");
+const { createImportStore } = require("../../business/attribution/import/store");
+const { registerImportRoutes } = require("../../business/attribution/import/routes");
+const { parseAuthorization } = require("../../analytics/backend/events/query.js");
 const { toDailyMetricRow } = require("../../business/attribution/import/toDailyMetricRow");
 const { createPgCompatPool } = require("../../analytics/lib/db.cjs");
 
@@ -103,7 +107,11 @@ async function run() {
   assert(r3 && approx(r3.spend, 95.25), "day2 spend");
 
   // 无 pool → failed，避免再静默假成功
-  const svcNoPool = createImportService({ storageDir: fs.mkdtempSync(path.join(os.tmpdir(), "pt-a9-np-")) });
+  const noPoolStorage = fs.mkdtempSync(path.join(os.tmpdir(), "pt-a9-np-"));
+  const svcNoPool = createImportService({
+    storageDir: noPoolStorage,
+    store: createImportStore({ storageDir: noPoolStorage, pool }),
+  });
   const ready2 = await svcNoPool.createAndValidate(ctx, {
     provider: "meta",
     originalName: "meta-ads.csv",
@@ -114,12 +122,47 @@ async function run() {
   assert(/pool/i.test(failed.errorMessage || ""), "pool error message");
 
   await pool.end();
+  const restartedPool = await createPgCompatPool({
+    dataDir,
+    migrationsDir: path.join(__dirname, "../../analytics/backend/db"),
+    deliveryMigrationsDir: path.join(__dirname, "../../analytics/schema"),
+    recoverStalePidFile: true,
+    log: () => {},
+  });
+  const restartedService = createImportService({ storageDir, pool: restartedPool });
+  const afterRestart = await restartedService.getJob(ctx, ready.importId);
+  assert(afterRestart && afterRestart.status === "completed", "job survives database/service restart");
+  const listedAfterRestart = await restartedService.listJobs(ctx);
+  assert(listedAfterRestart.some((job) => job.importId === ready.importId), "GET jobs survives restart");
+  const app = fastify({ logger: false });
+  registerImportRoutes(app, {
+    pool: restartedPool,
+    importService: restartedService,
+    verifyAnalyticsToken: async (token) =>
+      token === "a22-restart-token" ? { tenant_id: ctx.tenantId, label: "a22-test" } : null,
+    resolveWorkspaceId: async () => ctx.workspaceId,
+    parseAuthorization,
+  });
+  const jobsResponse = await app.inject({
+    method: "GET",
+    url: "/api/business/attribution/import/jobs",
+    headers: { authorization: "Bearer a22-restart-token" },
+  });
+  assert(jobsResponse.statusCode === 200, "GET /jobs after restart returns 200");
+  assert(
+    jobsResponse.json().jobs.some((job) => job.importId === ready.importId),
+    "GET /jobs after restart includes completed import"
+  );
+  await app.close();
+  await restartedPool.end();
   console.log(
     JSON.stringify(
       {
         ok: true,
         importId: ready.importId,
         dbRows: res.rows.length,
+        survivesRestart: afterRestart.status,
+        httpJobsAfterRestart: jobsResponse.statusCode,
         sample: { spend: r1.spend, entity_id: r1.entity_id, date: r1.date },
       },
       null,
