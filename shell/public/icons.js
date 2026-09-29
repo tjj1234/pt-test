@@ -84,6 +84,12 @@ window.ICONS.key = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" s
 /* 首页（U0 落地页导航入口） */
 window.ICONS.home = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 12 4l8 7.5"/><path d="M6 10v9.5a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1V10"/><path d="M10 20.5v-5h4v5"/></svg>';
 
+/* U1：广告数据导入（上传 / 两步校验） */
+window.ICONS.upload = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16.2V4.8"/><path d="M7.6 9.2 12 4.8l4.4 4.4"/><path d="M4.5 14.8v3.7a1.5 1.5 0 0 0 1.5 1.5h12a1.5 1.5 0 0 0 1.5-1.5v-3.7"/></svg>';
+window.ICONS.checkCircle = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.4"/><path d="m8.4 12.2 2.5 2.5 4.7-4.9"/></svg>';
+window.ICONS.xCircle = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.4"/><path d="m9.2 9.2 5.6 5.6M14.8 9.2l-5.6 5.6"/></svg>';
+window.ICONS.spinner = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3.6a8.4 8.4 0 1 0 8.4 8.4" opacity=".9"/><path d="M12 3.6a8.4 8.4 0 0 1 8.4 8.4" opacity=".25"/></svg>';
+
 
 /* 启动 */
 window.initIcons = function(){ document.querySelectorAll('[data-ico]').forEach(function(el){ var n=el.getAttribute('data-ico'); var s=window.ICONS[n]; if(s) el.innerHTML=s; }); };

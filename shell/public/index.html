@@ -49,6 +49,7 @@
       <div class="nav-group">
         <div class="nav-group-title">数据面板</div>
         <button data-v="dash"><span class="ico" data-ico="chartBar"></span>PowerTokens 归因面板</button>
+        <button data-v="import"><span class="ico" data-ico="upload"></span>广告数据导入</button>
       </div>
 
       <!-- ③ 对话历史 -->
@@ -162,6 +163,95 @@
       </div>
       <iframe id="dashFrame" src="about:blank"></iframe>
     </section>
+
+    <!-- ============ 数据面板：广告数据导入（U1） ============ -->
+    <section class="view" id="v-import"><div class="page imp-page">
+
+      <!-- 两步说明：结构校验 ≠ 最终入库，这是 A18 两阶段设计 -->
+      <div class="imp-steps">
+        <div class="imp-step" id="impStep1">
+          <span class="imp-step-n">1</span>
+          <div class="imp-step-t">
+            <b>上传并结构校验</b>
+            <span>检查表头、列映射、每行格式是否合法</span>
+          </div>
+        </div>
+        <span class="imp-step-arrow"><span class="ico" data-ico="chevronRight"></span></span>
+        <div class="imp-step" id="impStep2">
+          <span class="imp-step-n">2</span>
+          <div class="imp-step-t">
+            <b>确认导入入库</b>
+            <span>再做一次语义校验，可能刷掉部分行</span>
+          </div>
+        </div>
+      </div>
+      <p class="imp-note">
+        <span class="ico" data-ico="bulb"></span>
+        两步的行数<b>可能不一样</b>，这是设计如此、不是 bug：第 1 步只保证「格式读得懂」，
+        第 2 步才会按业务规则（如事件名不在映射表里）再筛一遍。以第 2 步的最终结果为准。
+      </p>
+
+      <!-- 表单：选平台 → 选文件 -->
+      <div class="imp-card">
+        <div class="imp-card-h"><span class="ico" data-ico="upload"></span> 新建导入</div>
+        <div class="imp-form">
+          <div class="imp-field">
+            <label for="impProvider">广告平台</label>
+            <div class="imp-provs" id="impProvs">
+              <button type="button" class="imp-prov on" data-prov="google"><span class="ico" data-ico="search"></span>Google Ads</button>
+              <button type="button" class="imp-prov" data-prov="meta"><span class="ico" data-ico="facebook"></span>Meta Ads</button>
+              <button type="button" class="imp-prov" data-prov="x"><span class="ico" data-ico="bolt"></span>X (Twitter)</button>
+            </div>
+            <p class="imp-hint">选错平台不会导入错数据 —— 后端会按表头特征列自动识别，这里的选择只作为提示。</p>
+          </div>
+
+          <div class="imp-field">
+            <label for="impFile">导出文件</label>
+            <div class="imp-drop" id="impDrop">
+              <input type="file" id="impFile" accept=".csv,.xlsx,.xls,text/csv" hidden>
+              <div class="imp-drop-in" id="impDropIn">
+                <span class="ico" data-ico="fileText"></span>
+                <b>点击选择文件</b>
+                <span class="imp-drop-sub">支持 CSV / XLSX / XLS，单个文件上限 20MB</span>
+              </div>
+              <div class="imp-file-on" id="impFileOn" hidden>
+                <span class="ico" data-ico="fileText"></span>
+                <span class="imp-file-name" id="impFileName"></span>
+                <span class="imp-file-size" id="impFileSize"></span>
+                <button type="button" class="imp-file-x" id="impFileClear" title="移除"><span class="ico" data-ico="close"></span></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="imp-actions">
+            <button type="button" class="gbtn primary" id="impUpload" disabled>
+              <span class="ico" data-ico="upload"></span> 上传并结构校验
+            </button>
+            <span class="imp-busy" id="impBusy" hidden><span class="ico spin" data-ico="spinner"></span> 正在校验…</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 当前任务结果 -->
+      <div class="imp-card" id="impResultCard" hidden>
+        <div class="imp-card-h">
+          <span class="ico" data-ico="clipboard"></span> 本次任务
+          <span class="imp-jobid" id="impJobId"></span>
+        </div>
+        <div id="impResult"></div>
+      </div>
+
+      <!-- 历史任务 -->
+      <div class="imp-card">
+        <div class="imp-card-h">
+          <span class="ico" data-ico="clock"></span> 最近导入任务
+          <div class="sp"></div>
+          <button type="button" class="imp-refresh" id="impRefresh"><span class="ico" data-ico="refresh"></span> 刷新</button>
+        </div>
+        <div id="impHistory"><div class="imp-empty">加载中…</div></div>
+      </div>
+
+    </div></section>
 
     <!-- ============ 对话历史（可折叠列表，复用 /api/conversations） ============ -->
     <section class="view" id="v-history"><div class="page">
