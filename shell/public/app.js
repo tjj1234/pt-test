@@ -24,7 +24,7 @@ function fmtShort(ts) {
 }
 
 /* ---- 视图切换 ---- */
-const TITLES = { home: "首页", flows: "业务流库", schedule: "调度与执行", dash: "归因看板", history: "对话历史", chat: "对话", skills: "技能", status: "运行状态", memory: "长期记忆", members: "成员与权限", usage: "用量与日志" };
+const TITLES = { home: "首页", flows: "业务流库", schedule: "调度与执行", dash: "归因看板", import: "广告数据导入", history: "对话历史", chat: "对话", skills: "技能", status: "运行状态", memory: "长期记忆", members: "成员与权限", usage: "用量与日志" };
 function switchView(v) {
   document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("on", x.dataset.v === v));
   document.querySelectorAll(".view").forEach(x => x.classList.toggle("on", x.id === "v-" + v));
@@ -34,6 +34,7 @@ function switchView(v) {
   if (v === "status") loadStatus();
   if (v === "memory") loadMemory();
   if (v === "history") refreshList();
+  if (v === "import") impOnEnter();
 }
 document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => switchView(b.dataset.v)));
 
@@ -920,6 +921,437 @@ async function openMyShares() {
 const sharePanelBtn = $("#sharePanelBtn"), mySharesBtn = $("#mySharesBtn");
 if (sharePanelBtn) sharePanelBtn.addEventListener("click", openShareModal);
 if (mySharesBtn) mySharesBtn.addEventListener("click", openMyShares);
+
+/* ============================================================================
+ * U1 · 广告数据导入（选平台 → 上传 → 看状态 → 二次确认入库）
+ *
+ * 鉴权：抄「归因看板」的模式 —— 前端**不持有** token，请求打同源相对路径，
+ *       由 shell 服务端反代注入 Authorization: Bearer <分析token>。
+ *       （见 server.cjs 的 /api/analytics 反代；/api/business 反代待补，见 U1-API-GAPS.md）
+ *
+ * 两阶段（A18 设计）：POST /jobs 只做**结构校验** → ready；
+ *                     POST /jobs/:id/confirm 才**真正入库**，会再刷掉一批行。
+ *                     两步行数不同是设计如此，文案必须讲清楚。
+ * ========================================================================== */
+
+const IMP_API = "/api/business/attribution/import";
+const IMP_MAX_BYTES = 20 * 1024 * 1024;   // 与 service.js 的 20MB 上限一致
+
+/** 状态枚举 → 中文友好文案（绝不把英文枚举直接甩给用户） */
+const IMP_STATUS = {
+  pending:        { zh: "排队中",             tone: "wait" },
+  validating:     { zh: "结构校验中",         tone: "wait" },
+  ready:          { zh: "结构校验通过 · 待确认", tone: "ready" },
+  importing:      { zh: "正在入库",           tone: "wait" },
+  completed:      { zh: "导入完成",           tone: "ok" },
+  partial_failed: { zh: "部分行失败",         tone: "warn" },
+  failed:         { zh: "导入失败",           tone: "bad" },
+  cancelled:      { zh: "已取消",             tone: "muted" },
+};
+const IMP_TONE_ICO = { ok: "checkCircle", warn: "warn", bad: "xCircle", ready: "circleAmber", wait: "clock", muted: "dot" };
+
+/** 后端错误码 → 人话 */
+const IMP_ERR_ZH = {
+  UNAUTHORIZED: "登录状态没传过去（服务端未注入分析 token）",
+  FORBIDDEN: "分析 token 无效或已过期",
+  NO_WORKSPACE: "当前租户还没有绑定工作区",
+  NOT_FOUND: "找不到这个导入任务",
+  BAD_PROVIDER: "平台参数非法（需为 google / meta / x）",
+  EMPTY_FILE: "文件是空的",
+  TOO_LARGE: "文件超过 20MB 上限",
+  CLIENT_TENANT_REJECTED: "请求里不该带 tenantId（租户只认登录身份）",
+  CONTEXT_REQUIRED: "缺少租户上下文",
+  BAD_STATUS: "当前状态不允许确认导入",
+  POOL_REQUIRED: "后端数据库连接不可用",
+};
+
+const impState = { provider: "google", file: null, jobId: null, job: null, busy: false, loaded: false };
+
+function impEl(id) { return document.getElementById(id); }
+
+function impFmtBytes(n) {
+  if (n == null || isNaN(n)) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
+  return (n / 1024 / 1024).toFixed(2) + " MB";
+}
+
+function impStatusChip(status) {
+  const s = IMP_STATUS[status] || { zh: status || "未知", tone: "muted" };
+  const ico = IMP_TONE_ICO[s.tone] || "dot";
+  return '<span class="imp-chip imp-chip-' + s.tone + '"><span class="ico" data-ico="' + ico + '"></span>' + s.zh + "</span>";
+}
+
+/** 统一请求：同源相对路径 + same-origin 凭据，token 由服务端注入 */
+async function impFetch(path, opts) {
+  const o = Object.assign({ credentials: "same-origin" }, opts || {});
+  if (o.body && !o.headers) o.headers = { "Content-Type": "application/json" };
+  let res;
+  try {
+    res = await fetch(IMP_API + path, o);
+  } catch (e) {
+    throw Object.assign(new Error("网络请求失败：" + e.message), { impKind: "network" });
+  }
+  // 413：Fastify bodyLimit 挡在业务逻辑之前，响应体是 Fastify 默认格式
+  if (res.status === 413) {
+    throw Object.assign(new Error("请求体超过服务端上限（当前 1MB）。文件本身没超 20MB，是服务端 bodyLimit 配置偏小 —— 已记为缺口。"), { impKind: "413" });
+  }
+  if (res.status === 404) {
+    throw Object.assign(new Error("接口不存在（404）。shell 还没有把 /api/business/ 反代到归因服务 —— 已记为缺口。"), { impKind: "404" });
+  }
+  const j = await res.json().catch(() => null);
+  if (!res.ok) {
+    const code = j && j.error && j.error.code;
+    const msg = (j && j.error && j.error.message) || (j && j.message) || ("HTTP " + res.status);
+    const zh = code && IMP_ERR_ZH[code] ? IMP_ERR_ZH[code] : null;
+    throw Object.assign(new Error(zh ? zh + "（" + code + "）" : msg), { impKind: "http", status: res.status, code: code });
+  }
+  return j;
+}
+
+function impFileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => {
+      const s = String(r.result || "");
+      const i = s.indexOf(",");
+      resolve(i >= 0 ? s.slice(i + 1) : s);
+    };
+    r.onerror = () => reject(new Error("读取文件失败"));
+    r.readAsDataURL(file);
+  });
+}
+
+function impBusy(on, text) {
+  impState.busy = on;
+  const b = impEl("impBusy"), up = impEl("impUpload");
+  if (b) { b.hidden = !on; if (text) b.innerHTML = '<span class="ico spin" data-ico="spinner"></span> ' + text; }
+  if (up) up.disabled = on || !impState.file;
+  if (window.initIcons) window.initIcons();
+}
+
+/* ---- 错误详情：逐行展示，精确到行号 + 字段 + 原因 ---- */
+function impRenderErrors(details, extra) {
+  if (!details || !details.length) return "";
+  const rows = details.slice(0, 200).map(d => {
+    const rn = d.sourceRowNumber != null ? d.sourceRowNumber : "—";
+    const fd = d.field ? d.field : null;
+    const reason = d.reason || d.message || "未知原因";
+    return '<tr><td class="imp-err-row">第 ' + rn + ' 行</td>'
+      + '<td class="imp-err-field">' + (fd ? fd : "—") + "</td>"
+      + '<td class="imp-err-reason"></td></tr>';
+  }).join("");
+  const more = details.length > 200 ? '<p class="imp-more">另有 ' + (details.length - 200) + " 条未显示</p>" : "";
+  return '<div class="imp-errbox">'
+    + '<div class="imp-errbox-h"><span class="ico" data-ico="warn"></span> 有 ' + details.length + " 行没通过" + (extra ? " · " + extra : "") + "</div>"
+    + '<table class="imp-errtab"><thead><tr><th>源文件行号</th><th>字段</th><th>问题</th></tr></thead><tbody>' + rows + "</tbody></table>"
+    + more + "</div>";
+}
+
+/** 把 reason 文本安全填进单元格（避免 innerHTML 注入） */
+function impFillReasons(container, details) {
+  if (!container) return;
+  const cells = container.querySelectorAll(".imp-err-reason");
+  const list = (details || []).slice(0, 200);
+  cells.forEach((c, i) => { c.textContent = (list[i] && (list[i].reason || list[i].message)) || "未知原因"; });
+}
+
+/* ---- 渲染单个 job 的完整结果 ---- */
+function impRenderJob(job, phase) {
+  impState.job = job;
+  impState.jobId = job.importId;
+  const card = impEl("impResultCard"), box = impEl("impResult"), idEl = impEl("impJobId");
+  if (!card || !box) return;
+  card.hidden = false;
+  if (idEl) idEl.textContent = "任务 " + String(job.importId || "").slice(0, 8);
+
+  const st = job.status;
+  const isReady = st === "ready";
+  const isTerminal = ["completed", "partial_failed", "failed", "cancelled"].indexOf(st) >= 0;
+
+  // 数字区：结构校验阶段 vs 最终入库阶段，分开显示，避免用户误以为掉行是 bug
+  let nums = "";
+  const hasStruct = job.rowCount != null;
+  const hasFinal = job.successRows != null || job.persistedRows != null;
+  if (hasStruct || hasFinal) {
+    nums = '<div class="imp-nums">';
+    if (hasStruct) {
+      nums += '<div class="imp-num"><span class="imp-num-k">读到行数</span><span class="imp-num-v">' + job.rowCount + "</span></div>";
+    }
+    if (isReady) {
+      nums += '<div class="imp-num"><span class="imp-num-k">结构校验</span><span class="imp-num-v imp-v-ready">通过</span></div>';
+    }
+    if (hasFinal) {
+      nums += '<div class="imp-num"><span class="imp-num-k">最终入库</span><span class="imp-num-v imp-v-ok">' + (job.successRows != null ? job.successRows : (job.persistedRows || 0)) + "</span></div>";
+      if (job.failedRows) {
+        nums += '<div class="imp-num"><span class="imp-num-k">被刷掉</span><span class="imp-num-v imp-v-bad">' + job.failedRows + "</span></div>";
+      }
+    }
+    nums += "</div>";
+  }
+
+  // ready 阶段：明确告诉用户「这只是结构校验，还没入库」
+  let readyHint = "";
+  if (isReady) {
+    readyHint = '<div class="imp-ready-hint"><span class="ico" data-ico="bulb"></span>'
+      + "<div><b>结构校验通过，但数据还没入库。</b>"
+      + "下面这一步才会真正写入，并再做一次语义校验（比如事件名不在映射表里）——"
+      + "<b>最终成功行数可能比现在少，这是正常的</b>，不是丢数据。</div></div>";
+  }
+
+  // 终态：如果 ready 阶段的行数和最终不一致，主动解释
+  let diffNote = "";
+  if (isTerminal && phase === "confirm" && job.rowCount != null && job.successRows != null && job.successRows < job.rowCount) {
+    diffNote = '<div class="imp-diffnote"><span class="ico" data-ico="checkCircle"></span>'
+      + "<div>读到 " + job.rowCount + " 行，最终入库 " + job.successRows + " 行，"
+      + (job.failedRows ? "有 " + job.failedRows + " 行在语义校验或落库阶段被刷掉" : "差额来自语义校验")
+      + "。两步口径不同是 A18 两阶段校验的设计，不是 bug。</div></div>";
+  }
+
+  // 元信息
+  const meta = [];
+  if (job.provider) meta.push("平台 " + job.provider);
+  if (job.originalName) meta.push(job.originalName);
+  if (job.dateRange && job.dateRange.from) meta.push("数据区间 " + job.dateRange.from + " ~ " + job.dateRange.to);
+  if (job.currencySeen && job.currencySeen.length) meta.push("币种 " + job.currencySeen.join("/"));
+  if (job.updatedAt) meta.push("更新于 " + fmtTime(job.updatedAt));
+
+  // 样例行预览
+  let sample = "";
+  if (job.sampleRows && job.sampleRows.length) {
+    const cols = ["date", "campaignId", "adGroupId", "country", "spend", "creativeName"];
+    const zh = { date: "日期", campaignId: "系列 ID", adGroupId: "组 ID", country: "国家", spend: "花费", creativeName: "素材名" };
+    sample = '<div class="imp-sample"><div class="imp-sample-h">前 ' + job.sampleRows.length + ' 行预览</div><table class="imp-errtab"><thead><tr>'
+      + cols.map(c => "<th>" + zh[c] + "</th>").join("") + "</tr></thead><tbody>"
+      + job.sampleRows.map(r => "<tr>" + cols.map(c => "<td>" + (r[c] != null && r[c] !== "" ? String(r[c]) : "—") + "</td>").join("") + "</tr>").join("")
+      + "</tbody></table></div>";
+  }
+
+  // 映射不完整的情况（MAPPING_INCOMPLETE 也会落到 ready，但 rowCount=0）
+  let mapHint = "";
+  if (isReady && job.rowCount === 0 && job.errorMessage) {
+    mapHint = '<div class="imp-mapwarn"><span class="ico" data-ico="warn"></span><div><b>必填列没映射上</b>：'
+      + job.errorMessage + "。需要补 mapping 后再确认导入。</div></div>";
+  }
+
+  const errHtml = impRenderErrors(job.errorDetails, isReady ? "结构校验阶段" : "最终入库阶段");
+
+  // 操作按钮
+  let actions = "";
+  if (isReady) {
+    actions = '<div class="imp-actions"><button type="button" class="gbtn primary" id="impConfirm">'
+      + '<span class="ico" data-ico="check"></span> 确认导入（真正写入）</button>'
+      + '<span class="imp-busy" id="impConfirmBusy" hidden><span class="ico spin" data-ico="spinner"></span> 正在入库…</span></div>';
+  } else if (isTerminal) {
+    actions = '<div class="imp-actions"><button type="button" class="gbtn" id="impAgain">'
+      + '<span class="ico" data-ico="refresh"></span> 再传一个文件</button></div>';
+  }
+
+  box.innerHTML = '<div class="imp-jobhead">' + impStatusChip(st)
+    + (job.errorMessage ? '<span class="imp-jobmsg"></span>' : "")
+    + "</div>"
+    + (meta.length ? '<div class="imp-meta">' + meta.join(" · ") + "</div>" : "")
+    + nums + readyHint + mapHint + diffNote + sample + errHtml + actions;
+
+  // 文本类内容用 textContent 填，避免注入
+  const msgEl = box.querySelector(".imp-jobmsg");
+  if (msgEl && job.errorMessage) msgEl.textContent = job.errorMessage;
+  impFillReasons(box, job.errorDetails);
+
+  const cf = impEl("impConfirm");
+  if (cf) cf.addEventListener("click", impDoConfirm);
+  const ag = impEl("impAgain");
+  if (ag) ag.addEventListener("click", impReset);
+
+  if (window.initIcons) window.initIcons();
+  impMarkSteps(isReady ? 2 : (isTerminal ? 2 : 1));
+}
+
+/** 高亮两步进度条 */
+function impMarkSteps(active) {
+  const s1 = impEl("impStep1"), s2 = impEl("impStep2");
+  if (s1) s1.classList.toggle("on", active >= 1);
+  if (s2) s2.classList.toggle("on", active >= 2);
+}
+
+function impShowError(e) {
+  const card = impEl("impResultCard"), box = impEl("impResult");
+  if (!card || !box) return;
+  card.hidden = false;
+  const kind = e && e.impKind;
+  const hint = kind === "404" || kind === "413" || kind === "network"
+    ? '<div class="imp-gapnote"><span class="ico" data-ico="wrench"></span><div><b>这是环境缺口，不是你操作错了。</b><span class="imp-gapdetail"></span></div></div>'
+    : "";
+  box.innerHTML = '<div class="imp-jobhead">' + impStatusChip("failed") + '<span class="imp-jobmsg"></span></div>' + hint;
+  const m = box.querySelector(".imp-jobmsg");
+  if (m) m.textContent = e && e.message ? e.message : String(e);
+  const d = box.querySelector(".imp-gapdetail");
+  if (d) d.textContent = " 详见 shell/public/U1-API-GAPS.md，需要后端补上后才能联调。";
+  if (window.initIcons) window.initIcons();
+}
+
+function impReset() {
+  impState.file = null; impState.jobId = null; impState.job = null;
+  const fi = impEl("impFile"); if (fi) fi.value = "";
+  const on = impEl("impFileOn"), inn = impEl("impDropIn");
+  if (on) on.hidden = true;
+  if (inn) inn.hidden = false;
+  const card = impEl("impResultCard"); if (card) card.hidden = true;
+  const up = impEl("impUpload"); if (up) up.disabled = true;
+  impMarkSteps(0);
+}
+
+function impSetFile(f) {
+  if (!f) return;
+  if (f.size > IMP_MAX_BYTES) {
+    impShowError(Object.assign(new Error("文件 " + impFmtBytes(f.size) + " 超过 20MB 上限，请拆分后再传。"), { impKind: "local" }));
+    return;
+  }
+  impState.file = f;
+  const on = impEl("impFileOn"), inn = impEl("impDropIn");
+  if (inn) inn.hidden = true;
+  if (on) on.hidden = false;
+  const n = impEl("impFileName"), s = impEl("impFileSize");
+  if (n) n.textContent = f.name;
+  if (s) s.textContent = impFmtBytes(f.size);
+  const up = impEl("impUpload");
+  if (up) up.disabled = impState.busy;
+  const card = impEl("impResultCard"); if (card) card.hidden = true;
+}
+
+async function impDoUpload() {
+  if (!impState.file || impState.busy) return;
+  impBusy(true, "正在上传并结构校验…");
+  try {
+    const contentBase64 = await impFileToBase64(impState.file);
+    const j = await impFetch("/jobs", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        provider: impState.provider,
+        originalName: impState.file.name,
+        contentBase64: contentBase64,
+      }),
+    });
+    if (j && j.job) impRenderJob(j.job, "validate");
+    else impShowError(new Error("后端没返回 job 对象"));
+  } catch (e) {
+    impShowError(e);
+  } finally {
+    impBusy(false);
+  }
+}
+
+async function impDoConfirm() {
+  if (!impState.jobId || impState.busy) return;
+  const btn = impEl("impConfirm"), busy = impEl("impConfirmBusy");
+  if (btn) btn.disabled = true;
+  if (busy) busy.hidden = false;
+  impState.busy = true;
+  try {
+    const j = await impFetch("/jobs/" + encodeURIComponent(impState.jobId) + "/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (j && j.job) impRenderJob(j.job, "confirm");
+    else impShowError(new Error("后端没返回 job 对象"));
+    impLoadHistory();
+  } catch (e) {
+    impShowError(e);
+  } finally {
+    impState.busy = false;
+  }
+}
+
+/* ---- 历史任务列表 ---- */
+function impRenderHistory(jobs) {
+  const box = impEl("impHistory");
+  if (!box) return;
+  if (!jobs || !jobs.length) {
+    box.innerHTML = '<div class="imp-empty">还没有导入任务。上面选平台 + 传文件开始第一次导入。</div>';
+    return;
+  }
+  box.innerHTML = '<table class="imp-histab"><thead><tr>'
+    + "<th>状态</th><th>平台</th><th>文件</th><th>行数</th><th>入库</th><th>时间</th><th></th>"
+    + "</tr></thead><tbody>"
+    + jobs.map((j, i) => '<tr data-i="' + i + '">'
+      + "<td>" + impStatusChip(j.status) + "</td>"
+      + "<td>" + (j.provider || "—") + "</td>"
+      + '<td class="imp-hist-name"></td>'
+      + "<td>" + (j.rowCount != null ? j.rowCount : "—") + "</td>"
+      + "<td>" + (j.successRows != null ? j.successRows : "—") + "</td>"
+      + "<td>" + fmtShort(j.createdAt) + "</td>"
+      + '<td><button type="button" class="imp-hist-view" data-id="' + j.importId + '">查看</button></td>'
+      + "</tr>").join("")
+    + "</tbody></table>";
+  // 文件名用 textContent 填
+  box.querySelectorAll(".imp-hist-name").forEach((c, i) => { c.textContent = jobs[i].originalName || "—"; });
+  box.querySelectorAll(".imp-hist-view").forEach(b => {
+    b.addEventListener("click", () => impOpenJob(b.dataset.id));
+  });
+  if (window.initIcons) window.initIcons();
+}
+
+async function impLoadHistory() {
+  const box = impEl("impHistory");
+  if (box) box.innerHTML = '<div class="imp-empty">加载中…</div>';
+  try {
+    const j = await impFetch("/jobs");
+    impRenderHistory(j && j.jobs ? j.jobs : []);
+  } catch (e) {
+    if (box) {
+      box.innerHTML = '<div class="imp-empty imp-empty-err"></div>';
+      box.querySelector(".imp-empty-err").textContent = "读取失败：" + (e.message || e);
+    }
+  }
+}
+
+async function impOpenJob(id) {
+  if (!id) return;
+  try {
+    const j = await impFetch("/jobs/" + encodeURIComponent(id));
+    if (j && j.job) { impRenderJob(j.job, "view"); impMarkSteps(2); }
+  } catch (e) {
+    impShowError(e);
+  }
+}
+
+/** 进入视图时初始化（只绑一次事件，历史每次刷新） */
+function impOnEnter() {
+  if (!impState.loaded) {
+    impState.loaded = true;
+    // 平台选择
+    const provs = impEl("impProvs");
+    if (provs) {
+      provs.querySelectorAll(".imp-prov").forEach(b => {
+        b.addEventListener("click", () => {
+          provs.querySelectorAll(".imp-prov").forEach(x => x.classList.toggle("on", x === b));
+          impState.provider = b.dataset.prov;
+        });
+      });
+    }
+    // 文件选择 + 拖拽
+    const drop = impEl("impDrop"), fi = impEl("impFile");
+    if (drop && fi) {
+      drop.addEventListener("click", e => { if (e.target.closest("#impFileClear")) return; fi.click(); });
+      fi.addEventListener("change", () => impSetFile(fi.files && fi.files[0]));
+      ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
+      ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
+      drop.addEventListener("drop", e => {
+        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) impSetFile(f);
+      });
+    }
+    const clr = impEl("impFileClear");
+    if (clr) clr.addEventListener("click", e => { e.stopPropagation(); impReset(); });
+    const up = impEl("impUpload");
+    if (up) up.addEventListener("click", impDoUpload);
+    const rf = impEl("impRefresh");
+    if (rf) rf.addEventListener("click", impLoadHistory);
+  }
+  impLoadHistory();
+}
 
 /* ---- 启动：拉状态 + 拉对话列表（自动选中最近一个；没有则空状态引导）---- */
 (async () => {
