@@ -5,7 +5,8 @@
  */
 const toolContract = require("../contracts/tool-registration.json");
 const { DEFAULT_TOOL } = require("./mock");
-const { ensureAttributionReadGranted, ATTRIBUTION_READ } = require("./permissions-grant");
+const { PERMISSIONS } = require("../../../shell/permissions/index.cjs");
+const ATTRIBUTION_READ = PERMISSIONS.ATTRIBUTION_READ;
 
 function loadShellToolRegistry(override) {
   if (override) return override;
@@ -53,13 +54,10 @@ function toShellPermissionContext(attributionContext) {
 }
 
 /**
- * 用真实 registerTool 注册 attribution.query，并确保 attribution:read 角色映射就绪。
+ * 用真实 registerTool 注册 attribution.query。
+ * attribution:read 已由基座 ROLE_PERMISSIONS 正式定义，无需业务线再打补丁。
  */
 function registerAttributionQueryTool(opts = {}) {
-  const grant = ensureAttributionReadGranted({
-    permissionsModule: opts.permissionsModule,
-    grantRoles: opts.grantRoles,
-  });
   const shellTools = loadShellToolRegistry(opts.shellTools);
   if (typeof shellTools.registerTool !== "function") {
     throw Object.assign(new Error("shell registerTool 不可用"), {
@@ -70,7 +68,6 @@ function registerAttributionQueryTool(opts = {}) {
   shellTools.registerTool(tool);
   return {
     tool,
-    grant,
     toolContractId: toolContract.$id,
     registry: "shell",
     shellModified: false,

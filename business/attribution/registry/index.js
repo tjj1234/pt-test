@@ -11,10 +11,8 @@ const {
   registerAttributionQueryTool,
   callAttributionQuery,
 } = require("./tool");
-const {
-  ATTRIBUTION_READ,
-  ensureAttributionReadGranted,
-} = require("./permissions-grant");
+const { PERMISSIONS } = require("../../../shell/permissions/index.cjs");
+const ATTRIBUTION_READ = PERMISSIONS.ATTRIBUTION_READ;
 
 /**
  * 生产路径：工具走 shell；面板仍 mock（无基座 Panel Registry 可接）。
@@ -68,5 +66,4 @@ module.exports = {
   registerAttributionQueryTool,
   callAttributionQuery,
   ATTRIBUTION_READ,
-  ensureAttributionReadGranted,
 };

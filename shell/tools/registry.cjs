@@ -9,7 +9,7 @@
  * ============================================================================
  */
 
-const { checkPermission } = require("../permissions/index.cjs");
+const { checkPermission, PERMISSIONS, ROLE_PERMISSIONS, ROLES } = require("../permissions/index.cjs");
 
 // 工具存储（内存中，后续可持久化）
 const tools = new Map();
@@ -48,6 +48,20 @@ function registerTool(toolDefinition) {
 
   if (!Array.isArray(requiredPermissions)) {
     throw new Error("requiredPermissions 必须是数组");
+  }
+
+  // B11：工具声明的 requiredPermissions 如果基座权限模型里还没有，
+  // 自动登记为默认权限（owner/admin 可用）。业务线需要更宽范围时，
+  // 应在工具注册后显式修改 ROLE_PERMISSIONS 或联系基座调整。
+  for (const permission of requiredPermissions) {
+    if (typeof permission !== "string" || !permission) continue;
+    if (!Object.values(PERMISSIONS).includes(permission)) {
+      PERMISSIONS[permission.toUpperCase().replace(/[^A-Z0-9]/g, "_")] = permission;
+      for (const role of [ROLES.OWNER, ROLES.ADMIN]) {
+        const list = ROLE_PERMISSIONS[role];
+        if (Array.isArray(list) && !list.includes(permission)) list.push(permission);
+      }
+    }
   }
 
   // 存储工具
