@@ -4,7 +4,10 @@
 > 日期：2026-09-28（2026-09-29 复核更新）
 > 范围边界：本次**只碰 `shell/public/`**，未改任何后端文件。
 >
-> **2026-09-29 复核（基于 main `e8c2491` 实测，非读代码推测）**：原 6 条缺口里 **#1/#2/#3/#4 已由 B13 / A9 工作闭环**（详见各条与第六章清单），无需转发业务线。仅 **#5（路由层 `expires_at` 拦截，minor）** 与 **#6（导入任务落库，产品化）** 仍待处理。其中 #2 即用户所述"A21/21d7bb3 已修"——经核对，main 上的等价修复来自 A9 的 `9d64ed9`，`21d7bb3`（"handle token strings…"）是**未合入 main 的并行冗余修复**（`grep origin/main` 计数为 0），不影响结论。所有结论均为**实测**（真起服务打接口 / 真跑 service.js），不是读代码推测。
+> **2026-09-29 复核（基于 main `0e053f38` 实测，非读代码推测）**：原 6 条缺口里 **#1/#2/#3/#4 已由 B13 / A9 / A21 工作闭环**（详见各条与第六章清单），无需转发业务线。仅 **#5（路由层 `expires_at` 拦截，minor）** 与 **#6（导入任务落库，产品化）** 仍待处理。
+>
+> ⚠️ **更正记录（2026-09-29 二次复核）**：本文档上一版把 **#2 的修复误归给 A9 `9d64ed9`**，并称 "A21 `21d7bb3` 是未合入 main 的并行冗余修复" —— **该结论错误，已修正**。真实情况：**修复来自 A21 `21d7bb3`**（`git merge-base --is-ancestor 21d7bb3 0e053f38` → exit 0，确系 main 祖先；其 diff 与当前 main 上 `routes.js` 代码逐行一致）；而 `9d64ed9` 里**仍是老的 `{ok, token}` 写法**（`!parsedAuth.ok`），是 bug 本身而非修复。**#3（路由级 20MB bodyLimit）同样来自 `21d7bb3`**（`9d64ed9` 版本中无 `bodyLimit`）。
+> 出错原因：当时 `grep` 的是**本地陈旧的 `origin/main` = `a4f6e3a`**（真实 main tip 早已走到 `0e053f38`），据此得出"计数为 0"的假结论。**教训：判断祖先关系必须用不可变 SHA 或 `git ls-remote` 实时值，不能依赖本地 `refs/remotes/origin/*`。** 感谢用户独立 fetch 核实后指出。
 
 ---
 
@@ -66,7 +69,9 @@ if (p.indexOf("/api/business/") === 0) {
 
 ### ✅ #2 `parseAuthorization` 返回类型误用 —— **已在 main 上修复**（原 🔴，用户所述 A21/21d7bb3）
 
-> ✅ **复核确认（2026-09-29，main `e8c2491`）**：当前 `business/attribution/import/routes.js:24-30` 与 `ingestion-adapter/routes.js:18-24` 已按**字符串**处理 `parseAuthorization` 返回值（`typeof parsedAuth !== "string"` 才 401），不再读 `.ok`/`.token`。等价修复来自 A9 导入入口 `9d64ed9`；`21d7bb3`（"handle token strings…"）是**未合入 main 的并行冗余修复**（`grep origin/main` 计数为 0），不影响。结论：**不需转发业务线 agent**。下方为原始证据留存。
+> ✅ **复核确认（2026-09-29 二次复核，基于 main `0e053f38`）**：当前 `routes.js:24-30` 与 `ingestion-adapter/routes.js` 已按**字符串**处理 `parseAuthorization` 返回值（`typeof parsedAuth !== "string"` 才 401），不再读 `.ok`/`.token`。**修复来自 A21 `21d7bb38…`**（`"handle token strings and raise import route body limit"`）——该 commit 同时修本条与 #3（20MB bodyLimit），确系 main 祖先：`git merge-base --is-ancestor 21d7bb3 0e053f38` → exit 0。
+>
+> **溯源裁定**：A9 的 `9d64ed9`（"A9 CSV/XLSX import entry"）里**仍是老的 `{ok, token}` 写法**（`if (!parsedAuth || !parsedAuth.ok)`），属 bug 引入方；本条修正的功劳记 **A21 `21d7bb3`**。结论不变：**不需转发业务线 agent**。下方为原始证据留存。
 
 **原始证据（单元级，直接调真实模块）**：
 
@@ -104,7 +109,7 @@ if (token === null) { return reply.status(401)... }
 
 ### ✅ #3 Fastify `bodyLimit` 1MB vs service 层 20MB —— **已在 main 上修复**（原 🟠）
 
-> ✅ **修复确认（2026-09-29 复核，main `e8c2491`）**：`business/attribution/import/routes.js:69` 的 `POST /api/business/attribution/import/jobs` 已显式设置 `bodyLimit: 20 * 1024 * 1024`（路由级覆盖全局 1MB）。`21d7bb3` 的 "raise import route body limit" 即指此。#3 闭合。下方为原始证据留存。
+> ✅ **修复确认（2026-09-29 复核，main `0e053f38`）**：`business/attribution/import/routes.js:69` 的 `POST /api/business/attribution/import/jobs` 已显式设置 `bodyLimit: 20 * 1024 * 1024`（路由级覆盖全局 1MB）。**修复来源同样为 A21 `21d7bb3`**（其 diff 内含此行；`9d64ed9` 版本中尚无 `bodyLimit`）。#3 闭合。下方为原始证据留存。
 
 **原始证据（真打 8095，发 1.43MB body，旧快照）**：
 
@@ -290,12 +295,15 @@ confirm  → partial_failed
 
 ## 六、给后端 agent 的修复清单（2026-09-29 复核后更新）
 
-> 复核结论：原 6 条里 **#1/#2/#3/#4 已在 main（`e8c2491`）由 B13 / A9 闭环**，无需转发。仅 **#5（路由层 `expires_at` 拦截，minor）** 与 **#6（导入任务落库，产品化）** 待处理。
+> 复核结论（2026-09-29 二次复核，基于 main `0e053f38`）：原 6 条里 **#1/#2/#3/#4 已在 main 上由 B13 / A9 / A21 闭环**，无需转发。**#5、#6 已由用户确认收到，拆为独立任务包 A22 交业务线（归属 `business/attribution/`）** —— 本清单不再跟踪，仅作存档。
+>
+> ⚠️ #2/#3 的修复来源：均为 **A21 `21d7bb3`**（非 `9d64ed9`，详见文首更正记录）。
 
 按优先级：
 
 1. **#6** 导入任务落库（`import_jobs` 表）—— 产品化前必须，否则 analytics 重启丢历史（U1 前端已做 404 / 读取失败容错，不会白屏）
 2. **#5** import / ingestion 路由补 `expires_at` 过期 401 拦截 —— 数据层 B13 已返回该字段（`deps.cjs:47-51`），仅路由未用；安全加固，优先级低
-3. **（已闭环，记录备查）** **#2** parseAuthorization 字符串处理 → A9 `9d64ed9` 已正确；**#1** shell `/api/business` 反代 → B13 `shell/server.cjs:612` 已加；**#3** 路由级 20MB bodyLimit → A9 `routes.js:69` 已设；**#4** label 透传 → B13 `deps.cjs:66` 已返回
+3. **（已闭环，仅存档记录，无需动作）** **#2** parseAuthorization 字符串处理 → **A21 `21d7bb3`** 已修（`9d64ed9` 为 bug 引入方，非修复）；**#3** 路由级 20MB bodyLimit → **A21 `21d7bb3`** 同批次修；**#1** shell `/api/business` 反代 → B13 `shell/server.cjs:612` 已加；**#4** label 透传 → B13 `deps.cjs:66` 已返回
+4. **（已转出）** #5 / #6 → 归 `business/attribution/`，已拆 **任务包 A22** 交业务线；UI 侧无需动作
 
-修完 #6 即可让导入历史在重启后保留；#5 是安全加固尾巴。
+至此本清单**无遗留待办**。存档用途：供后续排查 `business/attribution` 同类问题时对照明细。
