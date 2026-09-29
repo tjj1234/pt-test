@@ -596,11 +596,19 @@ async function handle(req, res) {
   // B14：不再使用全局 PT_DASH_TOKEN，而是按租户动态计算 HMAC 分析 token。
   if (p.indexOf("/api/analytics/") === 0) {
     const meAnalytics = await authed(req);
-    let shareOk = false;
+    let shareOk = null;
     const shareTok = cookie(req, "pt_share");
-    if (shareTok) { const sv = await panelShares.check(shareTok); shareOk = !!(sv && sv.valid); }
-    if (!meAnalytics && !shareOk) return json(res, 401, { ok: false, error: "没登录" });
-    const tenantId = meAnalytics && meAnalytics.tenant ? meAnalytics.tenant.id : null;
+    if (shareTok) { shareOk = await panelShares.check(shareTok); }
+    if (!meAnalytics && !(shareOk && shareOk.valid)) return json(res, 401, { ok: false, error: "没登录" });
+    // 确定租户：登录用户用自己的租户；匿名分享用分享者的租户
+    let tenantId = null;
+    if (meAnalytics && meAnalytics.tenant) {
+      tenantId = meAnalytics.tenant.id;
+    } else if (shareOk && shareOk.share && shareOk.share.owner_user_id) {
+      const owner = await auth.db.query("SELECT tenant_id FROM users WHERE id = $1", [shareOk.share.owner_user_id]);
+      tenantId = owner.rows.length ? owner.rows[0].tenant_id : null;
+    }
+    if (!tenantId) return json(res, 403, { ok: false, error: "无法确定访问租户" });
     // B14：动态计算 HMAC token（无需缓存）
     const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
     if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
