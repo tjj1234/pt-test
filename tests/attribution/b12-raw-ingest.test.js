@@ -57,6 +57,8 @@ async function run() {
     "default page_view→visit");
   r = store.resolve(mws, "pageview");
   assert(r.target === "visit" && r.defaultMapped === true, "default pageview→visit");
+  r = store.resolve(mws, "sign_up");
+  assert(r.target === "signup" && r.defaultMapped === true, "default sign_up→signup");
   r = store.resolve(mws, "visit");
   assert(r.target === "visit" && r.passthrough === true && !r.defaultMapped,
     "whitelist passthrough (not default)");
@@ -69,6 +71,7 @@ async function run() {
     "custom config overrides default");
 
   assert(DEFAULT_EVENT_MAPPINGS.page_view === "visit", "DEFAULT_EVENT_MAPPINGS exported");
+  assert(DEFAULT_EVENT_MAPPINGS.sign_up === "signup", "sign_up default mapping exported");
 
   // ── ② raw-collect 路由（真装配 buildUnifiedServer）──────────────────
   const adapterDir = fs.mkdtempSync(path.join(os.tmpdir(), "pt-b12-adapter-"));
@@ -117,6 +120,21 @@ async function run() {
   assert(enqueued[0].event.event_name === "visit", "page_view normalized to visit");
   assert(enqueued[0].event.event_id === body.event_id, "enqueued id == response id");
   assert(validateEvent(enqueued[0].event).ok, "enqueued event passes collect three-piece validation");
+
+  // (a2) GA4 sign_up + UTM/user_id → 默认映射为 signup 并完整入队
+  res = await app.inject(postJson(rawUrl, SECRET, {
+    event_name: "sign_up",
+    timestamp: 1725000000000,
+    user_id: "8022",
+    utm_source: "x",
+    utm_medium: "paid_social",
+    utm_campaign: "202609",
+  }));
+  assert(res.statusCode === 200, "raw sign_up 200: " + res.body);
+  assert(enqueued.length === 2, "sign_up envelope enqueued");
+  assert(enqueued[1].event.event_name === "signup", "sign_up normalized to signup");
+  assert(enqueued[1].event.user_id === "8022", "sign_up preserves product user_id");
+  assert(enqueued[1].event.utm_source === "x", "sign_up preserves UTM fields");
 
   // (b) 缺 Secret → 401，且不入队
   enqueued.length = 0;
@@ -193,6 +211,7 @@ async function run() {
     defaultMapping: {
       page_view: "visit",
       pageview: "visit",
+      sign_up: "signup",
       customOverrides: true,
       passthroughWhitelist: true,
     },

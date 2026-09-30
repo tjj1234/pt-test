@@ -16,6 +16,7 @@ const ALLOWED_TARGETS = new Set([...EVENT_NAMES, "ignore"]);
 const DEFAULT_EVENT_MAPPINGS = Object.freeze({
   page_view: "visit",
   pageview: "visit",
+  sign_up: "signup",
 });
 
 function createEventMappingStore(opts = {}) {
