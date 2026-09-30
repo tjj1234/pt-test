@@ -8,11 +8,22 @@ const { EVENT_NAMES } = require("../contracts/invariants");
 
 const ALLOWED_TARGETS = new Set([...EVENT_NAMES, "ignore"]);
 
+/**
+ * 内置默认映射表（最低优先级兜底）：
+ * 仅当「无显式 workspace 配置」且「原始名也不是白名单原名」时才会命中。
+ * 绝不覆盖租户在 U5/U6 已配置的映射（显式配置优先）。
+ */
+const DEFAULT_EVENT_MAPPINGS = Object.freeze({
+  page_view: "visit",
+  pageview: "visit",
+});
+
 function createEventMappingStore(opts = {}) {
   const root =
     opts.storageDir ||
     process.env.PT_EVENT_MAPPING_DIR ||
     path.join(__dirname, "..", "..", "..", "analytics", "data", "event-mappings");
+  const defaultMappings = opts.defaultMappings || DEFAULT_EVENT_MAPPINGS;
   const memory = new Map();
 
   function filePath(workspaceId) {
@@ -84,10 +95,18 @@ function createEventMappingStore(opts = {}) {
     if (EVENT_NAMES.includes(key)) {
       return { target: key, configured: false, passthrough: true };
     }
+    // 内置默认映射兜底（最低优先级，绝不在显式配置之前命中）
+    if (Object.prototype.hasOwnProperty.call(defaultMappings, key)) {
+      return { target: defaultMappings[key], configured: false, defaultMapped: true };
+    }
     return { target: null, configured: false };
   }
 
   return { load, save, putMappings, resolve, root, ALLOWED_TARGETS };
 }
 
-module.exports = { createEventMappingStore, ALLOWED_TARGETS: new Set([...EVENT_NAMES, "ignore"]) };
+module.exports = {
+  createEventMappingStore,
+  DEFAULT_EVENT_MAPPINGS,
+  ALLOWED_TARGETS: new Set([...EVENT_NAMES, "ignore"]),
+};
