@@ -38,6 +38,7 @@ exports.createInMemoryEndpointResolver = createInMemoryEndpointResolver;
 exports.createInMemoryQueue = createInMemoryQueue;
 exports.startCollectServer = startCollectServer;
 exports.registerShutdown = registerShutdown;
+exports.secretMatches = secretMatches;
 const fastify_1 = __importDefault(require("fastify"));
 const node_crypto_1 = require("node:crypto");
 const validate_1 = require("./validate");

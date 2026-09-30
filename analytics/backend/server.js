@@ -20,8 +20,8 @@
  *   - events：parseAuthorization / parseEventFilters / queryEventsScoped / serializeEventRow。
  *   - funnel：parseAuthorization / parseFunnelParams / queryFunnelScoped /
  *             serializeFunnelGroup / serializeRoiEntity + DEFAULT_SOURCE_PLATFORM_RULES。
- *   - collect：validateEvent / tryExtractEventId；secretMatches 未导出，此处逐字复制
- *             （SHA-256 + timingSafeEqual + 64 位 hex 校验，行为与原实现一致）。
+ *   - collect：validateEvent / tryExtractEventId / secretMatches（secretMatches 由
+ *             collect/server.ts 导出，此处直接 require 复用，不重复实现）。
  *
  * 铁律（不得因「合并」而放松任何一道）：
  *   1. 只读：三个分析端点纯 GET，无 body、无写操作；collect 只「接收 + 鉴权 + 入队」。
@@ -39,7 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.buildUnifiedServer = buildUnifiedServer;
 exports.startUnifiedServer = startUnifiedServer;
 const fastify_1 = __importDefault(require("fastify"));
-const node_crypto_1 = require("node:crypto");
+const collect_server_1 = require("./collect/server");
 const validate_1 = require("./collect/validate");
 const validate_2 = require("./collect/validate");
 const query_1 = require("./events/query");
@@ -81,10 +81,8 @@ function analyticsErrorBody(statusCode) {
     return errorBody(statusCode >= 500 ? "INTERNAL_ERROR" : "BAD_REQUEST", statusCode >= 500 ? "internal error" : "bad request");
 }
 // ---------------------------------------------------------------------------
-// collect：常量时间 Secret 比对（collect/server.ts 未导出，此处逐字复制）
+// collect：Secret 比对复用 collect/server.ts 原实现（exports.secretMatches）
 // ---------------------------------------------------------------------------
-/** 存储哈希应为 64 字符十六进制（SHA-256）。 */
-const SECRET_HASH_HEX = /^[0-9a-f]{64}$/i;
 /** Fastify 框架错误码 → 业务错误码（collect/server.ts §4.1 原表）。 */
 const FST_ERROR_CODE = {
     FST_ERR_CTP_BODY_TOO_LARGE: "PAYLOAD_TOO_LARGE",
@@ -93,13 +91,6 @@ const FST_ERROR_CODE = {
     FST_ERR_CTP_INVALID_MEDIA_TYPE: "UNSUPPORTED_MEDIA_TYPE",
     FST_ERR_CTP_INVALID_CONTENT_LENGTH: "UNSUPPORTED_MEDIA_TYPE",
 };
-function secretMatches(providedSecret, storedHashHex) {
-    const digest = (0, node_crypto_1.createHash)("sha256").update(providedSecret, "utf8").digest();
-    if (!SECRET_HASH_HEX.test(storedHashHex))
-        return false;
-    const stored = Buffer.from(storedHashHex, "hex");
-    return stored.length === digest.length && (0, node_crypto_1.timingSafeEqual)(digest, stored);
-}
 function registerEventsRoutes(scope, deps) {
     const { pool, verifyAnalyticsToken, now } = deps;
     scope.setErrorHandler((error, request, reply) => {
@@ -327,7 +318,7 @@ function registerCollectRoutes(scope, deps) {
                 .status(403)
                 .send(errorBody("INVALID_SECRET", "unauthorized", event_id));
         }
-        if (!secretMatches(secret, endpoint.secret_hash)) {
+        if (!(0, collect_server_1.secretMatches)(secret, endpoint.secret_hash)) {
             return reply
                 .status(403)
                 .send(errorBody("INVALID_SECRET", "unauthorized", event_id));
@@ -429,7 +420,7 @@ function buildUnifiedServer(options) {
     app.register(async (scope) => {
         (0, raw_ingest_1.registerRawIngestRoutes)(scope, {
             resolveEndpoint,
-            secretMatches,
+            secretMatches: collect_server_1.secretMatches,
             resolveWorkspaceId,
             enqueue,
             adapter,
