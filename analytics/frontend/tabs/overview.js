@@ -208,10 +208,16 @@
         return;
       }
       container.innerHTML =
-        PT.freshnessHtml(total && total.data_freshness) +
-        kpiCards(groups, roiRows) +
-        funnelHtml(groups) +
-        trendSvg(dailyGroups, from, to);
+        '<div class="pt-upload-toolbar">'
+        + '<span class="pt-upload-toolbar-hint muted">归因数据由手动上传维护（无自动同步）</span>'
+        + '<button type="button" class="pt-btn primary" id="pt-overview-upload">＋ 新增上传</button>'
+        + "</div>"
+        + PT.freshnessHtml(total && total.data_freshness)
+        + kpiCards(groups, roiRows)
+        + funnelHtml(groups)
+        + trendSvg(dailyGroups, from, to);
+      const ob = container.querySelector("#pt-overview-upload");
+      if (ob) ob.addEventListener("click", () => PTUpload.open());
     } catch (err) {
       container.innerHTML = errorHtml(err);
       const retry = container.querySelector(".retry-btn");
