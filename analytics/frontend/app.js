@@ -246,9 +246,9 @@ const AnalyticsClient = {
   getEvents(params) {
     return requestJson("/api/analytics/events", params);
   },
-  /** GET /api/analytics/funnel（2.x，groups + roi_by_entity 双结果集） */
+  /** GET /api/attribution/funnel（U2：切到归因服务；字段与旧 /api/analytics/funnel 对齐：groups + roi_by_entity） */
   getFunnel(params) {
-    return requestJson("/api/analytics/funnel", params);
+    return requestJson("/api/attribution/funnel", params);
   },
   /** GET /api/analytics/audit/token（3.4 §2.3：1.5 审计 report；路径待 1.5/5.1 拍板） */
   getTokenAudit() {
