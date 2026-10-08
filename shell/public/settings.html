@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>我的 PT Key · 北极星</title>
+<title>账户与授权 · 北极星</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
   /* 仅本页需要的小样式，全部沿用 styles.css 的 :root 变量，不新造配色 */
@@ -29,9 +29,13 @@
   <form class="login-card key-card" id="f" autocomplete="off">
     <div class="brand">
       <div class="logo">P</div>
-      <div><h1>北极星</h1><p>设置我的 PT Key · BYOK</p></div>
+      <div><h1>北极星</h1><p>账户与授权</p></div>
     </div>
 
+    <section aria-labelledby="accountHeading"><h2 id="accountHeading">当前账户</h2>
+      <p class="status" id="accountIdentity" role="status">读取账户信息…</p>
+    </section>
+    <h2>大模型与 PowerTokens Key</h2>
     <!-- 要素 1：跳转 PT 门户获取 key -->
     <div class="portal">
       <span class="ico">🔑</span>
@@ -63,6 +67,10 @@
 
     <div class="err" id="e"></div>
     <div class="hint">你的 PT key 只在你点「保存绑定」时进入浏览器内存并立即 POST 到服务端加密落库，提交后输入框马上清空；明文 key 不会写入本地存储、不会打印到控制台、也不会出现在网址里。服务端也只回显末 4 位。</div>
+    <section aria-labelledby="sourcesHeading"><h2 id="sourcesHeading">广告与数据源授权</h2>
+      <p class="status">暂无已授权账户，业务线接入后可在此配置。</p>
+    </section>
+    <p><a href="/">返回工作区</a></p>
   </form>
 </div>
 <script src="/assets/settings.js"></script>

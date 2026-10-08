@@ -75,6 +75,9 @@
       const r = await fetch("/api/auth/me", { credentials: "same-origin" });
       if (r.status === 401) { location.replace("/login"); return false; }
       if (!r.ok) { setErr("无法确认登录状态（HTTP " + r.status + "）"); return false; }
+      const account = await r.json();
+      const identity = $("#accountIdentity");
+      if (identity) identity.textContent = [account.user && account.user.username, account.user && account.user.email, account.tenant && account.tenant.name].filter(Boolean).join(" · ") || "已登录";
       return true;
     } catch (x) { setErr("连不上服务：" + x.message); return false; }
   }

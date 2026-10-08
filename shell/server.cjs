@@ -32,6 +32,7 @@ const { initAuth } = require("./auth.cjs");
 const { handleAuthRoutes, sessionFromCookie } = require("./auth-routes.cjs");
 const keysMod = require("./keys.cjs");
 const { handleKeyRoutes } = require("./key-routes.cjs");
+const { handleMemberRoutes } = require("./member-routes.cjs");
 const tenantMod = require("./tenant.cjs");
 const convMod = require("./conversations.cjs");
 const memoryMod = require("./memory.cjs");
@@ -663,6 +664,7 @@ async function handle(req, res) {
 
   const me = await authed(req);
   if (!me) return json(res, 401, { ok: false, error: "没登录" });
+  if (await handleMemberRoutes(req, res, auth, me)) return;
 
   // ---- M1：工具清单 / 工具执行 / 工具调用日志（按 workspace 隔离）----
   const workspaceIdFor = (m) => "ws_" + (m && m.tenant ? m.tenant.id : "");
