@@ -38,6 +38,7 @@ const memoryMod = require("./memory.cjs");
 const panelSharesMod = require("./panel-share.cjs");
 const toolCallsMod = require("./tool-calls.cjs");
 const toolsRegistry = require("./tools/registry.cjs");
+const { queryBusinessWorkspace, normalizeEnabledStatus } = require("./workspace-enabled-status.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
 
 // ---- 路径：全部相对 repo 根，可用环境变量覆盖 ----
@@ -693,6 +694,29 @@ async function handle(req, res) {
     }
     const calls = await toolCalls.list({ tenantId: me.tenant.id, workspaceId: workspaceIdFor(me), range });
     return json(res, 200, { ok: true, calls });
+  }
+
+  // ---- M3：工作区业务线启用状态查询（基座层只读接口）----
+  // 内部调用业务线既有只读接口 GET /api/business/attribution/import/workspace，
+  // 拿 firstConnectedAt 归一化成可扩展的 features 形状。不 import 业务线模块、不读其数据库表。
+  if (p === "/api/workspaces/enabled-status" && req.method === "GET") {
+    const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
+    if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
+    try {
+      const raw = await queryBusinessWorkspace({
+        internalKey: INTERNAL_KEY,
+        dashPort: DASH_PORT,
+        tenantId: me.tenant.id,
+      });
+      if (raw.statusCode !== 200) {
+        return json(res, 502, { ok: false, error: "业务线工作区状态查询失败（" + raw.statusCode + "）" });
+      }
+      const status = normalizeEnabledStatus(raw.body);
+      return json(res, 200, Object.assign({ ok: true }, status));
+    } catch (e) {
+      log.error("workspace_enabled_status_failed", { error: e && e.message ? e.message : String(e) });
+      return json(res, 502, { ok: false, error: "业务线服务不可用" });
+    }
   }
 
   if (p === "/api/skills") {
