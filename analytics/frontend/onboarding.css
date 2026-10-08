@@ -1,0 +1,166 @@
+/* ==========================================================================
+   PowerTokens 归因面板 · 单元 U5 首次接入向导样式
+   复用现有 card / pt-btn / section-title / muted / state-* 视觉语言，
+   仅定义向导专属结构（步进条 / 方式卡 / 诊断卡 / 映射表）。
+   ========================================================================== */
+
+.onb {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 8px 4px 32px;
+}
+
+/* —— 顶部步骤条 —— */
+.onb-steps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 0;
+  margin: 4px 0 18px;
+  padding: 12px 14px;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e7e7ef);
+  border-radius: 12px;
+}
+.onb-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #9aa0b4;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.onb-step-n {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%;
+  background: #eef0f6; color: #9aa0b4;
+  font-size: 12px;
+}
+.onb-step.active { color: #6c5ce7; }
+.onb-step.active .onb-step-n { background: #6c5ce7; color: #fff; }
+.onb-step.done { color: #2bb673; }
+.onb-step.done .onb-step-n { background: #2bb673; color: #fff; }
+.onb-step-sep { color: #d7dae6; margin: 0 10px; }
+
+/* —— 通用区块 —— */
+.onb-block { margin-top: 4px; }
+.onb-block .section-title { margin-bottom: 6px; }
+.onb-note, .onb .muted { color: #8a90a6; font-size: 13px; line-height: 1.6; }
+
+.onb-step-actions {
+  display: flex; gap: 10px; flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+/* —— 方式选择卡 —— */
+.onb-methods {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin: 14px 0 4px;
+}
+.onb-method {
+  text-align: left;
+  border: 1.5px solid var(--border, #e7e7ef);
+  background: var(--card, #fff);
+  border-radius: 12px;
+  padding: 16px;
+  cursor: pointer;
+  color: inherit;
+  transition: border-color .15s, box-shadow .15s, transform .05s;
+}
+.onb-method:hover { border-color: #b9b3f0; }
+.onb-method:active { transform: translateY(1px); }
+.onb-method.selected {
+  border-color: #6c5ce7;
+  box-shadow: 0 0 0 3px rgba(108,92,231,.12);
+}
+.onb-method svg { color: #6c5ce7; margin-bottom: 8px; }
+.onb-method-t { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.onb-method-d { font-size: 13px; color: #8a90a6; line-height: 1.55; }
+
+/* —— 表单 —— */
+.onb-form { margin: 14px 0; max-width: 560px; }
+.onb-label {
+  display: block; font-size: 13px; font-weight: 600;
+  margin: 12px 0 6px; color: #4a4f63;
+}
+.onb-input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--border, #e0e0ea);
+  border-radius: 9px;
+  font-size: 14px;
+  background: #fbfbfe;
+  color: inherit;
+}
+.onb-input:focus { outline: none; border-color: #6c5ce7; box-shadow: 0 0 0 3px rgba(108,92,231,.12); }
+
+/* —— 诊断卡 —— */
+.onb-diag { margin-top: 14px; }
+.onb-diag-card {
+  border-radius: 10px;
+  padding: 12px 14px;
+  border: 1px solid;
+}
+.onb-diag-card.ok { background: #ecfaf2; border-color: #b7e8cd; color: #1f7a4d; }
+.onb-diag-card.bad { background: #fdeef0; border-color: #f5c2cb; color: #b23b4e; }
+.onb-diag-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; }
+.onb-diag-hint { font-size: 13px; line-height: 1.55; }
+.onb-diag-next { font-size: 12px; margin-top: 6px; font-weight: 600; }
+
+/* —— 映射表 —— */
+.onb-map-meta { font-size: 12px; color: #8a90a6; margin: 10px 0 6px; }
+.onb-maptab, .onb-maptab th, .onb-maptab td { font-size: 13px; }
+.onb-maptab th { text-align: left; color: #8a90a6; font-weight: 600; padding: 6px 8px; }
+.onb-maptab td { padding: 5px 8px; border-top: 1px solid var(--border, #eef0f6); }
+.onb-maptab .mono, .onb-def-item .mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+}
+.onb-maptab select, .onb-add-sel {
+  padding: 5px 8px; border-radius: 7px;
+  border: 1px solid var(--border, #e0e0ea); background: #fbfbfe; color: inherit;
+}
+.onb-del {
+  border: none; background: none; color: #b23b4e;
+  cursor: pointer; font-size: 12px; padding: 2px 4px;
+}
+.onb-addrow { display: flex; align-items: center; gap: 8px; margin: 10px 0; flex-wrap: wrap; }
+.onb-add-src { width: 200px; }
+.onb-add-arrow { color: #9aa0b4; }
+.onb-defs { font-size: 12px; color: #8a90a6; margin-top: 8px; }
+.onb-def-item { margin-right: 10px; }
+
+/* —— 通知条 —— */
+.onb-notice {
+  border-radius: 9px; padding: 9px 12px; font-size: 13px;
+  margin: 10px 0; border: 1px solid;
+}
+.onb-notice.ok { background: #ecfaf2; border-color: #b7e8cd; color: #1f7a4d; }
+.onb-notice.bad { background: #fdeef0; border-color: #f5c2cb; color: #b23b4e; }
+
+/* —— 已接入提示 —— */
+.onb-already {
+  background: #eef0fb; border: 1px solid #d6d2f5; color: #4a4f63;
+  border-radius: 9px; padding: 9px 12px; font-size: 13px; margin-bottom: 12px;
+}
+
+/* —— 完成态 —— */
+.onb-done { text-align: center; padding: 28px 16px; }
+.onb-done-badge {
+  width: 56px; height: 56px; margin: 0 auto 12px;
+  border-radius: 50%; background: #2bb673; color: #fff;
+  font-size: 30px; display: flex; align-items: center; justify-content: center;
+}
+.onb-done .section-title { margin-bottom: 6px; }
+.onb-done .onb-step-actions { justify-content: center; }
+
+/* 窄屏 */
+@media (max-width: 640px) {
+  .onb-methods { grid-template-columns: 1fr; }
+  .onb-step-t { display: none; }
+  .onb-step-sep { margin: 0 4px; }
+}
