@@ -13,6 +13,7 @@ const {
 } = require("./tool");
 const { PERMISSIONS } = require("../../../shell/permissions/index.cjs");
 const ATTRIBUTION_READ = PERMISSIONS.ATTRIBUTION_READ;
+const trackingQualityAudit = require("../skills/tracking-quality-audit");
 
 /**
  * 生产路径：工具走 shell；面板仍 mock（无基座 Panel Registry 可接）。
@@ -57,6 +58,7 @@ function createAttributionRegistry(opts = {}) {
 }
 
 module.exports = {
+  ...trackingQualityAudit,
   createAttributionRegistry,
   createMockRegistry,
   DEFAULT_PANEL,
