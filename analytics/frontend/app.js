@@ -56,6 +56,7 @@ const TABS = [
   { key: "product", label: "产品", en: "Product" },
   { key: "ads", label: "健康", en: "Health" },
   { key: "ingestion", label: "接入", en: "Ingestion" },
+  { key: "onboarding", label: "接入向导", en: "Onboarding" },
   { key: "schedule", label: "调度与执行", en: "Schedule" },
 ];
 
@@ -423,6 +424,7 @@ function tabIcon(key) {
     product: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>',
     ads: '<path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
     ingestion: '<path d="M4 7h10M4 12h7M4 17h10"/><path d="M17 8l4 4-4 4"/><path d="M14 12h7"/>',
+    onboarding: '<path d="M12 3l2.2 6.2L20 11l-5.8 1.8L12 19l-2.2-6.2L4 11l5.8-1.8z"/>',
     schedule: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   };
   return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">${icons[key] || ""}</svg>`;
