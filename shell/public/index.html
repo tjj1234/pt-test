@@ -323,14 +323,12 @@
       </div>
     </div></section>
 
-    <!-- ============ 成员与权限（建设中） ============ -->
+    <!-- ============ 成员与权限 ============ -->
     <section class="view" id="v-members"><div class="page">
-      <div class="empty-state building">
-        <div class="es-ico"><span class="ico" data-ico="users"></span></div>
-        <h3>成员与权限</h3>
-        <p>基于 RBAC 的团队成员管理与权限分配（管理员 / 分析师 / 访客）。</p>
-        <p class="es-sub es-badge">功能建设中</p>
-      </div>
+      <h3>成员与权限</h3><p>管理当前团队的成员角色。角色变更保存后立即生效。</p>
+      <button type="button" class="toolbar-btn" id="membersRetry">刷新</button>
+      <p id="membersStatus" role="status"></p><div id="membersList" style="overflow:auto"></div>
+      <details><summary>角色与权限说明</summary><div id="membersRoles"></div></details>
     </div></section>
 
     <!-- ============ 用量与日志（建设中） ============ -->
@@ -379,4 +377,5 @@
   </div>
 <script src="/assets/key-drawer.js"></script>
 <script src="/assets/app.js"></script>
+<script src="/assets/members.js"></script>
 </body></html>
