@@ -55,6 +55,8 @@ const TABS = [
   { key: "users", label: "用户", en: "Users" },
   { key: "product", label: "产品", en: "Product" },
   { key: "ads", label: "健康", en: "Health" },
+  { key: "ingestion", label: "接入", en: "Ingestion" },
+  { key: "schedule", label: "调度与执行", en: "Schedule" },
 ];
 
 // 每个 Tab 的「占位卡片」数据契约（设计 3.1 §3）
@@ -62,25 +64,25 @@ const TAB_CONTRACT = {
   overview: {
     title: "总览",
     unit: "3.2",
-    source: "GET /api/analytics/funnel（KPI + 漏斗聚合）+ GET /api/analytics/events（趋势/明细）",
+    source: "GET /api/attribution/funnel（KPI + 漏斗聚合）+ GET /api/analytics/events（趋势/明细）",
     needs: ["访问 / 注册 / 建Key / 充值 / ROI 五张 KPI 卡", "转化漏斗（访问→注册→建Key→充值）", "漏斗日趋势（granularity=day）"],
   },
   creatives: {
     title: "素材",
     unit: "3.2",
-    source: "GET /api/analytics/funnel（roi_by_entity）+ 广告落库（广告侧明细，待广告侧接口）",
+    source: "GET /api/attribution/funnel（roi_by_entity）+ 广告落库（广告侧明细，待广告侧接口）",
     needs: ["素材级 ROI 排行表（roi_by_entity）", "广告侧指标（消耗/点击/CTR/缩略图，待广告侧接口）"],
   },
   users: {
     title: "用户",
     unit: "3.3",
-    source: "GET /api/analytics/funnel（转化路径）+ GET /api/analytics/events（用户明细抽屉）",
+    source: "GET /api/attribution/funnel（转化路径）+ GET /api/analytics/events（用户明细抽屉）",
     needs: ["注册→建Key→充值 转化路径", "按 utm_source / 按 model 转化", "用户行为详情抽屉"],
   },
   product: {
     title: "产品",
     unit: "3.3",
-    source: "GET /api/analytics/funnel（model_call 聚合）",
+    source: "GET /api/attribution/funnel（model_call 聚合）",
     needs: ["模型调用（by_model）", "调用渠道（by_source）", "Token 消耗（funnel 契约缺口 → 空态/兜底）", "充值趋势（granularity=day）"],
   },
   ads: {
@@ -246,9 +248,9 @@ const AnalyticsClient = {
   getEvents(params) {
     return requestJson("/api/analytics/events", params);
   },
-  /** GET /api/analytics/funnel（2.x，groups + roi_by_entity 双结果集） */
+  /** GET /api/attribution/funnel（U2：切到归因服务；字段与旧 /api/analytics/funnel 对齐：groups + roi_by_entity） */
   getFunnel(params) {
-    return requestJson("/api/analytics/funnel", params);
+    return requestJson("/api/attribution/funnel", params);
   },
   /** GET /api/analytics/audit/token（3.4 §2.3：1.5 审计 report；路径待 1.5/5.1 拍板） */
   getTokenAudit() {
@@ -420,6 +422,8 @@ function tabIcon(key) {
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
     product: '<circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>',
     ads: '<path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>',
+    ingestion: '<path d="M4 7h10M4 12h7M4 17h10"/><path d="M17 8l4 4-4 4"/><path d="M14 12h7"/>',
+    schedule: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   };
   return `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">${icons[key] || ""}</svg>`;
 }
