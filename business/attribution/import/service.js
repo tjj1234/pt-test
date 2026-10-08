@@ -385,6 +385,16 @@ function createImportService(opts = {}) {
     return workspaceMeta.load(context.workspaceId);
   }
 
+  // U5 · 实时接入（GTM/sGTM）路径：用户在向导点「完成接入」时，把本工作区的
+  // firstConnectedAt 打点。与 CSV 导入 confirm 共用同一份 workspace-meta 存储，
+  // 已写入则原样返回（首次接入时间只记一次）。
+  async function markConnected(context) {
+    if (!context || !context.workspaceId) {
+      throw Object.assign(new Error("AttributionContext 必填"), { code: "CONTEXT_REQUIRED" });
+    }
+    return workspaceMeta.markFirstConnected(context.workspaceId);
+  }
+
   return {
     store,
     workspaceMeta,
@@ -393,6 +403,7 @@ function createImportService(opts = {}) {
     getJob,
     listJobs,
     getWorkspaceMeta,
+    markConnected,
     POST_IMPORT_ACTION,
   };
 }

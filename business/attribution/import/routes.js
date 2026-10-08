@@ -130,6 +130,23 @@ function registerImportRoutes(app, opts = {}) {
     return { ok: true, workspace: meta };
   });
 
+  // U5 · 实时接入（GTM/sGTM）路径「完成接入」：写入 firstConnectedAt。
+  // 与 CSV 导入 confirm 共用 workspace-meta 存储，幂等（已写则不覆盖）。
+  app.post("/api/business/attribution/import/workspace/connected", async (request, reply) => {
+    const ctx = await authContext(request, reply);
+    if (reply.sent) return;
+    try {
+      const meta = await importService.markConnected(ctx);
+      return { ok: true, workspace: meta };
+    } catch (err) {
+      const code = err && err.code ? err.code : "BAD_REQUEST";
+      return reply.code(400).send({
+        ok: false,
+        error: { code, message: err && err.message ? err.message : String(err) },
+      });
+    }
+  });
+
   return { importService };
 }
 

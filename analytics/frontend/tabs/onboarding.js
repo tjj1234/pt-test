@@ -5,16 +5,18 @@
      ① 选接入方式      → GTM/sGTM 容器（实时事件） 或 广告平台 CSV 批量上传
      ② sGTM 连接测试   → POST /api/business/attribution/ingestion/connection-test
      ③ 确认事件名映射  → GET/PUT /mapping（与 U6 接入 Tab 同一份存储）
-     ④ 上传广告数据校验→ 复用 U4 PTUpload 上传 + 确认，触发 firstConnectedAt 写入
+     ④ 上传广告数据校验→ CSV 路径复用 U4 PTUpload 上传+确认写 firstConnectedAt；
+                       GTM 路径点「完成接入」经 /workspace/connected 写 firstConnectedAt
      ⑤ 生成归因面板    → 确认接入完成，跳转到「总览」（归因面板）
 
-   真实接口（A17 / A18，已挂载）：
+   真实接口（A17 / A18 / U5，已挂载）：
      POST /api/business/attribution/ingestion/connection-test  { collectUrl, secret, event, probeEventName }
      GET  /api/business/attribution/ingestion/mapping          → { ok, mapping }
      PUT  /api/business/attribution/ingestion/mapping          → { ok, mapping }（merge，null=删除）
      POST /api/business/attribution/ingestion/adapt            → { ok, event|ignored, quality } / 422
      GET  /api/business/attribution/import/workspace           → { workspace: { firstConnectedAt } }
-     POST /api/business/attribution/import/jobs + /confirm     （由 U4 PTUpload 复用）
+     POST /api/business/attribution/import/workspace/connected → 写 firstConnectedAt（GTM 路径「完成接入」）
+     POST /api/business/attribution/import/jobs + /confirm     （由 U4 PTUpload 复用，CSV 路径写 firstConnectedAt）
 
    鉴权：与 U4/U6 同一套——authContext 强制 Authorization: Bearer，优先复用
    app.js 的 resolveToken()。
@@ -27,6 +29,7 @@
   "use strict";
 
   const ING_API = "/api/business/attribution/ingestion";
+  const IMP_API = "/api/business/attribution/import";
 
   /* 白名单目标（与 ingestion.js / contracts/invariants.js 对齐）+ ignore */
   const TARGETS = ["visit", "signup", "key_created", "model_call", "recharge", "auto_recharge_toggle"];
@@ -98,6 +101,28 @@
     return j;
   }
 
+  /* import 基址请求封装（与 onbFetch 同鉴权逻辑，仅基址不同） */
+  async function onbFetchImport(path, opts) {
+    const o = Object.assign({ credentials: "same-origin" }, opts || {});
+    const h = Object.assign({}, o.headers || {});
+    const tk = onbToken();
+    if (tk && !h.Authorization && !h.authorization) h.Authorization = "Bearer " + tk;
+    if (o.body && !h["Content-Type"]) h["Content-Type"] = "application/json";
+    o.headers = h;
+    let res;
+    try {
+      res = await fetch(IMP_API + path, o);
+    } catch (e) {
+      throw Object.assign(new Error("网络请求失败：" + e.message), { onbKind: "network" });
+    }
+    const j = await res.json().catch(() => null);
+    if (!res.ok) {
+      const msg = (j && j.error && j.error.message) || ("HTTP " + res.status);
+      throw Object.assign(new Error(msg), { onbKind: "http", status: res.status });
+    }
+    return j;
+  }
+
   /* 复用 U4/U6 已暴露的全局 client；缺失时本地兜底 */
   const PTOnbClient = {
     getMapping: () => (global.PTIngestionClient
@@ -115,6 +140,9 @@
     getWorkspace: () => (global.PTImportClient
       ? global.PTImportClient.getWorkspace()
       : null),
+    /* U5 · GTM 路径「完成接入」：写 firstConnectedAt（幂等，已写不覆盖） */
+    completeOnboarding: () => onbFetchImport("/workspace/connected", { method: "POST" })
+      .then((j) => (j && j.workspace) || null),
   };
 
   function esc(v) { return escapeHtml(v); }
@@ -193,7 +221,7 @@
     const diagHtml = ui.connDiag ? renderConnDiag(ui.connDiag) : "";
     const gtmHint = isCsv
       ? '<div class="onb-note">你选择了 CSV 批量上传，本步可选。若你同时部署了 GTM/sGTM 容器，也可在此验证 Collect 可达性；不测也能继续。</div>'
-      : '<div class="onb-note">把你的 Collect 接收地址与 Webhook Secret 填好，点「测试连接」验证实时链路是否打通。</div>';
+      : '<div class="onb-note">把你的 Collect 接收地址与 Webhook Secret 填好，点「测试连接」验证实时链路是否打通。连接测试通过后，「下一步」会自动解锁。</div>';
     return '<div class="onb-block">'
       + '<h2 class="section-title">第二步 · sGTM 连接测试</h2>'
       + gtmHint
@@ -204,7 +232,9 @@
       +   '<input type="password" class="onb-input" id="onb-secret" placeholder="与 Collect 接入密钥一致" />'
       +   '<div class="onb-step-actions">'
       +     '<button type="button" class="pt-btn primary" id="onb-test">测试连接</button>'
-      +     (isCsv ? '<button type="button" class="pt-btn" id="onb-next2-skip">跳过，下一步</button>' : "")
+      +     (isCsv
+            ? '<button type="button" class="pt-btn" id="onb-next2-skip">跳过，下一步</button>'
+            : '<button type="button" class="pt-btn primary" id="onb-next2"' + (ui.connected ? "" : " disabled") + ">下一步</button>")
       +     '<button type="button" class="pt-btn ghost" id="onb-back2">上一步</button>'
       +   "</div>"
       + "</div>"
@@ -292,7 +322,7 @@
         + '<button type="button" class="pt-btn ghost" id="onb-back4">上一步</button></div>'
         + uploadedNote;
     } else {
-      body = '<p class="muted">你选择了 GTM 实时接入，无需上传文件——事件会经 sGTM 实时进入。点击「完成接入」即可进入归因面板；首个实时事件到达时 firstConnectedAt 会自动写入。</p>'
+      body = '<p class="muted">你选择了 GTM 实时接入，无需上传文件——事件会经 sGTM 实时进入。点击「完成接入」即记录首次接入时间，并进入归因面板。</p>'
         + '<div class="onb-step-actions"><button type="button" class="pt-btn primary" id="onb-finish-gtm">完成接入</button>'
         + '<button type="button" class="pt-btn ghost" id="onb-back4">上一步</button></div>';
     }
@@ -356,6 +386,8 @@
     if (testBtn) testBtn.addEventListener("click", doTestConnection);
     const skip2 = container.querySelector("#onb-next2-skip");
     if (skip2) skip2.addEventListener("click", () => { ui.step = 3; ensureMapping(); });
+    const next2 = container.querySelector("#onb-next2");
+    if (next2) next2.addEventListener("click", () => { if (ui.connected) { ui.step = 3; ensureMapping(); } });
     const back2 = container.querySelector("#onb-back2");
     if (back2) back2.addEventListener("click", () => { ui.step = 1; rerender(); });
 
@@ -372,7 +404,7 @@
     const checkBtn = container.querySelector("#onb-check");
     if (checkBtn) checkBtn.addEventListener("click", checkConnected);
     const finishGtm = container.querySelector("#onb-finish-gtm");
-    if (finishGtm) finishGtm.addEventListener("click", () => { ui.step = 5; rerender(); });
+    if (finishGtm) finishGtm.addEventListener("click", doFinishGtm);
     const back4 = container.querySelector("#onb-back4");
     if (back4) back4.addEventListener("click", () => { ui.step = 3; rerender(); });
 
@@ -488,6 +520,24 @@
       ui.notice = { tone: "bad", text: "保存失败：" + ((e && e.message) || String(e)) };
       ui.busy = false;
       rerender();
+    }
+  }
+
+  /* U5 · GTM 路径「完成接入」：写 firstConnectedAt 后进归因面板 */
+  async function doFinishGtm() {
+    ui.busy = true; ui.notice = null;
+    try {
+      const ws = await PTOnbClient.completeOnboarding();
+      ui.firstConnectedAt = ws && ws.firstConnectedAt ? ws.firstConnectedAt : null;
+      ui.step = 5; rerender();
+    } catch (e) {
+      ui.notice = {
+        tone: "bad",
+        text: "完成接入失败：" + ((e && e.message) || String(e)) + "（仍可进入面板）",
+      };
+      ui.step = 5; rerender();
+    } finally {
+      ui.busy = false;
     }
   }
 
