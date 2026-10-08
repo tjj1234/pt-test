@@ -14,6 +14,28 @@ const { checkPermission, PERMISSIONS, ROLE_PERMISSIONS, ROLES } = require("../pe
 // 工具存储（内存中，后续可持久化）
 const tools = new Map();
 
+// 工具执行函数映射：toolName -> executeFn(args, context)。executeTool() 按此分发真实执行。
+const toolExecutors = new Map();
+
+// 调用日志（可选注入）。server.cjs 启动时用 tool-calls.cjs 的 initToolCalls(db) 注入，
+// 注入后 executeTool() 会在真实执行前后各写一条；未注入则静默跳过（兼容既有测试）。
+let toolCallLogger = null;
+
+/** 注入调用日志模块：形如 { start(entry)->{id}, finish(id, entry) }。 */
+function setToolCallLogger(logger) {
+  toolCallLogger = logger || null;
+}
+
+/** 生成参数/结果的简短摘要（截断到 500 字符，避免超大对象撑爆日志）。 */
+function summarize(value) {
+  if (value == null) return "";
+  let s;
+  try { s = typeof value === "string" ? value : JSON.stringify(value); }
+  catch (e) { s = String(value); }
+  s = String(s || "");
+  return s.length > 500 ? s.slice(0, 500) + "…" : s;
+}
+
 /**
  * 注册工具
  * @param {Object} toolDefinition - 工具定义
@@ -39,6 +61,7 @@ function registerTool(toolDefinition) {
     riskLevel,
     requiredPermissions,
     requiredCredentials = [],
+    execute = null,
   } = toolDefinition;
 
   // 基本验证
@@ -77,6 +100,28 @@ function registerTool(toolDefinition) {
     requiredCredentials,
   });
 
+  // 若定义里直接带了执行函数，一并登记为 executor（等同于单独调 registerToolExecutor）。
+  if (typeof execute === "function") {
+    toolExecutors.set(name, execute);
+  }
+
+  return true;
+}
+
+/**
+ * 注册工具的真实执行函数（供 executeTool 按工具名分发）。
+ * @param {string} toolName - 工具名称
+ * @param {Function} executeFn - 执行函数：async (args, context) => 任意可序列化结果
+ * @returns {boolean} 是否注册成功
+ */
+function registerToolExecutor(toolName, executeFn) {
+  if (!toolName || typeof executeFn !== "function") {
+    throw new Error("registerToolExecutor 需要有效的 toolName 和 executeFn");
+  }
+  if (!tools.has(toolName)) {
+    throw new Error(`工具尚未注册，无法绑定执行函数: ${toolName}`);
+  }
+  toolExecutors.set(toolName, executeFn);
   return true;
 }
 
@@ -149,24 +194,73 @@ async function validateToolCall(toolName, args, context) {
  * @returns {Promise<Object>} 执行结果
  */
 async function executeTool(toolName, args, context) {
-  // B2: 暂不实现真实执行，仅返回模拟结果
   const isValid = await validateToolCall(toolName, args, context);
   if (!isValid) {
     throw new Error(`工具调用验证失败: ${toolName}`);
   }
 
+  const executor = toolExecutors.get(toolName);
+  const ctx = context || {};
+  const startedAt = Date.now();
+
+  // 执行前日志（真实执行前后各写一条）
+  let logId = null;
+  if (toolCallLogger) {
+    try {
+      const started = await toolCallLogger.start({
+        tenantId: ctx.tenantId,
+        workspaceId: ctx.workspaceId,
+        userId: ctx.userId,
+        toolName,
+        inputSummary: summarize(args),
+      });
+      logId = started && started.id;
+    } catch (e) {
+      // 日志写入失败不应阻断工具执行（审计失败可观测，但不影响业务）。
+    }
+  }
+
+  let resultValue = null;
+  let status = "completed";
+  let outputSummary = "";
+
+  try {
+    if (typeof executor === "function") {
+      resultValue = await executor(args, ctx);
+      outputSummary = summarize(resultValue);
+    } else {
+      // 未注册执行函数：返回空结果，不再返回硬编码的“模拟执行成功”字符串。
+      status = "skipped";
+      outputSummary = "";
+    }
+  } catch (err) {
+    status = "failed";
+    outputSummary = summarize(err && err.message ? err.message : err);
+    if (logId != null && toolCallLogger) {
+      try { await toolCallLogger.finish(logId, { outputSummary, durationMs: Date.now() - startedAt, tokenCount: 0, status }); } catch (e) {}
+    }
+    throw err;
+  }
+
+  if (logId != null && toolCallLogger) {
+    try { await toolCallLogger.finish(logId, { outputSummary, durationMs: Date.now() - startedAt, tokenCount: 0, status }); } catch (e) {}
+  }
+
   return {
     success: true,
-    result: `模拟执行 ${toolName} 成功`,
+    result: resultValue,
     metadata: {
       toolName,
       executedAt: new Date().toISOString(),
+      executed: typeof executor === "function",
     },
   };
 }
 
 module.exports = {
   registerTool,
+  registerToolExecutor,
+  setToolCallLogger,
   listToolsForWorkspace,
   validateToolCall,
   executeTool,
