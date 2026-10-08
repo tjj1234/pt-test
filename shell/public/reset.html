@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>重置密码 · 北极星</title>
+<link rel="stylesheet" href="/assets/styles.css">
+</head>
+<body>
+<div class="login-wrap">
+  <form class="login-card" id="f" autocomplete="off">
+    <div class="brand">
+      <div class="logo">P</div>
+      <div><h1>北极星</h1><p>设置新密码</p></div>
+    </div>
+    <div class="err" id="e" style="min-height:auto"></div>
+    <label for="np">新密码</label><input id="np" type="password" autocomplete="new-password" placeholder="至少 8 位">
+    <div class="pw-meter" id="pwMeter" hidden><div class="pw-bar"><span class="pw-bar-fill" id="pwBar"></span></div><div class="pw-tip" id="pwTip"></div></div>
+    <label for="np2">确认新密码</label><input id="np2" type="password" autocomplete="new-password" placeholder="再输一遍">
+    <div class="pw-match" id="pwMatch" hidden></div>
+    <button class="btn" id="b" type="submit">重置密码</button>
+    <div class="hint"><a href="/login">返回登录</a></div>
+  </form>
+</div>
+<script src="/assets/pw-strength.js"></script>
+<script src="/assets/reset.js"></script>
+</body></html>

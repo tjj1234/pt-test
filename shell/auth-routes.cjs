@@ -9,9 +9,33 @@
  *   PT_BF_MAX_FAILURES / PT_BF_WINDOW_MS / PT_BF_LOCK_MS
  * ============================================================================
  */
+const crypto = require("crypto");
 const { createRateLimiter, createLoginGuard, clientIp } = require("./ratelimit.cjs");
+// 仅复用 auth.cjs 的哈希原语，不改动其登录/注册/会话等既有逻辑
+const { hashPassword, verifyPassword } = require("./auth.cjs");
 
 const COOKIE_NAME = "pt_session";
+const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
+
+// ---- U3：忘记/改密码相关限流（抗枚举 / 抗暴破）----
+const forgotLimiter   = createRateLimiter({ windowMs: 60000, max: Number(process.env.PT_RATE_FORGOT_PER_MIN   || 5) });
+const changePwLimiter = createRateLimiter({ windowMs: 60000, max: Number(process.env.PT_RATE_CHANGE_PW_PER_MIN || 10) });
+
+// 重置令牌表：懒创建（不新增迁移文件、不碰 db-migrations），users.id 为 UUID
+let resetTableReady = false;
+async function ensureResetTable(db) {
+  if (resetTableReady) return;
+  await db.query(
+    `CREATE TABLE IF NOT EXISTS password_reset_tokens (
+       token_hash  TEXT PRIMARY KEY,
+       user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+       expires_at  TIMESTAMPTZ NOT NULL,
+       used        INTEGER NOT NULL DEFAULT 0,
+       created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+     )`
+  );
+  resetTableReady = true;
+}
 
 // ---- P1 硬化阈值（生产默认；可用环境变量覆盖供自测）----
 const RATE_LOGIN_PER_MIN    = Number(process.env.PT_RATE_LOGIN_PER_MIN    || 10);
@@ -126,6 +150,91 @@ async function handleAuthRoutes(req, res, auth) {
       const s = await sessionFromCookie(req, auth);
       if (!s) return sendJson(res, 401, { ok: false, error: "没登录" }), true;
       return sendJson(res, 200, { ok: true, user: s.user, tenant: s.tenant }), true;
+    }
+
+    // ===== U3：忘记 / 重置 / 改密码（仅新增这三个端点，不改动既有登录/注册/会话逻辑）=====
+
+    // ---- 忘记密码（返回重置令牌；开发态 PT_RESET_DELIVERY=return 直接在响应返回，不假设任何发信通道）----
+    if (p === "/api/auth/forgot-password" && method === "POST") {
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+      if (!forgotLimiter.allow(clientIp(req))) {
+        return sendJson(res, 429, { ok: false, error: "请求过于频繁，请稍后再试" }), true;
+      }
+      const identifier = String(body.username || body.email || "").trim();
+      let tokenInfo = null;
+      if (identifier) {
+        const r = await auth.db.query(
+          "SELECT id, username, email FROM users WHERE username = $1 OR email = $1",
+          [identifier]
+        );
+        if (r.rows.length) {
+          await ensureResetTable(auth.db);
+          const token = crypto.randomBytes(32).toString("hex");
+          const expiresAt = new Date(Date.now() + Number(process.env.PT_RESET_TTL_MS || 30 * 60 * 1000));
+          await auth.db.query(
+            "INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES ($1,$2,$3)",
+            [sha256(token), r.rows[0].id, expiresAt]
+          );
+          // 开发态：直接把重置链接返回前端，绕开「尚不存在的发信基础设施」
+          const delivery = (process.env.PT_RESET_DELIVERY || "return").toLowerCase();
+          if (delivery === "return") {
+            const host = req.headers.host || "localhost";
+            tokenInfo = { delivery, token, resetUrl: "http://" + host + "/reset?token=" + token };
+          }
+        }
+      }
+      // 抗账户枚举：无论是否找到用户，都返回同一套成功文案；仅 return 模式才附带令牌
+      const out = { ok: true, message: "若该账号存在，已生成重置链接（开发态直接返回在下方）。" };
+      if (tokenInfo) { out.delivery = tokenInfo.delivery; out.token = tokenInfo.token; out.resetUrl = tokenInfo.resetUrl; }
+      return sendJson(res, 200, out), true;
+    }
+
+    // ---- 用令牌重置密码 ----
+    if (p === "/api/auth/reset-password" && method === "POST") {
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+      const token = String(body.token || "").trim();
+      const password = String(body.password || "");
+      if (!token) return sendJson(res, 400, { ok: false, error: "缺少重置令牌" }), true;
+      if (password.length < 8) return sendJson(res, 400, { ok: false, error: "新密码至少 8 位" }), true;
+      await ensureResetTable(auth.db);
+      const r = await auth.db.query(
+        "SELECT token_hash, user_id, expires_at, used FROM password_reset_tokens WHERE token_hash = $1",
+        [sha256(token)]
+      );
+      if (!r.rows.length) return sendJson(res, 400, { ok: false, error: "重置链接无效或已失效" }), true;
+      const row = r.rows[0];
+      if (row.used) return sendJson(res, 400, { ok: false, error: "该重置链接已使用过" }), true;
+      if (new Date(row.expires_at).getTime() < Date.now()) return sendJson(res, 400, { ok: false, error: "重置链接已过期，请重新申请" }), true;
+      await auth.db.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hashPassword(password), row.user_id]);
+      await auth.db.query("UPDATE password_reset_tokens SET used = 1 WHERE token_hash = $1", [row.token_hash]);
+      return sendJson(res, 200, { ok: true }), true;
+    }
+
+    // ---- 已登录改密码（校验当前密码后更新；改密后让其他会话失效，保留当前会话）----
+    if (p === "/api/auth/change-password" && method === "POST") {
+      const sess = await sessionFromCookie(req, auth);
+      if (!sess) return sendJson(res, 401, { ok: false, error: "没登录" }), true;
+      if (!changePwLimiter.allow(clientIp(req))) {
+        return sendJson(res, 429, { ok: false, error: "请求过于频繁，请稍后再试" }), true;
+      }
+      let body = {};
+      try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+      const current = String(body.currentPassword || "");
+      const np = String(body.newPassword || "");
+      if (!current) return sendJson(res, 400, { ok: false, error: "请输入当前密码" }), true;
+      if (np.length < 8) return sendJson(res, 400, { ok: false, error: "新密码至少 8 位" }), true;
+      const ur = await auth.db.query("SELECT password_hash FROM users WHERE id = $1", [sess.user.id]);
+      if (!ur.rows.length) return sendJson(res, 400, { ok: false, error: "用户不存在" }), true;
+      if (!verifyPassword(current, ur.rows[0].password_hash)) return sendJson(res, 400, { ok: false, error: "当前密码不正确" }), true;
+      await auth.db.query("UPDATE users SET password_hash = $1 WHERE id = $2", [hashPassword(np), sess.user.id]);
+      const curTok = parseCookie(req, COOKIE_NAME);
+      if (curTok) {
+        // 改密后让同一用户的其他设备/标签页会话失效，仅保留当前这次会话
+        await auth.db.query("DELETE FROM sessions WHERE user_id = $1 AND token_hash <> $2", [sess.user.id, sha256(curTok)]);
+      }
+      return sendJson(res, 200, { ok: true }), true;
     }
   } catch (e) {
     console.error("[auth] 出错：", e && e.message ? e.message : e);

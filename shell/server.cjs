@@ -543,6 +543,9 @@ async function handle(req, res) {
 
   if (p === "/login" || p === "/login.html") return serveFile(res, path.join(PUBLIC, "login.html"));
   if (p === "/settings" || p === "/settings.html") return serveFile(res, path.join(PUBLIC, "settings.html"));
+  // ---- U3：忘记/重置密码页（登出态公开页，不能套 authed 重定向）----
+  if (p === "/forgot" || p === "/forgot.html") return serveFile(res, path.join(PUBLIC, "forgot.html"));
+  if (p === "/reset" || p === "/reset.html") return serveFile(res, path.join(PUBLIC, "reset.html"));
   if (p === "/" || p === "/index.html") {
     if (!(await authed(req))) { res.writeHead(302, { Location: "/login" }); return res.end(); }
     return serveFile(res, path.join(PUBLIC, "index.html"));
