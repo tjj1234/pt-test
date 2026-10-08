@@ -281,6 +281,9 @@ async function handleChat(req, res, me, body) {
   // ⑨ 发消息附带的图片（URL 或本地路径）落到消息里
   const image = String(body.image || "").trim() || null;
 
+  // M2：当前上下文（如 { panel, panelLabel }），透传给 DSH 拼进系统提示
+  const context = (body.context && typeof body.context === "object" && !Array.isArray(body.context)) ? body.context : null;
+
   // ⑤ 分岔：以某条 assistant 消息之前的上下文重新生成
   const branchFrom = (body.branchFrom !== undefined && body.branchFrom !== null) ? body.branchFrom : null;
 
@@ -368,6 +371,7 @@ async function handleChat(req, res, me, body) {
     history: histText,
     memory: memText,
     imageNote,
+    context,
     decryptApiKey: keys.decryptApiKey,
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,

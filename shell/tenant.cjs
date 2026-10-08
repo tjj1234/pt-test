@@ -226,6 +226,7 @@ async function runDshForUser(userId, question, opts = {}) {
     persona: readPersona(),
     memory: opts.memory,
     imageNote: opts.imageNote,
+    context: opts.context,
     history: opts.history,
     question,
     onDelta: opts.onDelta,
