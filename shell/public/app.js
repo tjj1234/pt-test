@@ -1402,10 +1402,11 @@ async function bizLoadFlows() {
   try {
     const result = await bizRead("/api/tools", () => bizToolSamples);
     if (seq !== bizFlowsRequest) return;
-    if (!Array.isArray(result.data)) throw new Error("工具接口返回格式不正确");
+    const tools = Array.isArray(result.data) ? result.data : result.data.tools;
+    if (!Array.isArray(tools)) throw new Error("工具接口返回格式不正确");
     $("#toolsList").replaceChildren();
-    $("#toolsStatus").textContent = (result.mock ? "示例数据 · 工具接口待接入。" : "") + (result.data.length ? result.data.length + " 项能力" : "当前没有可用工具");
-    result.data.forEach(t => {
+    $("#toolsStatus").textContent = (result.mock ? "示例数据 · 工具接口待接入。" : "") + (tools.length ? tools.length + " 项能力" : "当前没有可用工具");
+    tools.forEach(t => {
       const card = bizNode("div", null, "card"); card.append(bizNode("h4", t.name), bizNode("p", t.description), bizNode("p", [t.type, t.version, "输出 " + t.outputType, "风险 " + t.riskLevel].join(" · ")));
       const details = bizNode("details"); details.append(bizNode("summary", "输入参数"), bizNode("pre", JSON.stringify(t.inputSchema, null, 2))); card.appendChild(details);
       const run = bizNode("button", "运行", "toolbar-btn"); run.type = "button";
@@ -1437,7 +1438,7 @@ async function bizLoadUsage() {
     if (!Array.isArray(result.data.calls)) throw new Error("调用日志接口返回格式不正确");
     const calls = result.data.calls;
     $("#usageStatus").textContent = (result.mock ? "示例数据 · 日志接口待接入。" : "") + (calls.length ? calls.length + " 次调用 · " + calls.reduce((n, c) => n + (Number(c.tokenCount) || 0), 0) + " Tokens" : "所选时间范围内没有工具调用");
-    bizTable($("#usageList"), ["时间", "工具", "输入摘要", "输出摘要", "耗时", "Tokens", "状态"], calls.map(c => [fmtTime(c.timestamp), c.toolName, c.inputSummary, c.outputSummary, c.durationMs == null ? "—" : c.durationMs + " ms", c.tokenCount, ({ success: "成功", completed: "成功", failed: "失败", error: "失败", running: "执行中", pending: "等待中" })[c.status] || c.status]));
+    bizTable($("#usageList"), ["时间", "工具", "输入摘要", "输出摘要", "耗时", "Tokens", "状态"], calls.map(c => [fmtTime(c.timestamp), c.toolName, c.inputSummary, c.outputSummary, c.durationMs == null ? "—" : c.durationMs + " ms", c.tokenCount, ({ success: "成功", completed: "成功", failed: "失败", error: "失败", running: "执行中", started: "执行中", skipped: "未执行", pending: "等待中" })[c.status] || c.status]));
   } catch (e) { if (seq === bizUsageRequest) { $("#usageList").replaceChildren(); $("#usageStatus").textContent = e.message; } }
 }
 $("#usageRanges").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { bizUsageRange = b.dataset.range; bizLoadUsage(); }));
