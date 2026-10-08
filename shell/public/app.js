@@ -35,6 +35,9 @@ function switchView(v) {
   if (v === "memory") loadMemory();
   if (v === "history") refreshList();
   if (v === "import") impOnEnter();
+  if (v === "flows") bizLoadFlows();
+  if (v === "usage") bizLoadUsage();
+  if (v === "schedule") bizLoadSchedule();
 }
 document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => switchView(b.dataset.v)));
 
@@ -1362,3 +1365,110 @@ function impOnEnter() {
   await refreshList();   // 预拉对话列表，对话历史视图打开即见
   switchView("home");    // 默认落地首页（U0 三卡片 + chip 行）
 })();
+
+/* ---- M-UI-B：仅业务流库、用量日志与上传记录。?m-ui-b=mock 显式演示；
+ * M1 未上线时仅 404/501 使用标注的示例数据，401/403/故障不会伪装成成功。
+ * U5 路径交付后填 #v-flows .page[data-onboarding-path]。
+ * enabled-count 契约尚未交付，启用状态暂为独立 mock，不代表真实接入状态。
+ * 上传记录沿用 U4 的 import API、字段和状态语义，上传复用现有 impOnEnter。
+ */
+const bizMock = new URLSearchParams(location.search).get("m-ui-b") === "mock";
+const bizToolSamples = [
+  { name: "attribution.summary", type: "tool", version: "1.0", description: "汇总广告渠道转化与花费", inputSchema: { type: "object", properties: { range: { type: "string" } } }, outputType: "json", riskLevel: "low" },
+  { name: "data.quality", type: "tool", version: "1.0", description: "检查事件与广告数据质量", inputSchema: { type: "object" }, outputType: "json", riskLevel: "low" }
+];
+function bizNode(tag, text, cls) {
+  const n = document.createElement(tag); if (text != null) n.textContent = String(text); if (cls) n.className = cls; return n;
+}
+async function bizRead(url, sample) {
+  if (bizMock) return { data: sample(), mock: true };
+  const r = await fetch(url, { credentials: "same-origin" });
+  if ((r.status === 404 || r.status === 501) && sample) return { data: sample(), mock: true };
+  const j = await r.json().catch(() => null);
+  if (!r.ok || !j || j.ok === false) throw new Error((j && typeof j.error === "string" && j.error) || "读取失败（HTTP " + r.status + "），请刷新重试");
+  return { data: j, mock: false };
+}
+function bizTable(host, headers, rows) {
+  host.replaceChildren(); const table = bizNode("table"); table.style.cssText = "width:100%;border-collapse:collapse;text-align:left";
+  const head = bizNode("thead"), tr = bizNode("tr");
+  headers.forEach(h => { const th = bizNode("th", h); th.style.padding = "12px"; tr.appendChild(th); }); head.appendChild(tr); table.appendChild(head);
+  const body = bizNode("tbody"); rows.forEach(cells => { const row = bizNode("tr"); cells.forEach(c => { const td = bizNode("td"); td.style.cssText = "padding:12px;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere"; if (c instanceof Node) td.appendChild(c); else td.textContent = c == null ? "—" : String(c); row.appendChild(td); }); body.appendChild(row); });
+  table.appendChild(body); host.appendChild(table);
+}
+let bizFlowsRequest = 0;
+async function bizLoadFlows() {
+  const seq = ++bizFlowsRequest; $("#toolsStatus").textContent = "读取工具…";
+  $("#flowStatus").textContent = "未启用 · 示例状态（启用查询待接入）";
+  try {
+    const result = await bizRead("/api/tools", () => bizToolSamples);
+    if (seq !== bizFlowsRequest) return;
+    if (!Array.isArray(result.data)) throw new Error("工具接口返回格式不正确");
+    $("#toolsList").replaceChildren();
+    $("#toolsStatus").textContent = (result.mock ? "示例数据 · 工具接口待接入。" : "") + (result.data.length ? result.data.length + " 项能力" : "当前没有可用工具");
+    result.data.forEach(t => {
+      const card = bizNode("div", null, "card"); card.append(bizNode("h4", t.name), bizNode("p", t.description), bizNode("p", [t.type, t.version, "输出 " + t.outputType, "风险 " + t.riskLevel].join(" · ")));
+      const details = bizNode("details"); details.append(bizNode("summary", "输入参数"), bizNode("pre", JSON.stringify(t.inputSchema, null, 2))); card.appendChild(details);
+      const run = bizNode("button", "运行", "toolbar-btn"); run.type = "button";
+      run.addEventListener("click", async () => {
+        run.disabled = true;
+        try { if (!state.activeId && !(await newConversation())) { $("#toolsStatus").textContent = "无法创建对话，请重试"; return; } switchView("chat"); ta.value = "@" + t.name + " "; ta.dispatchEvent(new Event("input", { bubbles: true })); ta.focus(); }
+        finally { run.disabled = false; }
+      }); card.appendChild(run); $("#toolsList").appendChild(card);
+    });
+  } catch (e) { if (seq === bizFlowsRequest) { $("#toolsList").replaceChildren(); $("#toolsStatus").textContent = e.message; } }
+}
+$("#flowEnable").addEventListener("click", () => {
+  const path = $("#v-flows .page").dataset.onboardingPath;
+  if (path && path.startsWith("/") && !path.startsWith("//")) location.assign(path);
+  else $("#flowHint").textContent = "首次接入向导入口待接通；当前尚未启用广告归因分析。";
+});
+$("#toolsRetry").addEventListener("click", bizLoadFlows);
+let bizUsageRange = "today", bizUsageRequest = 0;
+function bizUsageSample() {
+  const now = Date.now(), days = bizUsageRange === "month" ? [0, 2, 12] : bizUsageRange === "week" ? [0, 2] : [0];
+  return { ok: true, calls: days.map((d, i) => ({ id: "demo-" + i, timestamp: new Date(now - d * 86400000).toISOString(), toolName: bizToolSamples[i % 2].name, inputSummary: "最近广告数据", outputSummary: "分析已完成", durationMs: 240 + i * 80, tokenCount: 380 + i * 60, status: "success" })) };
+}
+async function bizLoadUsage() {
+  const seq = ++bizUsageRequest; $("#usageStatus").textContent = "读取调用记录…";
+  $("#usageRanges").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.range === bizUsageRange)));
+  try {
+    const result = await bizRead("/api/usage/tool-calls?range=" + bizUsageRange, bizUsageSample);
+    if (seq !== bizUsageRequest) return;
+    if (!Array.isArray(result.data.calls)) throw new Error("调用日志接口返回格式不正确");
+    const calls = result.data.calls;
+    $("#usageStatus").textContent = (result.mock ? "示例数据 · 日志接口待接入。" : "") + (calls.length ? calls.length + " 次调用 · " + calls.reduce((n, c) => n + (Number(c.tokenCount) || 0), 0) + " Tokens" : "所选时间范围内没有工具调用");
+    bizTable($("#usageList"), ["时间", "工具", "输入摘要", "输出摘要", "耗时", "Tokens", "状态"], calls.map(c => [fmtTime(c.timestamp), c.toolName, c.inputSummary, c.outputSummary, c.durationMs == null ? "—" : c.durationMs + " ms", c.tokenCount, ({ success: "成功", completed: "成功", failed: "失败", error: "失败", running: "执行中", pending: "等待中" })[c.status] || c.status]));
+  } catch (e) { if (seq === bizUsageRequest) { $("#usageList").replaceChildren(); $("#usageStatus").textContent = e.message; } }
+}
+$("#usageRanges").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { bizUsageRange = b.dataset.range; bizLoadUsage(); }));
+$("#usageRetry").addEventListener("click", bizLoadUsage);
+const bizImportApi = "/api/business/attribution/import";
+const bizUploadStatus = { pending: "排队中", validating: "结构校验中", ready: "结构校验通过 · 待确认", importing: "正在入库", completed: "导入完成", partial_failed: "部分行失败", failed: "导入失败", cancelled: "已取消" };
+let bizScheduleRequest = 0;
+async function bizLoadSchedule() {
+  const seq = ++bizScheduleRequest; $("#scheduleStatus").textContent = "读取上传记录…";
+  const sampleJob = { importId: "demo-upload", provider: "google", originalName: "广告数据示例.csv", status: "completed", rowCount: 120, successRows: 120, createdAt: new Date().toISOString() };
+  try {
+    const [jr, wr] = await Promise.all([
+      bizRead(bizImportApi + "/jobs", bizMock ? () => ({ jobs: [sampleJob] }) : null),
+      bizRead(bizImportApi + "/workspace", bizMock ? () => ({ workspace: { firstConnectedAt: sampleJob.createdAt } }) : null)
+    ]);
+    if (seq !== bizScheduleRequest) return;
+    if (!Array.isArray(jr.data.jobs)) throw new Error("上传记录接口返回格式不正确");
+    const jobs = jr.data.jobs.slice().sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 50);
+    $("#scheduleConnected").textContent = fmtTime(wr.data.workspace && wr.data.workspace.firstConnectedAt) || "尚未接通（首次成功导入后自动记录）";
+    $("#scheduleStatus").textContent = (jr.mock ? "示例上传记录。" : "") + (jobs.length ? "上传时间是文件被上传的时间；数据仅在重新上传时更新。" : "还没有上传记录，点击「新增上传」开始第一次导入。");
+    bizTable($("#scheduleHistory"), ["状态", "平台", "文件", "读到行数", "入库", "上传时间", "详情"], jobs.map(j => {
+      const detail = bizNode("details"), summary = bizNode("summary", "查看"); detail.appendChild(summary);
+      let loaded = false;
+      detail.addEventListener("toggle", async () => {
+        if (!detail.open || loaded) return; loaded = true; const content = bizNode("p", "读取详情…"); detail.appendChild(content);
+        try { const r = await bizRead(bizImportApi + "/jobs/" + encodeURIComponent(j.importId), bizMock ? () => ({ job: j }) : null); const job = r.data.job; if (!job) throw new Error("找不到该任务"); content.textContent = "平台 " + (job.provider || "—") + " · " + (job.originalName || "—") + " · 最终入库 " + (job.successRows == null ? "—" : job.successRows) + " · 失败行 " + (job.failedRows || 0); if (job.errorDetails && job.errorDetails.length) detail.appendChild(bizNode("pre", JSON.stringify(job.errorDetails, null, 2))); }
+        catch (e) { content.textContent = e.message; loaded = false; }
+      });
+      return [bizUploadStatus[j.status] || j.status, j.provider, j.originalName, j.rowCount, j.successRows, fmtTime(j.createdAt), detail];
+    }));
+  } catch (e) { if (seq === bizScheduleRequest) { $("#scheduleHistory").replaceChildren(); $("#scheduleConnected").textContent = "暂时无法读取首次接通时间"; $("#scheduleStatus").textContent = e.message; } }
+}
+$("#scheduleUpload").addEventListener("click", () => switchView("import"));
+$("#scheduleRetry").addEventListener("click", bizLoadSchedule);
