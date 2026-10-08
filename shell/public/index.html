@@ -133,24 +133,24 @@
       </div>
     </section>
 
-    <!-- ============ 工作区：业务流库（暂无内容） ============ -->
-    <section class="view" id="v-flows"><div class="page">
-      <div class="empty-state">
-        <div class="es-ico"><span class="ico" data-ico="layers"></span></div>
-        <h3>业务流库</h3>
-        <p>把 skill + mcp + workflow 编排成可复用的业务流。启用后自动生成「数据面板」Tab。</p>
-        <p class="es-sub">当前还没有业务流 —— 去首页「启用业务流」开始配置（U5 任务包交付）。</p>
-      </div>
+    <!-- ============ 工作区：业务流库 ============ -->
+    <section class="view" id="v-flows"><div class="page" data-onboarding-path="">
+      <h3>业务流库</h3><p>编排业务流连接数据与分析；单点能力可在对话中运行。</p>
+      <h4>编排</h4><div class="card"><h4>广告归因分析</h4><p>接入广告数据，分析渠道、产品与用户转化。</p>
+        <p id="flowStatus" role="status">读取启用状态…</p><button type="button" class="toolbar-btn" id="flowEnable">启用</button>
+        <p id="flowHint" role="status"></p></div>
+      <h4>单点能力</h4><p id="toolsStatus" role="status"></p><button type="button" class="toolbar-btn" id="toolsRetry">刷新</button>
+      <div class="guide-cards" id="toolsList"></div>
     </div></section>
 
-    <!-- ============ 工作区：调度与执行（暂无内容） ============ -->
+    <!-- ============ 工作区：调度与执行 · 上传记录 ============ -->
     <section class="view" id="v-schedule"><div class="page">
-      <div class="empty-state">
-        <div class="es-ico"><span class="ico" data-ico="schedule"></span></div>
-        <h3>调度与执行</h3>
-        <p>周期性触发业务流、查看运行记录与执行状态。</p>
-        <p class="es-sub">当前还没有调度任务 —— 等业务流启用后再来这里编排定时执行。</p>
-      </div>
+      <h3>调度与执行 · 上传记录</h3><p>数据由手动上传触发，不会自动同步。更新归因数据时，请重新上传文件。</p>
+      <div class="card"><h4>首次接通时间</h4><p id="scheduleConnected">读取中…</p></div>
+      <h4>上传记录</h4><p>最近 50 条 · 按上传时间倒序</p>
+      <button type="button" class="toolbar-btn" id="scheduleUpload">＋ 新增上传</button>
+      <button type="button" class="toolbar-btn" id="scheduleRetry">刷新</button>
+      <p id="scheduleStatus" role="status"></p><div id="scheduleHistory" style="overflow:auto"></div>
     </div></section>
 
     <!-- ============ 数据面板（复用现有 /dashboard/ 反代） ============ -->
@@ -333,14 +333,15 @@
       </div>
     </div></section>
 
-    <!-- ============ 用量与日志（建设中） ============ -->
+    <!-- ============ 用量与日志 ============ -->
     <section class="view" id="v-usage"><div class="page">
-      <div class="empty-state building">
-        <div class="es-ico"><span class="ico" data-ico="log"></span></div>
-        <h3>用量与日志</h3>
-        <p>查看调用量、Token 消耗与操作审计日志。</p>
-        <p class="es-sub es-badge">功能建设中</p>
-      </div>
+      <h3>用量与日志</h3><p>查看工具调用、执行结果与 Token 消耗。</p>
+      <div role="group" aria-label="日志时间范围" id="usageRanges">
+        <button type="button" class="toolbar-btn" data-range="today" aria-pressed="true">今日</button>
+        <button type="button" class="toolbar-btn" data-range="week" aria-pressed="false">本周</button>
+        <button type="button" class="toolbar-btn" data-range="month" aria-pressed="false">本月</button>
+      </div><button type="button" class="toolbar-btn" id="usageRetry">刷新</button>
+      <p id="usageStatus" role="status"></p><div id="usageList" style="overflow:auto"></div>
     </div></section>
   </main>
 </div>
