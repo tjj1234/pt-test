@@ -36,6 +36,8 @@ const tenantMod = require("./tenant.cjs");
 const convMod = require("./conversations.cjs");
 const memoryMod = require("./memory.cjs");
 const panelSharesMod = require("./panel-share.cjs");
+const toolCallsMod = require("./tool-calls.cjs");
+const toolsRegistry = require("./tools/registry.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
 
 // ---- 路径：全部相对 repo 根，可用环境变量覆盖 ----
@@ -101,6 +103,7 @@ let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
 let memory = null;               // 用户长期记忆 / 所选模型
 let panelShares = null;          // 面板分享落库句柄
+let toolCalls = null;            // 工具调用日志落库句柄（M1）
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
@@ -661,6 +664,37 @@ async function handle(req, res) {
   const me = await authed(req);
   if (!me) return json(res, 401, { ok: false, error: "没登录" });
 
+  // ---- M1：工具清单 / 工具执行 / 工具调用日志（按 workspace 隔离）----
+  const workspaceIdFor = (m) => "ws_" + (m && m.tenant ? m.tenant.id : "");
+  if (p === "/api/tools" && req.method === "GET") {
+    const context = { userId: me.user.id, tenantId: me.tenant.id, workspaceId: workspaceIdFor(me) };
+    const list = await toolsRegistry.listToolsForWorkspace(context.workspaceId, context);
+    return json(res, 200, { ok: true, tools: list });
+  }
+  const toolExecMatch = p.match(/^\/api\/tools\/([^\/]+)\/execute$/);
+  if (toolExecMatch && req.method === "POST") {
+    const name = decodeURIComponent(toolExecMatch[1]);
+    let body = {};
+    try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
+    const args = body.args != null ? body.args : {};
+    const context = { userId: me.user.id, tenantId: me.tenant.id, workspaceId: workspaceIdFor(me) };
+    try {
+      const result = await toolsRegistry.executeTool(name, args, context);
+      return json(res, 200, { ok: true, result });
+    } catch (e) {
+      return json(res, 400, { ok: false, error: e && e.message ? e.message : String(e) });
+    }
+  }
+  if (p === "/api/usage/tool-calls" && req.method === "GET") {
+    const u = new URL(req.url, "http://127.0.0.1:" + PORT);
+    const range = (u.searchParams.get("range") || "today").toLowerCase();
+    if (!["today", "week", "month"].includes(range)) {
+      return json(res, 400, { ok: false, error: "range 只能是 today|week|month" });
+    }
+    const calls = await toolCalls.list({ tenantId: me.tenant.id, workspaceId: workspaceIdFor(me), range });
+    return json(res, 200, { ok: true, calls });
+  }
+
   if (p === "/api/skills") {
     const list = [];
     try {
@@ -961,8 +995,28 @@ async function main() {
   panelShares = await panelSharesMod.initPanelShares(auth.db);
   
   // B4-fix: 初始化默认角色权限
-  const { initializeDefaultRoles } = require("./permissions/index.cjs");
+  const { initializeDefaultRoles, setDb, PERMISSIONS } = require("./permissions/index.cjs");
+  // M1：让 checkPermission 复用 auth.db，避免二次开库 / 读到错误库（workspace 隔离前提）
+  setDb(auth.db);
   await initializeDefaultRoles();
+  
+  // M1：工具调用日志（tool_calls 表）+ 注入 registry.executeTool()，执行前后各写一条。
+  toolCalls = await toolCallsMod.initToolCalls(auth.db);
+  toolsRegistry.setToolCallLogger(toolCalls);
+  
+  // M1：注册一个与业务线无关的 demo 工具（真实执行函数，按 skill 注册规范落 shell registry）。
+  //      该工具同时用于 /api/tools 清单、/api/tools/:name/execute 触发、/api/usage/tool-calls 日志。
+  toolsRegistry.registerTool({
+    name: "get_current_time",
+    type: "utility",
+    version: "1.0.0",
+    description: "返回当前精确时间（ISO 8601）。M1 链路验证用的 demo 工具，与业务线无关。",
+    inputSchema: { type: "object", properties: {}, additionalProperties: false },
+    outputType: "data",
+    riskLevel: "read",
+    requiredPermissions: [PERMISSIONS.TOOL_USE],
+    execute: async () => ({ now: new Date().toISOString() }),
+  });
   
   pruneUploads(); // P1-2：启动清理过期上传
   log.info("init", { stage: "ready", dbDir: DB_DIR, username: USERNAME, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });

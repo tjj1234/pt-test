@@ -2,6 +2,7 @@ import { writeSync } from "node:fs";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
+import { defineTool } from "@deepseek-ai/dsh-tools";
 
 /**
  * persistent-runner —— 常驻 agent 驱动插件（替代 headless 一次性 runner）。
@@ -83,10 +84,17 @@ function apply(ctx) {
       if (event.type === "tool/result") {
         const d = event.data || {};
         const msg = d.message || {};
-        const name = stepNames.get(msg.callId) || "tool";
-        const content = msg.content;
-        const text = Array.isArray(content) ? content.map((b) => (b && b.text) || "").join("") : String(content == null ? "" : content);
-        emit({ type: "step", sessionId: sid, name, result: truncate(text, 400), isError: msg.isError === true });
+        const callId = msg.source && msg.source.callId;
+        const name = stepNames.get(callId) || "tool";
+        let text = "";
+        let isError = false;
+        const blocks = Array.isArray(msg.content) ? msg.content : [];
+        for (const b of blocks) {
+          if (!b || b.type !== "tool-result") continue;
+          text = Array.isArray(b.content) ? b.content.map((c) => (c && c.text) || "").join("") : String(b.content == null ? "" : b.content);
+          if (b.isError === true) isError = true;
+        }
+        emit({ type: "step", sessionId: sid, name, result: truncate(text, 400), isError });
         return;
       }
     });
@@ -110,6 +118,19 @@ function apply(ctx) {
             agentOptions: { provider, model },
             setup: (agentCtx) => {
               installModelSelection(agentCtx, { current: { provider, model }, assembled: void 0 });
+              // M1 探针：注册一个与业务线无关的 demo 工具，验证「对话 → 真实 tool/call → tool/result」链路
+              agentCtx.tools.register(defineTool({
+                name: "get_current_time",
+                description: "返回当前精确时间（ISO 8601 字符串）。当用户询问「现在几点 / 当前时间」时使用此工具。",
+                parameters: {},
+                output: {
+                  schema: { type: "object", properties: { now: { type: "string" } }, additionalProperties: false },
+                  render: (_args, value) => [{ type: "text", text: String(value.now) }],
+                },
+                async execute() {
+                  return { now: new Date().toISOString() };
+                },
+              }));
             },
           });
           await agent.whenIdle();

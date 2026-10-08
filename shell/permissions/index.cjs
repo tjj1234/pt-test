@@ -118,6 +118,16 @@ const DEFAULT_ROLES = [
 // 数据库连接池（单例）
 let dbPool = null;
 
+/**
+ * 注入共享 db（server.cjs 启动时传入 auth.db）。
+ * 目的：让 checkPermission 与身份/会话/日志共用同一个库，避免二次开库（PGlite 同目录
+ * 双开有锁冲突风险），也避免在 PT_DB_DIR 指向临时目录时读到错误的 users 表。
+ * 未注入时保持原有行为：惰性打开 shell/../db。
+ */
+function setDb(db) {
+  dbPool = { db, close: async () => {} };
+}
+
 async function getDb() {
   if (!dbPool) {
     const dataDir = path.join(__dirname, "..", "..", "db");
@@ -269,6 +279,7 @@ module.exports = {
   createRole,
   assignRoleToUser,
   initializeDefaultRoles,
+  setDb,
   ROLES,
   PERMISSIONS,
   ROLE_PERMISSIONS,
