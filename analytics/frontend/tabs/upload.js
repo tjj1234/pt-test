@@ -46,10 +46,37 @@
     POOL_REQUIRED: "后端数据库连接不可用",
   };
 
+  /* ---------------- token 解析 ----------------
+     后端 import 路由的 authContext 强制要求 `Authorization: Bearer <token>`
+     （见 business/attribution/import/routes.js），只靠 same-origin cookie 会 401。
+     优先复用 app.js 的 resolveToken()（localStorage["pt_ro_token"] → CONFIG.READONLY_TOKEN），
+     保证与只读分析 API 用同一份 token；app.js 未加载时自行兜底，不抛异常。 */
+  function impToken() {
+    try {
+      if (typeof global.resolveToken === "function") {
+        const t = global.resolveToken();
+        if (t) return t;
+      }
+    } catch (e) { /* app.js 未就绪，走下面兜底 */ }
+    try {
+      const ls = global.localStorage && global.localStorage.getItem("pt_ro_token");
+      if (ls) return ls;
+    } catch (e) { /* 存储不可用（隐私模式等） */ }
+    try {
+      if (global.CONFIG && global.CONFIG.READONLY_TOKEN) return global.CONFIG.READONLY_TOKEN;
+    } catch (e) { /* 忽略 */ }
+    return "";
+  }
+
   /* ---------------- 统一请求封装 ---------------- */
   async function impFetch(path, opts) {
     const o = Object.assign({ credentials: "same-origin" }, opts || {});
-    if (o.body && !o.headers) o.headers = { "Content-Type": "application/json" };
+    // 合并请求头：调用方给的 Content-Type 等 + 鉴权头（鉴权头不覆盖调用方显式传入的）
+    const h = Object.assign({}, o.headers || {});
+    const tk = impToken();
+    if (tk && !h.Authorization && !h.authorization) h.Authorization = "Bearer " + tk;
+    if (o.body && !h["Content-Type"]) h["Content-Type"] = "application/json";
+    o.headers = h;
     let res;
     try {
       res = await fetch(IMP_API + path, o);
