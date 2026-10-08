@@ -16,6 +16,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, spawnSync } = require("child_process");
+const { formatContext } = require("./contract.cjs");
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
@@ -300,6 +301,8 @@ function createDshRuntime(opts = {}) {
       if (spec.persona) parts.push("【系统设定】\n" + spec.persona);
       if (spec.memory) parts.push("用户长期记忆：\n" + spec.memory);
       if (spec.imageNote) parts.push(spec.imageNote);
+      const ctxText = formatContext(spec.context);
+      if (ctxText) parts.push(ctxText);
       if (!warm && spec.history) parts.push("以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + spec.history);
       parts.push("用户现在问：" + String(spec.question || ""));
       const fullTask = parts.join("\n\n");

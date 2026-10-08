@@ -25,6 +25,7 @@
  *     persona: string,       // 人设（可空）
  *     memory: string,        // 长期记忆（可空）
  *     imageNote: string,     // 图片说明（可空）
+ *     context: object,       // 当前上下文（可空，如 { panel, panelLabel }），由 runtime 拼进系统提示
  *     history: string,       // 截断历史（仅冷启动注入）
  *     question: string,      // 当前问题（必填）
  *     onDelta: (text)=>void, // 逐字增量回调
@@ -95,6 +96,22 @@ function normalizeStep(step) {
   return out;
 }
 
+/**
+ * 把当前上下文（context）格式化成注入系统提示的段落。
+ * context 形状可扩展（当前仅支持面板），例如：
+ *   { panel: "dash", panelLabel: "归因看板" }
+ * 返回空串表示无需注入。
+ */
+function formatContext(ctx) {
+  if (!ctx || typeof ctx !== "object") return "";
+  const lines = [];
+  if (ctx.panel) {
+    lines.push("用户当前所在 / 引用的数据面板：" + ctx.panel + (ctx.panelLabel ? "（" + ctx.panelLabel + "）" : ""));
+    lines.push("当用户说「这个面板」「当前面板」「这里」等指代时，请理解为其指向上述数据面板，并优先调用该面板对应的数据工具（如归因查询 attribution.query）来回答。");
+  }
+  return lines.length ? "【当前上下文】\n" + lines.join("\n") : "";
+}
+
 /** 归一化 run() 返回结果，保证业务壳可安全读取。 */
 function normalizeRunResult(r) {
   if (!r || typeof r !== "object") r = {};
@@ -119,4 +136,5 @@ module.exports = {
   normalizeDelta,
   normalizeStep,
   normalizeRunResult,
+  formatContext,
 };

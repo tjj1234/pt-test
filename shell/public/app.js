@@ -25,10 +25,14 @@ function fmtShort(ts) {
 
 /* ---- 视图切换 ---- */
 const TITLES = { home: "首页", flows: "业务流库", schedule: "调度与执行", dash: "归因看板", import: "广告数据导入", history: "对话历史", chat: "对话", skills: "技能", status: "运行状态", memory: "长期记忆", members: "成员与权限", usage: "用量与日志" };
+// M2：可 @ 引用的数据面板（顺序即弹窗展示顺序）；currentPanel 记录最近所在/引用的面板
+const DATA_PANELS = ["dash", "flows", "import", "schedule"];
+let currentPanel = null;
 function switchView(v) {
   document.querySelectorAll(".nav button").forEach(x => x.classList.toggle("on", x.dataset.v === v));
   document.querySelectorAll(".view").forEach(x => x.classList.toggle("on", x.id === "v-" + v));
   $("#title").textContent = TITLES[v];
+  if (DATA_PANELS.indexOf(v) >= 0) currentPanel = v;
   if (v === "dash" && !dashLoaded) { $("#dashFrame").src = "/dashboard/"; dashLoaded = true; }
   if (v === "skills") loadSkills();
   if (v === "status") loadStatus();
@@ -458,6 +462,8 @@ async function ask(msg) {
   }
   ta.value = ""; ta.style.height = "auto";
   const payload = { conversationId: state.activeId, message: msg };
+  // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
+  if (currentPanel) payload.context = { panel: currentPanel, panelLabel: TITLES[currentPanel] || currentPanel };
   if (pendingImage) payload.image = pendingImage;
   // 立即渲染用户消息（乐观更新），AI 回复回来后再用服务器完整列表覆盖
   renderMessage({ role: "user", text: msg, ts: Date.now(), image: pendingImage || undefined });
@@ -493,6 +499,58 @@ function exportConversation(c, fmt) {
   a.href = "/api/conversations/" + encodeURIComponent(c.id) + "/export?fmt=" + (fmt || "md");
   document.body.appendChild(a); a.click(); a.remove();
 }
+
+/* ---- M2：@ 引用数据面板（弹出面板列表，选中后随消息传给后端） ---- */
+const mentionMenu = document.createElement("div");
+mentionMenu.className = "mention-menu";
+mentionMenu.hidden = true;
+document.body.appendChild(mentionMenu);
+let mentionStart = -1;
+
+function closeMentionMenu() { mentionMenu.hidden = true; mentionStart = -1; }
+
+function renderMentionItems() {
+  mentionMenu.replaceChildren();
+  DATA_PANELS.forEach(p => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "mention-item";
+    item.innerHTML = '<span class="mi-ico">▦</span><span class="mi-label">' + (TITLES[p] || p) + "</span>";
+    item.addEventListener("mousedown", e => e.preventDefault()); // 抢在 textarea blur 前
+    item.addEventListener("click", () => {
+      const label = TITLES[p] || p;
+      const before = mentionStart >= 0 ? ta.value.slice(0, mentionStart) : ta.value;
+      ta.value = before + "@" + label + " ";
+      currentPanel = p;
+      closeMentionMenu();
+      ta.focus();
+      ta.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    mentionMenu.appendChild(item);
+  });
+}
+
+function openMentionMenu(start) {
+  mentionStart = start;
+  renderMentionItems();
+  mentionMenu.hidden = false;
+  const rect = ta.getBoundingClientRect();
+  const menuH = mentionMenu.offsetHeight;
+  mentionMenu.style.left = rect.left + "px";
+  mentionMenu.style.top = Math.max(4, rect.top - menuH - 6) + "px";
+}
+
+// 光标前紧邻 @ 时弹出面板列表
+ta.addEventListener("input", () => {
+  if (mentionMenu.hidden) {
+    const pos = ta.selectionStart == null ? ta.value.length : ta.selectionStart;
+    if (pos >= 1 && ta.value[pos - 1] === "@") openMentionMenu(pos - 1);
+  }
+});
+document.addEventListener("click", e => {
+  if (!mentionMenu.hidden && !e.target.closest(".mention-menu")) closeMentionMenu();
+});
+ta.addEventListener("keydown", e => { if (e.key === "Escape") closeMentionMenu(); });
 
 send.addEventListener("click", () => ask(ta.value));
 newBtn.addEventListener("click", () => newConversation());
