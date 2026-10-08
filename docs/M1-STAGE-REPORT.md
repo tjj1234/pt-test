@@ -93,8 +93,8 @@
 
 ## 9. 遗留缺口（非阻塞）
 
-- 旧测试 `tests/regression/tool-registry-test.mjs` 仍用假 UUID（`"test-user"` / `"test-tenant"`）查询 `users` 表，会报 `invalid input syntax for type uuid`。本次未改它，改用 `m1-tool-wiring-test.mjs`（真实临时库 + 真实 UUID）完成验收；该旧测试属技术债，后续需决定重写或跳过。
-- `token_count` 目前固定写 `0`（DSH 事件未稳定暴露 token 数），字段已预留。
+- `token_count` 目前固定写 `0` —— **已知限制，待 DSH 升级后处理**：DSH 事件暂未稳定暴露 token 数，字段已预留，等 DSH 能稳定吐出 token 数后再补。
+- **后续小任务（下个任务包带上）**：旧测试 `tests/regression/tool-registry-test.mjs` 仍用假 UUID（`"test-user"` / `"test-tenant"`）查询 `users` 表，会报 `invalid input syntax for type uuid`。要么直接删掉该旧测试文件（已被 `m1-tool-wiring-test.mjs` 取代），要么改用合法 UUID 重写。本次未阻塞合并。
 
 ---
 
