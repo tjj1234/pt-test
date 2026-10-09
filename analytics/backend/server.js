@@ -364,6 +364,12 @@ function buildUnifiedServer(options) {
     const { resolveEndpoint, enqueue, verifyAnalyticsToken, pool, loadAuditLogs, loadConfigFindings, resolveWorkspaceId = (tenantId) => tenantId, sourcePlatformRules = attribution_1.DEFAULT_SOURCE_PLATFORM_RULES, now = Date.now, maxBodyBytes = 1024 * 1024, // 1MB，对齐 collect/server.ts
     logger = true, adapter = (0, ingestion_service_1.createIngestionAdapter)({}), } = options;
     const app = (0, fastify_1.default)({ logger, bodyLimit: maxBodyBytes });
+    app.register(async scope => {
+        require('./ga-connector/routes').registerGaConnectorRoutes(scope, {
+            pool, verifyAnalyticsToken, parseAuthorization: query_1.parseAuthorization,
+            now, gaConnector: options.gaConnector,
+        });
+    });
     // 1.4 事件查询
     app.register(async (scope) => {
         registerEventsRoutes(scope, { pool, verifyAnalyticsToken, now });

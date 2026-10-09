@@ -5,6 +5,7 @@
   "description": "Business-line attribution package (A0 contracts frozen; no shell edits)",
   "main": "index.js",
   "scripts": {
+    "test:ga": "node --test ga-connector/*.test.js",
     "validate:contracts": "node contracts/validate.js",
     "test:a0": "node contracts/validate.js",
     "test:a1": "node ../../tests/attribution/a1-parsers.test.js",
