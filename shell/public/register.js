@@ -104,4 +104,9 @@
       setBusy(el.rb, false, null, "注册并进入对话");
     }
   });
+
+  // U3：注册密码强度提示（复用 pw-strength.js；CSP 下只能走外部脚本）
+  if (window.attachPwStrength) {
+    attachPwStrength({ inputId: "rp", barId: "pwBar", tipId: "pwTip", meterId: "pwMeter", matchInputId: "rp2", matchMsgId: "pwMatch" });
+  }
 })();

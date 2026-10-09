@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
   /* 仅本页需要的小样式，全部沿用 styles.css 的 :root 变量，不新造配色 */
-  .key-card{width:460px}
+  .key-card{width:460px;max-width:calc(100vw - 32px)}
   .portal{display:flex;align-items:center;gap:8px;margin:18px 0 0;padding:12px 14px;
     border:1px dashed var(--line);border-radius:10px;background:#fafbff;font-size:13px}
   .portal a{font-weight:600;text-decoration:none}
@@ -72,6 +72,23 @@
     </section>
     <p><a href="/">返回工作区</a></p>
   </form>
+
+  <!-- U3：修改登录密码（与 PT Key 绑定互不干扰，独立区块） -->
+  <form class="login-card" id="pwf" autocomplete="off" style="margin-top:18px;display:none">
+    <div class="brand">
+      <div class="logo">P</div>
+      <div><h1>北极星</h1><p>修改登录密码 · 账户安全</p></div>
+    </div>
+    <label for="cp">当前密码</label><input id="cp" type="password" autocomplete="current-password">
+    <label for="np">新密码</label><input id="np" type="password" autocomplete="new-password" placeholder="至少 8 位">
+    <div class="pw-meter" id="pwMeter2" hidden><div class="pw-bar"><span class="pw-bar-fill" id="pwBar2"></span></div><div class="pw-tip" id="pwTip2"></div></div>
+    <label for="np2">确认新密码</label><input id="np2" type="password" autocomplete="new-password" placeholder="再输一遍">
+    <div class="pw-match" id="pwMatch2" hidden></div>
+    <button class="btn" id="pwSave" type="submit">更新密码</button>
+    <div class="err" id="pwe"></div>
+  </form>
 </div>
 <script src="/assets/settings.js"></script>
+<script src="/assets/pw-strength.js"></script>
+<script src="/assets/settings-pw.js"></script>
 </body></html>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>忘记密码 · 北极星</title>
+<link rel="stylesheet" href="/assets/styles.css">
+<style>
+  .hint a{font-weight:600;text-decoration:none}
+  .resetbox{margin-top:16px;padding:14px 16px;border:1px dashed var(--line);border-radius:10px;background:#fafbff;font-size:13px;display:none}
+  .resetbox code{font-family:ui-monospace,Consolas,monospace;word-break:break-all;display:inline-block;margin-top:4px}
+  .copybtn{margin-top:10px;padding:8px 14px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--text-1);font-size:13px;cursor:pointer;font-family:inherit}
+  .copybtn:hover{border-color:#1a1a1a}
+</style>
+</head>
+<body>
+<div class="login-wrap">
+  <form class="login-card" id="f" autocomplete="off">
+    <div class="brand">
+      <div class="logo">P</div>
+      <div><h1>北极星</h1><p>找回你的登录密码</p></div>
+    </div>
+    <label for="id">用户名或邮箱</label>
+    <input id="id" autocomplete="username" placeholder="注册时用的用户名或邮箱">
+    <button class="btn" id="b" type="submit">发送重置链接</button>
+    <div class="err" id="e"></div>
+    <div class="resetbox" id="box">
+      <div id="msg"></div>
+      <div style="margin-top:8px">重置链接（开发态直接返回）：</div>
+      <code id="url"></code>
+      <br><button type="button" class="copybtn" id="copy">复制链接</button>
+    </div>
+    <div class="hint"><a href="/login">返回登录</a></div>
+  </form>
+</div>
+<script src="/assets/forgot.js"></script>
+</body></html>
