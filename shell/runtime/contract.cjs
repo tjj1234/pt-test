@@ -22,7 +22,9 @@
  *     model: string,         // 模型 id
  *     apiKey: string,        // PT key（仅注入 env，不落盘）
  *     workspace: string,     // 租户 workspace cwd
- *     persona: string,       // 人设（可空）
+ *     persona: string,       // 人设 = [基础] 段（可空，由 tenant 读 agent-persona.md）
+ *     constraints: string[], // [约束] 段（可空，由 tenant 从业务线资产包只读公开导出读取）
+ *     capabilities: object[],// [能力] 段（可空，如 [{ name, description }]，按当前用户授权过滤）
  *     memory: string,        // 长期记忆（可空）
  *     imageNote: string,     // 图片说明（可空）
  *     context: object,       // 当前上下文（可空，如 { panel, panelLabel }），由 runtime 拼进系统提示
@@ -97,19 +99,71 @@ function normalizeStep(step) {
 }
 
 /**
- * 把当前上下文（context）格式化成注入系统提示的段落。
+ * 把当前上下文（context）格式化成「上下文」段的行列表。
  * context 形状可扩展（当前仅支持面板），例如：
  *   { panel: "dash", panelLabel: "归因看板" }
- * 返回空串表示无需注入。
+ * 返回空数组表示无需注入。
  */
-function formatContext(ctx) {
-  if (!ctx || typeof ctx !== "object") return "";
+function contextLines(ctx) {
+  if (!ctx || typeof ctx !== "object") return [];
   const lines = [];
   if (ctx.panel) {
     lines.push("用户当前所在 / 引用的数据面板：" + ctx.panel + (ctx.panelLabel ? "（" + ctx.panelLabel + "）" : ""));
     lines.push("当用户说「这个面板」「当前面板」「这里」等指代时，请理解为其指向上述数据面板，并优先调用该面板对应的数据工具（如归因查询 attribution.query）来回答。");
   }
+  return lines;
+}
+
+/** 把当前上下文格式化成注入系统提示的段落（旧单段格式，保留兼容）。 */
+function formatContext(ctx) {
+  const lines = contextLines(ctx);
   return lines.length ? "【当前上下文】\n" + lines.join("\n") : "";
+}
+
+/** 把约束列表（string[]）格式化成「【约束】」段；空则返回空串。 */
+function formatConstraints(constraints) {
+  const items = (Array.isArray(constraints) ? constraints : [])
+    .map((c) => String(c == null ? "" : c).trim())
+    .filter(Boolean);
+  return items.length ? "【约束】\n" + items.map((c) => "- " + c).join("\n") : "";
+}
+
+/** 把能力列表（[{ name, description }]）格式化成「【能力】」段；空则返回空串。 */
+function formatCapabilities(capabilities) {
+  const items = (Array.isArray(capabilities) ? capabilities : [])
+    .map((t) => {
+      if (!t || typeof t !== "object") return "";
+      const name = String(t.name || "").trim();
+      const desc = String(t.description || "").trim();
+      return name ? (desc ? name + "：" + desc : name) : "";
+    })
+    .filter(Boolean);
+  return items.length ? "【能力】\n" + items.map((c) => "- " + c).join("\n") : "";
+}
+
+/**
+ * 系统提示四段式组装（M4）：
+ *   【基础】 人设（agent-persona.md）
+ *   【约束】 业务线资产包读出的工程铁律
+ *   【上下文】 当前数据上下文（面板/引用）
+ *   【能力】 当前用户已授权的工具清单 + 描述
+ * 其后按顺序追加：长期记忆 / 图片说明 /（冷启动）截断历史 / 当前问题。
+ * 返回组装好的完整任务文本；各段为空自动省略。
+ */
+function assembleSystemPrompt(spec = {}) {
+  const parts = [];
+  if (spec.persona) parts.push("【基础】\n" + String(spec.persona));
+  const constraintText = formatConstraints(spec.constraints);
+  if (constraintText) parts.push(constraintText);
+  const ctxLines = contextLines(spec.context);
+  if (ctxLines.length) parts.push("【上下文】\n" + ctxLines.join("\n"));
+  const capabilityText = formatCapabilities(spec.capabilities);
+  if (capabilityText) parts.push(capabilityText);
+  if (spec.memory) parts.push("用户长期记忆：\n" + String(spec.memory));
+  if (spec.imageNote) parts.push(String(spec.imageNote));
+  if (spec.history) parts.push("以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + String(spec.history));
+  parts.push("用户现在问：" + String(spec.question || ""));
+  return parts.join("\n\n");
 }
 
 /** 归一化 run() 返回结果，保证业务壳可安全读取。 */
@@ -136,5 +190,9 @@ module.exports = {
   normalizeDelta,
   normalizeStep,
   normalizeRunResult,
+  contextLines,
   formatContext,
+  formatConstraints,
+  formatCapabilities,
+  assembleSystemPrompt,
 };

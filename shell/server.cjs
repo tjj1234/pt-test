@@ -39,7 +39,7 @@ const memoryMod = require("./memory.cjs");
 const panelSharesMod = require("./panel-share.cjs");
 const toolCallsMod = require("./tool-calls.cjs");
 const toolsRegistry = require("./tools/registry.cjs");
-const { loadBusinessTools } = require("./tools/autoload.cjs");
+const { loadBusinessTools, loadBusinessConstraints } = require("./tools/autoload.cjs");
 const { queryBusinessWorkspace, normalizeEnabledStatus } = require("./workspace-enabled-status.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
 
@@ -366,6 +366,12 @@ async function handleChat(req, res, me, body) {
     try { tenantMod.closeDshSession(conversationId); } catch (e) { /* 忽略 */ }
   }
 
+  // M4：已授权能力清单（按当前用户/租户过滤）+ 业务线约束（从资产包只读读取，不写死）
+  const permCtx = { userId: uid, tenantId: me.tenant.id, workspaceId: "ws_" + me.tenant.id };
+  let capabilities = [];
+  try { capabilities = await toolsRegistry.listToolsForWorkspace(permCtx.workspaceId, permCtx); } catch (e) { capabilities = []; }
+  const constraints = loadBusinessConstraints({ log });
+
   const r = await tenantMod.runDshForUser(uid, question, {
     tenantId: me.tenant.id,
     conversationId,
@@ -373,6 +379,8 @@ async function handleChat(req, res, me, body) {
     memory: memText,
     imageNote,
     context,
+    capabilities,
+    constraints,
     decryptApiKey: keys.decryptApiKey,
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
