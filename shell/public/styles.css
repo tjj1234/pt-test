@@ -588,6 +588,9 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   cursor:pointer;font-size:14px;line-height:1;
 }
 .bubimg{display:block;max-width:220px;max-height:180px;border-radius:9px;margin-bottom:6px}
+/* 聊天气泡内返回的媒体（图片/视频）：限制最大宽度，避免撑破气泡；区别于用户上传缩略图 .bubimg */
+.bubmedia{display:block;max-width:min(420px,92%);height:auto;border-radius:10px;margin:4px 0;background:#000}
+.bubvideo{background:#000}
 .bubtext{display:block;white-space:pre-wrap;word-break:break-word}
 
 /* ---------- 记忆 ---------- */

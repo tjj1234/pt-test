@@ -132,6 +132,9 @@ function renderMessage(m, opts) {
     img.className = "bubimg"; img.src = m.image; img.alt = "上传图片"; img.loading = "lazy";
     bub.appendChild(img);
   }
+  // 输出侧：渲染 assistant 返回的媒体（图片/视频 URL）——字段形状与基座 media.route 对齐
+  // （当前按 { type:"image"|"video", url } 约定；字段名待基座确认，集中在 chat-media.js 提取）
+  if (m.media && window.renderMediaInto) window.renderMediaInto(bub, m.media);
   const btxt = document.createElement("span"); btxt.className = "bubtext"; btxt.textContent = m.text == null ? "" : m.text;
   bub.appendChild(btxt);
   box.appendChild(bub);
