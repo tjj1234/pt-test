@@ -59,6 +59,9 @@ function arg(name, dflt) {
 }
 const PORT = Number(arg("--port", process.env.PT_SHELL_PORT || 8098));
 const DASH_PORT = Number(arg("--dashboard-port", process.env.PT_DASH_PORT || 8095));
+// 注入到进程 env，使 DSH 子进程（persistent-runner 的 ga.query/attribution.query executor）
+// 能经 process.env.DASH_PORT 回连看板内部只读接口；PT_DASH_INTERNAL_KEY 已随 process.env 继承。
+process.env.DASH_PORT = String(DASH_PORT);
 const DASH_TOKEN = arg("--dashboard-token", process.env.PT_DASH_TOKEN || null); // P0-2：不再内置默认 token
 // P0-1 安全：取消固定默认密码。显式提供 PT_SHELL_PASSWORD / --password 才用；
 // 否则生成随机密码；非回环监听 + 无显式密码 → 直接拒绝启动（见下方检查）。
@@ -450,7 +453,8 @@ async function handleChat(req, res, me, body) {
     for (const s of steps) sse({ step: s });
   }
   const media = Array.isArray(r.media) ? r.media : null;
-  const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps, ...(media ? { media } : {}) }]);
+  const report = r.report && typeof r.report === "object" ? r.report : null;
+  const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps, ...(media ? { media } : {}), ...(report ? { report } : {}) }]);
   await conversations.saveMessages(uid, conversationId, saved);
 
   sse({
@@ -460,6 +464,7 @@ async function handleChat(req, res, me, body) {
     messages: saved,
     steps,
     ...(media ? { media } : {}),
+    ...(report ? { report } : {}),
     ms: r.ms || 0,
     turns: saved.filter((m) => m.role === "assistant").length,
     ...(DRY_RUN_CHAT ? { dryRun: true, tenantId: r.tenantId, workspace: r.cwd, userId: r.userId, keySha256: r.keySha256 } : {}),

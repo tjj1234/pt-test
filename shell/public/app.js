@@ -135,6 +135,8 @@ function renderMessage(m, opts) {
   // 输出侧：渲染 assistant 返回的媒体（图片/视频 URL）——字段形状与基座 media.route 对齐
   // （当前按 { type:"image"|"video", url } 约定；字段名待基座确认，集中在 chat-media.js 提取）
   if (m.media && window.renderMediaInto) window.renderMediaInto(bub, m.media);
+  // 输出侧：report 结果（outputType:"report"）自动弹抽屉——镜像 media 字段的自动呈现
+  if (m.report && window.openReportDrawer) window.openReportDrawer(m.report);
   const btxt = document.createElement("span"); btxt.className = "bubtext"; btxt.textContent = m.text == null ? "" : m.text;
   bub.appendChild(btxt);
   box.appendChild(bub);

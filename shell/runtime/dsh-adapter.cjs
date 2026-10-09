@@ -154,6 +154,18 @@ function makeProfile(dshHome, settingsTemplate, persistentRunner) {
   } else {
     process.stderr.write("[DSH] 警告：缺 business/media/presets.cjs（" + presetsModule + "）\n");
   }
+
+  // ga.query 依赖的 GA4 连接器 executor（自包含：仅 node:http/node:crypto）：
+  // persistent-runner.mjs 按相对路径 require("./ga-query-executor.cjs")。
+  const gaQueryModule = persistentRunner
+    ? path.resolve(path.dirname(persistentRunner), "..", "business", "attribution", "ga-connector", "executor.js")
+    : null;
+  if (gaQueryModule && fs.existsSync(gaQueryModule)) {
+    try { fs.copyFileSync(gaQueryModule, path.join(dir, "ga-query-executor.cjs")); }
+    catch (e) { process.stderr.write("[DSH] ga-query-executor.cjs 复制失败：" + e.message + "\n"); }
+  } else {
+    process.stderr.write("[DSH] 警告：缺 business/attribution/ga-connector/executor.js（" + gaQueryModule + "）\n");
+  }
   return { name, dir };
 }
 
@@ -370,6 +382,7 @@ function createDshRuntime(opts = {}) {
             ok: frame.ok !== false,
             text: frame.text || "",
             media: Array.isArray(frame.media) ? frame.media : null,
+            report: frame.report || null,
             ms: frame.ms || (Date.now() - t0),
             error: frame.error || (frame.reasonDetail ? (frame.reasonDetail.code + ": " + frame.reasonDetail.message) : null),
             stopped: frame.stopped === true || frame.canceled === true,
@@ -380,7 +393,7 @@ function createDshRuntime(opts = {}) {
         },
       };
       proc.waiters.set(sessionId, waiter);
-      writeJson(proc, { type: "task", sessionId, task: fullTask, model: spec.model });
+      writeJson(proc, { type: "task", sessionId, task: fullTask, model: spec.model, tenantId });
 
       // 成功发送后标记 warm（会话在 DSH 侧存活；记录实际 sessionId）
       if (sessionKey) warmSessions.set(sessionKey, { tenantId, sessionId });
