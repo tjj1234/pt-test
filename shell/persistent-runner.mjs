@@ -295,30 +295,6 @@ function apply(ctx) {
                 },
               }));
 
-              // [验收探针] report_demo：返回固定 report 结构，验证 report 抽屉端到端桥接（验收后移除）。
-              agentCtx.tools.register(defineTool({
-                name: "report_demo",
-                description: "返回一份固定格式的演示分析报告（outputType=report）。当用户要求「生成测试报告 / 弹出一份报告 / 验证报告抽屉」时使用此工具。",
-                parameters: {},
-                output: {
-                  schema: { type: "object", additionalProperties: true },
-                  render: (_args, value) => [{ type: "text", text: "已生成测试报告：" + (value && value.title ? value.title : "报告") }],
-                },
-                async execute() {
-                  const report = {
-                    outputType: "report",
-                    schemaVersion: "report.v1",
-                    title: "测试报告",
-                    meta: "站点 demo · 验证窗口 2026-10-01 ~ 2026-10-09",
-                    stats: [["已配置事件数", "38 / 52"], ["关键事件覆盖率", "73%"]],
-                    table: { title: "问题清单", head: ["严重度", "问题", "影响", "建议"], rows: [["高", "purchase 事件丢失", "收入归因偏低", "改用 server-side 回传"]] },
-                    suggestions: ["[高] 优先修复 purchase 跨域丢失"],
-                  };
-                  lastReport = report;
-                  return report;
-                },
-              }));
-
               // attribution.query：查询归因漏斗/素材表现（真实数据来自业务线只读接口）。
               agentCtx.tools.register(defineTool({
                 name: "attribution_query",
