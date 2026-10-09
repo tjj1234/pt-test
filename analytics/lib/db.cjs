@@ -198,6 +198,11 @@ async function createPgCompatPool(opts) {
       },
     ];
 
+    files.push({
+      label: "ga_connector.sql",
+      path: path.join(__dirname, "..", "..", "business", "attribution", "schema", "ga_connector.sql"),
+      isPsqlScript: false,
+    });
     for (const f of files) {
       if (!fs.existsSync(f.path)) throw new Error("缺少迁移脚本：" + f.path);
       const sql = f.isPsqlScript

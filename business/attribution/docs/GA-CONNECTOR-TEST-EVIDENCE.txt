@@ -1,0 +1,23 @@
+
+> @powertokens/business-attribution@0.0.0-a0 test:ga
+> node --test ga-connector/*.test.js
+
+✔ real HTTP auth gate and input validation (745.069834ms)
+✔ OAuth redirect, PKCE, tenant/session binding, single-use callback and encrypted SQL storage (9.018583ms)
+✔ GA4 runReport request and existing report renderer preserve exact Google values (2.257083ms)
+✔ Google failures expose safe codes only (0.168458ms)
+✔ expired state, denied consent and missing refresh token never save connection (4.218833ms)
+✔ public tool definition matches registration contract (0.074542ms)
+✔ summary, zero rows and truncation keep strict report shape without invented totals (1.7245ms)
+✔ configuration fails closed without secrets or with mismatched callback (0.101958ms)
+✔ ciphertext authentication rejects wrong encryption key (0.712417ms)
+✔ encrypted connection survives actual database close/reopen and RLS hides other tenant (62.965709ms)
+✔ OAuth route logging does not leak callback code or state (2.42725ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 954.061958
