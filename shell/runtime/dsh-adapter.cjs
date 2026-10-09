@@ -130,6 +130,30 @@ function makeProfile(dshHome, settingsTemplate, persistentRunner) {
   } else {
     process.stderr.write("[DSH] 警告：缺 persistent-runner.mjs（" + persistentRunner + "）\n");
   }
+
+  // media.route 依赖的 PowerTokens 调用层：与 persistent-runner.mjs 同目录，
+  // 供其 createRequire(import.meta.url) + require("./powertokens.cjs") 引用。
+  const mediaModule = persistentRunner
+    ? path.resolve(path.dirname(persistentRunner), "..", "business", "media", "powertokens.cjs")
+    : null;
+  if (mediaModule && fs.existsSync(mediaModule)) {
+    try { fs.copyFileSync(mediaModule, path.join(dir, "powertokens.cjs")); }
+    catch (e) { process.stderr.write("[DSH] powertokens.cjs 复制失败：" + e.message + "\n"); }
+  } else {
+    process.stderr.write("[DSH] 警告：缺 business/media/powertokens.cjs（" + mediaModule + "）\n");
+  }
+
+  // media.route 风格预设：powertokens.cjs / persistent-runner.mjs 都 require("./presets.cjs")，
+  // 需一并复制到 profile 同目录。
+  const presetsModule = persistentRunner
+    ? path.resolve(path.dirname(persistentRunner), "..", "business", "media", "presets.cjs")
+    : null;
+  if (presetsModule && fs.existsSync(presetsModule)) {
+    try { fs.copyFileSync(presetsModule, path.join(dir, "presets.cjs")); }
+    catch (e) { process.stderr.write("[DSH] presets.cjs 复制失败：" + e.message + "\n"); }
+  } else {
+    process.stderr.write("[DSH] 警告：缺 business/media/presets.cjs（" + presetsModule + "）\n");
+  }
   return { name, dir };
 }
 
@@ -343,6 +367,7 @@ function createDshRuntime(opts = {}) {
           resolve({
             ok: frame.ok !== false,
             text: frame.text || "",
+            media: Array.isArray(frame.media) ? frame.media : null,
             ms: frame.ms || (Date.now() - t0),
             error: frame.error || (frame.reasonDetail ? (frame.reasonDetail.code + ": " + frame.reasonDetail.message) : null),
             stopped: frame.stopped === true || frame.canceled === true,

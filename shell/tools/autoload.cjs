@@ -97,6 +97,14 @@ function buildAttributionQueryExecutor({ internalKey, dashPort }) {
   };
 }
 
+/** media.route 真实 executor：按 taskType 路由到 PowerTokens 生成，返回结果 URL。 */
+function buildMediaRouteExecutor() {
+  const media = require("../../business/media/index.js");
+  return async function mediaRouteExecutor(args, context) {
+    return media.callMediaRoute(context, args || {});
+  };
+}
+
 /** 按 "." 路径读取对象上的公开导出（如 "registry.attributionToolDefinition"）。 */
 function resolvePath(obj, pathStr) {
   return String(pathStr).split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
@@ -116,6 +124,11 @@ const PROVIDERS = [
     modulePath: "../../business/attribution/index.js",
     definitionGetter: "registry.attributionToolDefinition",
     buildExecutor: buildAttributionQueryExecutor,
+  },
+  {
+    modulePath: "../../business/media/index.js",
+    definitionGetter: "registry.mediaRouteToolDefinition",
+    buildExecutor: buildMediaRouteExecutor,
   },
 ];
 
