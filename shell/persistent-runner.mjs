@@ -1,8 +1,17 @@
 import { writeSync } from "node:fs";
+import { createRequire } from "node:module";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+
+// media.route 依赖的 PowerTokens 调用层：makeProfile() 会把
+// business/media/powertokens.cjs 复制到本插件同目录，这里按相对路径引用。
+const require = createRequire(import.meta.url);
+const { callMediaRoute } = require("./powertokens.cjs");
+const { listStylePresets, stylePresetSummary } = require("./presets.cjs");
+
+const STYLE_PRESET_ENUM = listStylePresets().map((p) => p.id);
 
 /**
  * persistent-runner —— 常驻 agent 驱动插件（替代 headless 一次性 runner）。
@@ -63,6 +72,7 @@ function apply(ctx) {
     const agentMap = new Map();       // sessionId -> { agent }
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
     const stepNames = new Map();      // callId -> 工具名（tool/result 时回填名字）
+    let lastMediaRouteResult = null;  // 本 turn 最近一次 media.route 的结构化结果 { type, url }
 
     // 逐字流 + 轨迹：把 assistant 文本增量 / 工具调用路由到对应 sessionId
     ctx.on("session/event", (session, event) => {
@@ -131,6 +141,63 @@ function apply(ctx) {
                   return { now: new Date().toISOString() };
                 },
               }));
+
+              // media.route：文件路由 skill。按 taskType 选择 PowerTokens 生成模型，
+              // 返回结果（图片/视频）URL。DSH 进程已注入 POWERTOKENS_API_KEY。
+              agentCtx.tools.register(defineTool({
+                name: "media.route",
+                description:
+                  "根据用户上传的图片和文字描述，选择 PowerTokens 里合适的生成模型（文生图/图生图/文生视频/图生视频），生成并返回结果图片或视频的 URL。" +
+                  "当用户说「生成一张图 / 把这张图改成… / 做成视频 / 生成一段视频 / 用这张图生成视频」等时使用此工具。",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    taskType: {
+                      type: "string",
+                      enum: ["text2image", "image2image", "text2video", "image2video"],
+                      description: "生成任务类型：text2image 文生图 / image2image 图生图 / text2video 文生视频 / image2video 图生视频",
+                    },
+                    prompt: { type: "string", description: "生成提示词（描述要生成的画面 / 视频内容）" },
+                    inputImageUrl: {
+                      type: "string",
+                      description: "可选：输入图片的可公网访问 URL（http/https）或 data:image/...;base64 数据 URL。图生图 / 图生视频必填。",
+                    },
+                    stylePreset: {
+                      type: "string",
+                      enum: STYLE_PRESET_ENUM,
+                      description:
+                        "可选：风格预设模板 id，仅适用于文生图(text2image)/图生图(image2image)，不支持视频。选择后按模板提示词套路生成，占位符内容写进 prompt；需上传参考图的模板必须同时传 inputImageUrl。可选：\n" +
+                        stylePresetSummary(),
+                    },
+                  },
+                  required: ["taskType", "prompt"],
+                },
+                output: {
+                  schema: {
+                    type: "object",
+                    properties: {
+                      taskType: { type: "string" },
+                      label: { type: "string" },
+                      model: { type: "string" },
+                      provider: { type: "string" },
+                      kind: { type: "string" },
+                      url: { type: "string" },
+                      elapsedMs: { type: "number" },
+                    },
+                    additionalProperties: false,
+                  },
+                  render: (_args, value) => {
+                    const url = value && value.url;
+                    const label = value && value.label;
+                    return [{ type: "text", text: url ? `已生成${label || ""}，结果地址：${url}` : JSON.stringify(value) }];
+                  },
+                },
+                async execute(args) {
+                  const result = await callMediaRoute({}, args || {});
+                  lastMediaRouteResult = result && result.url ? { type: result.kind, url: result.url } : null;
+                  return result;
+                },
+              }));
             },
           });
           await agent.whenIdle();
@@ -141,6 +208,7 @@ function apply(ctx) {
 
         const agent = rec.agent;
         const firstSeq = agent.session.seq;
+        lastMediaRouteResult = null;
         agent.followup(createUserMessage({
           content: [{ type: "text", text: task }],
           source: { kind: "user" },
@@ -152,6 +220,7 @@ function apply(ctx) {
           type: "done", sessionId: sid,
           ok: outcome.reason?.kind === "completed" || outcome.text !== "",
           text: outcome.text,
+          media: lastMediaRouteResult ? [lastMediaRouteResult] : null,
           reason: outcome.reason?.kind ?? null,
           reasonDetail: outcome.reason?.error ? { code: outcome.reason.error.code, message: outcome.reason.error.message } : null,
           canceled: !!(outcome.reason && (outcome.reason.kind === "user" || outcome.reason.kind === "parent" || outcome.reason.kind === "hook")),

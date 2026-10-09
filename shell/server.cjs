@@ -218,6 +218,19 @@ function uploadsAbsPath(url) {
   return m ? path.join(RUNTIME, "_uploads", m[1]) : String(url || "");
 }
 
+/** 把 /uploads/<tenantId>/<file> 上传图片读成 base64 data URL（供 PowerTokens 外链）。 */
+function uploadsToDataUrl(url) {
+  const abs = uploadsAbsPath(url);
+  let buf;
+  try { buf = fs.readFileSync(abs); } catch (e) { return ""; }
+  // 过大图片不进 prompt（base64 再膨胀约 1/3），避免撑爆上下文
+  const maxBytes = 10 * 1024 * 1024;
+  if (buf.length > maxBytes) return "";
+  const ext = path.extname(abs).slice(1).toLowerCase();
+  const mime = ({ png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" })[ext] || "image/png";
+  return "data:" + mime + ";base64," + buf.toString("base64");
+}
+
 /** P1-2：启动时清理超过 7 天的上传文件（按租户目录遍历）。 */
 function pruneUploads() {
   const root = path.join(RUNTIME, "_uploads");
@@ -343,12 +356,24 @@ async function handleChat(req, res, me, body) {
   if (messages.length > 1) {
     histText = messages.slice(0, -1).slice(-6).map((c) => (c.role === "user" ? "用户" : "助手") + "：" + c.text).join("\n");
   }
-  // ⑨ 图片路径说明（多模态：告知 DSH 图片已上传到本地路径）
+  // ⑨ 图片说明（多模态）：把上传图片转成 base64 data URL 传给 DSH，
+  // 使 media.route（图生图 / 图生视频）能把 inputImageUrl 直接外链给 PowerTokens，
+  // 规避 /uploads 相对路径需登录+租户校验、无法被外部访问的问题。
   const lastUser = messages[messages.length - 1];
   let imageNote = "";
   if (lastUser && lastUser.image) {
-    const imgAbs = uploadsAbsPath(lastUser.image);
-    imageNote = "用户这次附带了一张图片，已上传到本地路径：" + imgAbs + "（如你有读取文件 / 识别图片的能力请读取它；否则请据路径说明你暂无法直接看图）";
+    const dataUrl = uploadsToDataUrl(lastUser.image);
+    if (dataUrl) {
+      imageNote =
+        "用户这次附带了一张图片（内容已编码为下面的 data URL）。" +
+        "当用户要求「把这张图改成… / 用这张图生成新图 / 把这张图做成视频 / 用这张图生成视频」时，" +
+        "请调用 media.route 工具：taskType 用 image2image（图生图）或 image2video（图生视频），" +
+        "并把 inputImageUrl 设为下面的 data URL 原文：\n" + dataUrl;
+    } else {
+      imageNote =
+        "用户这次附带了一张图片，但服务端未能把它编码成 data URL（可能文件缺失或过大）。" +
+        "请据实说明你暂无法拿到可用的图片数据。";
+    }
   }
 
   // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
@@ -424,7 +449,8 @@ async function handleChat(req, res, me, body) {
     ];
     for (const s of steps) sse({ step: s });
   }
-  const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps }]);
+  const media = Array.isArray(r.media) ? r.media : null;
+  const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps, ...(media ? { media } : {}) }]);
   await conversations.saveMessages(uid, conversationId, saved);
 
   sse({
@@ -433,6 +459,7 @@ async function handleChat(req, res, me, body) {
     reply: reply || "（DSH 没有输出）",
     messages: saved,
     steps,
+    ...(media ? { media } : {}),
     ms: r.ms || 0,
     turns: saved.filter((m) => m.role === "assistant").length,
     ...(DRY_RUN_CHAT ? { dryRun: true, tenantId: r.tenantId, workspace: r.cwd, userId: r.userId, keySha256: r.keySha256 } : {}),

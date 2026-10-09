@@ -1,0 +1,17 @@
+media.route 风格预设模板 —— 第三方内容声明（NOTICE）
+=====================================================
+
+本目录（business/media）中的风格预设模板（见 presets.cjs 的 STYLE_PRESETS），
+其提示词原文取材自以下开源仓库：
+
+  仓库：PicoTrex/Awesome-Nano-Banana-images
+  地址：https://github.com/PicoTrex/Awesome-Nano-Banana-images
+  许可证：Apache License 2.0（Apache-2.0）
+        https://www.apache.org/licenses/LICENSE-2.0
+
+（说明：该仓库 README 上的 CC BY 4.0 徽章有误，仓库实际 LICENSE 原文为
+ Apache License 2.0，特此以 LICENSE 原文为准。）
+
+每一条预设均保留原作者署名（author）与出处链接（source），完整清单见
+presets.cjs 中的 STYLE_PRESETS。我们对提示词仅做了少量占位符规范化
+（统一为 {占位符}），属 Apache-2.0 许可范围内的改作。
