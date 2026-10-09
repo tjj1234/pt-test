@@ -22,6 +22,35 @@
     color:var(--ok);background:#e8f7ee;border-radius:999px;padding:5px 14px}
   .mask{font:600 30px/1.4 ui-monospace,Consolas,monospace;letter-spacing:2px;margin:16px 0 4px;color:var(--ink)}
   .sub{font-size:12px;color:var(--sub);margin-bottom:18px}
+
+  /* M7：广告与数据源授权分节 */
+  .acct-list{display:flex;flex-direction:column;gap:10px;margin:12px 0 4px}
+  .acct-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .acct-main{flex:1;min-width:0}
+  .acct-type{font-size:14px;font-weight:600;color:var(--ink)}
+  .acct-scope{font-size:12.5px;color:var(--sub);margin-top:3px;word-break:break-word}
+  .acct-updated{font-size:11.5px;color:var(--sub);margin-top:6px;opacity:.85}
+  .acct-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}
+  .acct-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px}
+  .acct-badge.ok{color:#0f7a3d;background:#e8f7ee}      /* 有效：绿 */
+  .acct-badge.warn{color:#9a6b00;background:#fff4d6}     /* 即将过期：琥珀 */
+  .acct-badge.danger{color:#b42318;background:#fde7e4}  /* 需重验：红 */
+  .acct-revoke{font-size:12.5px;color:var(--bad);background:#fff;border:1px solid var(--line);border-radius:9px;padding:6px 12px;cursor:pointer;font-family:inherit}
+  .acct-revoke:hover{border-color:var(--bad)}
+  .acct-empty{padding:18px 10px;text-align:center;color:var(--sub);font-size:13px}
+  @media (max-width:480px){
+    .acct-item{flex-direction:column}
+    .acct-side{flex-direction:row;align-items:center;justify-content:space-between;width:100%}
+  }
+
+  /* M7：解除确认弹框 */
+  .modal-mask{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:60;padding:16px}
+  .modal-card{width:min(440px,92vw);background:#fff;border-radius:14px;padding:22px 22px 18px;box-shadow:0 24px 60px rgba(0,0,0,.3)}
+  .modal-card h3{margin:0 0 10px;font-size:16px;color:var(--ink)}
+  .modal-body{margin:0 0 18px;font-size:13.5px;line-height:1.75;color:var(--sub);white-space:pre-line}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end}
+  .btn.danger{background:var(--bad);border-color:var(--bad);color:#fff}
+  .btn.danger:hover{filter:brightness(.95)}
 </style>
 </head>
 <body>
@@ -68,7 +97,8 @@
     <div class="err" id="e"></div>
     <div class="hint">你的 PT key 只在你点「保存绑定」时进入浏览器内存并立即 POST 到服务端加密落库，提交后输入框马上清空；明文 key 不会写入本地存储、不会打印到控制台、也不会出现在网址里。服务端也只回显末 4 位。</div>
     <section aria-labelledby="sourcesHeading"><h2 id="sourcesHeading">广告与数据源授权</h2>
-      <p class="status">暂无已授权账户，业务线接入后可在此配置。</p>
+      <p class="status" id="acctStatus">读取中…</p>
+      <div id="acctList" class="acct-list"></div>
     </section>
     <p><a href="/">返回工作区</a></p>
   </form>
@@ -88,6 +118,16 @@
     <div class="err" id="pwe"></div>
   </form>
 </div>
+  <div id="revokeModal" class="modal-mask" style="display:none" role="dialog" aria-modal="true" aria-labelledby="revokeTitle">
+    <div class="modal-card">
+      <h3 id="revokeTitle">解除授权确认</h3>
+      <p class="modal-body" id="revokeBody"></p>
+      <div class="modal-actions">
+        <button type="button" class="ghost" id="revokeCancel">取消</button>
+        <button type="button" class="btn danger" id="revokeConfirm">确认解除</button>
+      </div>
+    </div>
+  </div>
 <script src="/assets/settings.js"></script>
 <script src="/assets/pw-strength.js"></script>
 <script src="/assets/settings-pw.js"></script>
