@@ -39,6 +39,7 @@ const memoryMod = require("./memory.cjs");
 const panelSharesMod = require("./panel-share.cjs");
 const toolCallsMod = require("./tool-calls.cjs");
 const toolsRegistry = require("./tools/registry.cjs");
+const { loadBusinessTools } = require("./tools/autoload.cjs");
 const { queryBusinessWorkspace, normalizeEnabledStatus } = require("./workspace-enabled-status.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
 
@@ -1025,7 +1026,7 @@ async function main() {
   panelShares = await panelSharesMod.initPanelShares(auth.db);
   
   // B4-fix: 初始化默认角色权限
-  const { initializeDefaultRoles, setDb, PERMISSIONS } = require("./permissions/index.cjs");
+  const { initializeDefaultRoles, setDb } = require("./permissions/index.cjs");
   // M1：让 checkPermission 复用 auth.db，避免二次开库 / 读到错误库（workspace 隔离前提）
   setDb(auth.db);
   await initializeDefaultRoles();
@@ -1034,19 +1035,17 @@ async function main() {
   toolCalls = await toolCallsMod.initToolCalls(auth.db);
   toolsRegistry.setToolCallLogger(toolCalls);
   
-  // M1：注册一个与业务线无关的 demo 工具（真实执行函数，按 skill 注册规范落 shell registry）。
-  //      该工具同时用于 /api/tools 清单、/api/tools/:name/execute 触发、/api/usage/tool-calls 日志。
-  toolsRegistry.registerTool({
-    name: "get_current_time",
-    type: "utility",
-    version: "1.0.0",
-    description: "返回当前精确时间（ISO 8601）。M1 链路验证用的 demo 工具，与业务线无关。",
-    inputSchema: { type: "object", properties: {}, additionalProperties: false },
-    outputType: "data",
-    riskLevel: "read",
-    requiredPermissions: [PERMISSIONS.TOOL_USE],
-    execute: async () => ({ now: new Date().toISOString() }),
+  // 业务工具通用加载入口：遍历业务线模块公开导出的工具定义，循环注册 + 绑定真实 executor。
+  // 真实数据经内部 HTTP 调业务线只读接口（如 GET /api/attribution/funnel），不 import 内部实现、不新建空数据源。
+  const businessTools = loadBusinessTools({
+    internalKey: process.env.PT_DASH_INTERNAL_KEY || "",
+    dashPort: DASH_PORT,
+    log,
   });
+  for (const { definition, execute } of businessTools) {
+    toolsRegistry.registerTool(Object.assign({}, definition, { execute }));
+    log.info("tool_autoloaded", { name: definition.name, type: definition.type });
+  }
   
   pruneUploads(); // P1-2：启动清理过期上传
   log.info("init", { stage: "ready", dbDir: DB_DIR, username: USERNAME, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
