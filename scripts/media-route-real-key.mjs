@@ -102,6 +102,7 @@ async function postVideo(baseUrl, apiKey, body) {
       Accept: "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(180000),
   });
   const text = await res.text();
   let json = null;
@@ -111,12 +112,16 @@ async function postVideo(baseUrl, apiKey, body) {
 
 async function pollVideo(baseUrl, apiKey, taskId, timeoutMs = 240000) {
   const start = Date.now();
+  let n = 0;
   while (Date.now() - start < timeoutMs) {
+    n++;
     const res = await fetch(`${baseUrl}/v1/videos/${taskId}`, {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(30000),
     });
     const json = await res.json();
     const status = json && json.status;
+    console.log(`  [轮询 #${n}] status=${status ?? "（无）"} 已等 ${Math.round((Date.now() - start) / 1000)}s`);
     if (status === "completed" || status === "succeeded" || status === "success") {
       return { ok: true, status, json };
     }
