@@ -16,7 +16,7 @@ const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
 const { spawn, spawnSync } = require("child_process");
-const { formatContext } = require("./contract.cjs");
+const { assembleSystemPrompt } = require("./contract.cjs");
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
@@ -296,16 +296,18 @@ function createDshRuntime(opts = {}) {
       const warm = !fresh && warmRec && warmRec.tenantId === tenantId;
       const sessionId = warm ? warmRec.sessionId : ((sessionKey || "adhoc") + "-" + crypto.randomBytes(6).toString("hex"));
 
-      // 组装任务：人设 + 长期记忆 + 图片说明 +（冷启动才补历史）+ 当前问题
-      const parts = [];
-      if (spec.persona) parts.push("【系统设定】\n" + spec.persona);
-      if (spec.memory) parts.push("用户长期记忆：\n" + spec.memory);
-      if (spec.imageNote) parts.push(spec.imageNote);
-      const ctxText = formatContext(spec.context);
-      if (ctxText) parts.push(ctxText);
-      if (!warm && spec.history) parts.push("以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + spec.history);
-      parts.push("用户现在问：" + String(spec.question || ""));
-      const fullTask = parts.join("\n\n");
+      // M4：系统提示四段式组装（基础/约束/上下文/能力 + 记忆/图片/历史/问题）。
+      // 历史仅冷启动注入（热会话由 DSH session 持有轨迹）。
+      const fullTask = assembleSystemPrompt({
+        persona: spec.persona,
+        constraints: spec.constraints,
+        capabilities: spec.capabilities,
+        context: spec.context,
+        memory: spec.memory,
+        imageNote: spec.imageNote,
+        history: !warm ? spec.history : undefined,
+        question: spec.question,
+      });
 
       const t0 = Date.now();
       const job = {

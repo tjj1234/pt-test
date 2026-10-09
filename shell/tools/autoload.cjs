@@ -146,8 +146,49 @@ function loadBusinessTools(opts = {}) {
   return loaded;
 }
 
+/**
+ * 业务线「约束」（工程铁律）来源：只读业务线模块公开导出，不在 shell 写死。
+ * 每条 provider 描述：从哪个业务线模块的哪个公开导出读取约束文本。
+ * 约束以 string[] 返回（对象取 values，数组取元素，字符串拆单条）。
+ */
+const CONSTRAINT_PROVIDERS = [
+  {
+    modulePath: "../../business/attribution/index.js",
+    constraintsGetter: "INVARIANTS",
+  },
+];
+
+/**
+ * 加载业务线约束：返回 string[]（工程铁律），供 M4 系统提示【约束】段动态拼接。
+ */
+function loadBusinessConstraints(opts = {}) {
+  const { log = null } = opts;
+  const constraints = [];
+  for (const provider of CONSTRAINT_PROVIDERS) {
+    let mod = null;
+    try {
+      mod = require(provider.modulePath);
+    } catch (e) {
+      if (log) log.warn("constraints_require_failed", { module: provider.modulePath, error: String(e && e.message ? e.message : e) });
+      continue;
+    }
+    const raw = resolvePath(mod, provider.constraintsGetter);
+    if (raw == null) {
+      if (log) log.info("constraints_skip_not_exported", { module: provider.modulePath, getter: provider.constraintsGetter });
+      continue;
+    }
+    const values = Array.isArray(raw) ? raw : (typeof raw === "object" ? Object.values(raw) : [raw]);
+    for (const v of values) {
+      const s = String(v == null ? "" : v).trim();
+      if (s) constraints.push(s);
+    }
+  }
+  return constraints;
+}
+
 module.exports = {
   loadBusinessTools,
+  loadBusinessConstraints,
   computeAnalyticsToken,
   internalGet,
   unwrapResponse,

@@ -224,6 +224,8 @@ async function runDshForUser(userId, question, opts = {}) {
     workspace,
     userId: uid,
     persona: readPersona(),
+    constraints: opts.constraints,
+    capabilities: opts.capabilities,
     memory: opts.memory,
     imageNote: opts.imageNote,
     context: opts.context,
