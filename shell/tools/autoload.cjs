@@ -105,6 +105,12 @@ function buildMediaRouteExecutor() {
   };
 }
 
+/** ga.query 真实 executor：直接复用业务线公开导出的 buildGaQueryExecutor。 */
+function buildGaQueryExecutor({ internalKey, dashPort }) {
+  const attribution = require("../../business/attribution/index.js");
+  return attribution.gaConnector.buildGaQueryExecutor({ internalKey, dashPort });
+}
+
 /** 按 "." 路径读取对象上的公开导出（如 "registry.attributionToolDefinition"）。 */
 function resolvePath(obj, pathStr) {
   return String(pathStr).split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
@@ -129,6 +135,11 @@ const PROVIDERS = [
     modulePath: "../../business/media/index.js",
     definitionGetter: "registry.mediaRouteToolDefinition",
     buildExecutor: buildMediaRouteExecutor,
+  },
+  {
+    modulePath: "../../business/attribution/index.js",
+    definitionGetter: "gaConnector.gaQueryToolDefinition",
+    buildExecutor: buildGaQueryExecutor,
   },
 ];
 
