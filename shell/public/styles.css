@@ -591,6 +591,10 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 /* 聊天气泡内返回的媒体（图片/视频）：限制最大宽度，避免撑破气泡；区别于用户上传缩略图 .bubimg */
 .bubmedia{display:block;max-width:min(420px,92%);height:auto;border-radius:10px;margin:4px 0;background:#000}
 .bubvideo{background:#000}
+/* 媒体加载失败兜底：替换破图标/空白，文案含类型与失败 URL，便于排查 */
+.bubmedia-fallback{display:block;max-width:min(420px,92%);box-sizing:border-box;padding:10px 12px;margin:4px 0;border:1px dashed var(--line,#d8d8d8);border-radius:10px;background:#fafafa;color:var(--sub,#888);font-size:13px;line-height:1.5;word-break:break-all}
+.bubmedia-fallback-msg{display:block;font-weight:600;color:var(--text-1,#555)}
+.bubmedia-fallback-url{display:block;margin-top:4px;font-size:12px;color:var(--sub,#aaa);word-break:break-all}
 .bubtext{display:block;white-space:pre-wrap;word-break:break-word}
 
 /* ---------- 记忆 ---------- */

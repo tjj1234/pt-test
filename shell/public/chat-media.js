@@ -10,6 +10,7 @@
  * 渲染规则：
  *   - type === "video"        → <video class="bubmedia bubvideo" controls preload="metadata">
  *   - 其余（image 或未知类型）→ <img class="bubmedia" loading="lazy">（未知类型按图片兜底，避免媒体无法展示）
+ *   - 加载失败：img/video 绑定 onerror，失败时把破图标/空白替换为兜底文案（.bubmedia-fallback），文案含类型与失败 URL
  */
 (function () {
   "use strict";
@@ -25,6 +26,35 @@
     return t ? String(t).toLowerCase() : "";
   }
 
+  /* 加载失败兜底：用一段文案替换破图标 / 空白。kind 决定文案（图片/视频）。 */
+  function makeFallback(kind, url) {
+    const fb = document.createElement("div");
+    fb.className = "bubmedia-fallback";
+    const label = kind === "video" ? "视频" : "图片";
+    const msg = document.createElement("span");
+    msg.className = "bubmedia-fallback-msg";
+    msg.textContent = label + "加载失败，请检查链接";
+    fb.appendChild(msg);
+    if (url) {
+      const u = document.createElement("span");
+      u.className = "bubmedia-fallback-url";
+      u.textContent = url;
+      fb.appendChild(u);
+    }
+    return fb;
+  }
+
+  /* 绑定 onerror：加载失败时把破媒体节点替换成兜底文案（优先 replaceChild，降级 appendChild）。 */
+  function attachErrorFallback(el, kind, url, bub) {
+    el.onerror = function () {
+      const fb = makeFallback(kind, url);
+      if (bub && bub.replaceChild) {
+        try { bub.replaceChild(fb, el); return; } catch (e) { /* fallthrough */ }
+      }
+      if (bub && bub.appendChild) bub.appendChild(fb);
+    };
+  }
+
   /* 把媒体渲染进气泡节点 bub，返回是否渲染了任意媒体 */
   function renderMediaInto(bub, media) {
     if (!bub || !media) return false;
@@ -37,6 +67,7 @@
       if (type === "video") {
         const v = document.createElement("video");
         v.className = "bubmedia bubvideo";
+        attachErrorFallback(v, "video", url, bub); // 先绑 onerror 再设 src，避免漏掉错误事件
         v.src = url;
         v.controls = true;
         v.preload = "metadata";
@@ -45,6 +76,7 @@
       } else {
         const img = document.createElement("img");
         img.className = "bubmedia";
+        attachErrorFallback(img, "image", url, bub); // 先绑 onerror 再设 src
         img.src = url;
         img.alt = "图片";
         img.loading = "lazy";
