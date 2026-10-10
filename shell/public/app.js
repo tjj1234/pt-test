@@ -37,7 +37,6 @@ function switchView(v) {
   if (v === "skills") loadSkills();
   if (v === "status") loadStatus();
   if (v === "memory") loadMemory();
-  if (v === "history") refreshList();
   if (v === "import") impOnEnter();
   if (v === "flows") bizLoadFlows();
   if (v === "usage") bizLoadUsage();
@@ -73,7 +72,7 @@ function bubbleSys(text) {
 function thinking() {
   const el = document.createElement("div");
   el.className = "msg a";
-  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 正在查数据、跑技能…<span class="elapsed"></span></div><div class="steps-live"></div></div>';
+  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 思考中…<span class="elapsed"></span></div><div class="steps-live"></div></div>';
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight;
   return el;
 }
@@ -884,11 +883,26 @@ async function loadKeyState() {
     const j = await r.json().catch(() => null);
     if (!j || !j.ok) return;
     const bound = !!(j.key && j.key.key_last4);
-    const dot = $("#keyDot"), last4 = $("#keyLast4"), banner = $("#keyBanner");
-    if (dot) dot.hidden = bound;
-    if (last4) { last4.hidden = !bound; if (bound) last4.textContent = "····" + j.key.key_last4; }
-    if (banner) banner.hidden = bound;
+    const banner = $("#keyBanner"); if (banner) banner.hidden = bound;
   } catch (x) { /* 静默 */ }
+}
+
+/* P0-2：拉当前登录用户，填充侧边栏用户名 / 用户菜单 / 头像首字母（只接 session，不新增功能） */
+async function loadMe() {
+  try {
+    const r = await fetch("/api/auth/me", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok || !j.user) return;
+    const u = j.user;
+    const name = u.username || u.email || "账户";
+    const handle = "@" + (u.username || (u.email || "").split("@")[0] || "user");
+    const ueName = $(".ue-name"); if (ueName) ueName.textContent = name;
+    const umName = $("#umName"); if (umName) umName.textContent = name;
+    const umHandle = $("#umHandle"); if (umHandle) umHandle.textContent = handle;
+    const initial = (name[0] || "U").toUpperCase();
+    document.querySelectorAll(".ue-avatar").forEach(a => { a.textContent = initial; });
+  } catch (e) { /* 静默 */ }
 }
 
 /* ---- 面板分享（只读 + 整面板）---- */
@@ -1419,8 +1433,9 @@ function impOnEnter() {
   try { const j = await (await fetch("/api/skills")).json(); $("#pSkills").textContent = "技能 " + j.skills.length; $("#pSkills").className = "pill ok"; } catch (e) {}
   try { const j = await (await fetch("/api/status")).json(); $("#pDash").textContent = "看板 " + (j.dashboardOk ? "在线" : "离线"); $("#pDash").className = "pill " + (j.dashboardOk ? "ok" : "bad"); } catch (e) {}
   loadKeyState();
+  loadMe();
   loadModels();
-  await refreshList();   // 预拉对话列表，对话历史视图打开即见
+  await refreshList();   // 预拉对话列表，侧边栏对话历史即时可见
   switchView("home");    // 默认落地首页（U0 三卡片 + chip 行）
 })();
 

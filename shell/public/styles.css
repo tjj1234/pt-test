@@ -61,7 +61,7 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   background:#1a1a1a;color:#fff;
 }
 
-.nav{display:flex;flex-direction:column;gap:0;padding:0 8px}
+.nav{display:flex;flex-direction:column;gap:0;padding:0 8px;flex:1 1 auto;min-height:0;overflow-y:auto}
 .nav button{
   display:flex;align-items:center;gap:10px;
   width:100%;padding:8px 10px;margin:1px 0;
@@ -704,20 +704,6 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   background:#1a1a1a;transition:background .15s;
 }
 .keygo:hover{background:#333}
-
-/* ---------- 侧边栏 key nav ---------- */
-.nav .keynav{
-  display:flex;align-items:center;gap:10px;width:100%;padding:9px 10px;
-  border-radius:8px;color:var(--text-2);font-size:13.5px;text-decoration:none;font-family:inherit;
-  transition:background .15s,color .15s;
-}
-.nav .keynav:hover{background:rgba(255,255,255,.08);color:#fff}
-.nav .keynav .ico{width:18px;text-align:center}
-.keydot{
-  flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:var(--bad);
-  box-shadow:0 0 0 2px rgba(220,38,38,.2);
-}
-.keylast{flex:0 0 auto;font-size:11px;color:#6a6a6a;font-family:ui-monospace,Consolas,monospace}
 
 /* 全局 hidden */
 [hidden]{display:none!important}
