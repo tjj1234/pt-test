@@ -150,122 +150,63 @@
   renderLoading();
   loadState();
 
-  /* ============================================================================
-   * M7【前端半部】：广告与数据源授权分节（mock 先行，待基座接口就绪换血）
-   * ----------------------------------------------------------------------------
-   * 契约（基座后续按此实现，前端先用 mock 跑通交互）：
-   *   GET    /api/auth-accounts        -> [{id,tenantId,accountType,status,scope,updatedAt}]
-   *   DELETE /api/auth-accounts/:id    -> 解除该账户授权
-   * 切换真实数据：将 USE_MOCK_AUTH_ACCOUNTS 置 false，并确保上面两个端点已上线，
-   *   渲染层 renderAccounts(list) 对来源无感知，换源即回归，无需改 UI。
-   * ========================================================================== */
-  const USE_MOCK_AUTH_ACCOUNTS = true;   // ★ 基座接口上线后改为 false
-  const MOCK_ACCOUNTS = [
-    { id: "acc_ssgtm_01", tenantId: "t_default", accountType: "SS-GTM", status: "有效",
-      scope: "Server 容器 GTM-WP7H3CBN 全量事件转发", updatedAt: "2026-09-28T14:20:00+08:00" },
-    { id: "acc_meta_01", tenantId: "t_default", accountType: "Meta", status: "即将过期",
-      scope: "Meta CAPI 转化回传（像素 ID 1029…）", updatedAt: "2026-07-12T09:05:00+08:00" },
-    { id: "acc_mcp_01", tenantId: "t_default", accountType: "MCP", status: "需重验",
-      scope: "MCP 数据源只读权限", updatedAt: "2026-06-30T18:42:00+08:00" },
-  ];
-
-  const acctEl = {
-    status: $("#acctStatus"), list: $("#acctList"),
-    modal: $("#revokeModal"), modalBody: $("#revokeBody"),
-    revokeCancel: $("#revokeCancel"), revokeConfirm: $("#revokeConfirm"),
+  /* GA4: real tenant-scoped connection metadata and browser OAuth. */
+  const ga = {
+    status: $("#acctStatus"), list: $("#acctList"), property: $("#gaPropertyId"),
+    connect: $("#gaConnect"), error: $("#gaError"), refresh: $("#gaRefresh"),
   };
-  let acctData = [];
-  let pendingRevokeId = null;
-
-  // 状态 -> 徽标配色（有效/即将过期/需重验 三种视觉区分）
-  const STATUS_BADGE = { "有效": "ok", "即将过期": "warn", "需重验": "danger" };
-  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-
-  function renderAccounts(list) {
-    acctData = Array.isArray(list) ? list : [];
-    if (!acctData.length) {
-      acctEl.status.textContent = "暂无已授权账户，业务线接入后可在此配置。";
-      acctEl.list.innerHTML = "";
-      return;
-    }
-    acctEl.status.textContent = "共 " + acctData.length + " 个已授权账户";
-    acctEl.list.innerHTML = acctData.map((a) => {
-      const bc = STATUS_BADGE[a.status] || "ok";
-      const upd = a.updatedAt ? new Date(a.updatedAt).toLocaleString("zh-CN") : "未知";
-      return '<div class="acct-item" data-id="' + esc(a.id) + '">'
-        + '<div class="acct-main">'
-        +   '<div class="acct-type">' + esc(a.accountType) + "</div>"
-        +   '<div class="acct-scope">' + esc(a.scope) + "</div>"
-        +   '<div class="acct-updated">最后更新：' + esc(upd) + "</div>"
-        + "</div>"
-        + '<div class="acct-side">'
-        +   '<span class="acct-badge ' + bc + '">' + esc(a.status) + "</span>"
-        +   '<button type="button" class="acct-revoke" data-id="' + esc(a.id) + '">解除</button>'
-        + "</div>"
-        + "</div>";
-    }).join("");
+  function addText(parent, tag, className, value) {
+    const node = document.createElement(tag);
+    node.className = className;
+    node.textContent = value;
+    parent.appendChild(node);
+    return node;
   }
-
-  async function loadAuthAccounts() {
-    if (!USE_MOCK_AUTH_ACCOUNTS) {
-      try {
-        const r = await fetch("/api/auth-accounts", { credentials: "same-origin" });
-        if (r.status === 401) { location.replace("/login"); return; }
-        const j = await r.json().catch(() => null);
-        renderAccounts(Array.isArray(j) ? j : (j && j.accounts) || []);
-      } catch (x) {
-        acctEl.status.textContent = "读取授权账户失败：" + x.message;
+  async function loadGaStatus() {
+    ga.status.textContent = "读取 Google Analytics 连接状态…";
+    ga.list.replaceChildren();
+    ga.refresh.disabled = true;
+    try {
+      const r = await fetch("/api/business/ga-connector/status", { credentials: "same-origin", cache: "no-store" });
+      if (r.status === 401) { location.replace("/login"); return; }
+      const j = await r.json().catch(() => null);
+      if (!r.ok || !j || j.ok !== true || typeof j.connected !== "boolean") {
+        ga.status.textContent = "无法读取 Google Analytics 连接状态，请稍后刷新。";
+        return;
       }
-      return;
-    }
-    renderAccounts(MOCK_ACCOUNTS);
-  }
-
-  function openRevokeModal(id) {
-    const a = acctData.find((x) => x.id === id);
-    if (!a) return;
-    pendingRevokeId = id;
-    acctEl.modalBody.textContent =
-      "确认解除「" + a.accountType + "」的授权吗？\n\n"
-      + "解除影响：\n"
-      + "• 该数据源将停止向归因面板回传数据；\n"
-      + "• 已生成的归因结果不受影响，但新的事件将不再归集；\n"
-      + "• 如需恢复，可在对应平台（GTM 容器 / Meta / MCP）重新授权后再次添加。";
-    acctEl.modal.style.display = "flex";
-  }
-  function closeRevokeModal() {
-    pendingRevokeId = null;
-    acctEl.modal.style.display = "none";
-  }
-  async function confirmRevoke() {
-    const id = pendingRevokeId;
-    closeRevokeModal();
-    if (!id) return;
-    if (!USE_MOCK_AUTH_ACCOUNTS) {
-      try {
-        const r = await fetch("/api/auth-accounts/" + encodeURIComponent(id),
-          { method: "DELETE", credentials: "same-origin" });
-        if (r.status === 401) { location.replace("/login"); return; }
-        await loadAuthAccounts();
-      } catch (x) {
-        acctEl.status.textContent = "解除失败：" + x.message;
+      ga.status.textContent = j.connected ? "Google Analytics 已连接" : "尚未连接 Google Analytics";
+      if (j.connected) {
+        const item = addText(ga.list, "div", "acct-item", "");
+        const main = addText(item, "div", "acct-main", "");
+        addText(main, "div", "acct-type", "Google Analytics 4");
+        addText(main, "div", "acct-scope", "Property ID：" + j.propertyId + " · 只读查询");
+        if (j.updatedAt) addText(main, "div", "acct-updated", "连接更新：" + new Date(j.updatedAt).toLocaleString("zh-CN"));
+        addText(item, "span", "acct-badge ok", "已连接");
+        if (!ga.property.value) ga.property.value = j.propertyId;
       }
+    } catch (_) {
+      ga.status.textContent = "无法读取 Google Analytics 连接状态，请检查网络后刷新。";
+    } finally { ga.refresh.disabled = false; }
+  }
+  function connectGa() {
+    const propertyId = ga.property.value.trim();
+    ga.error.textContent = "";
+    if (!/^\d+$/.test(propertyId)) {
+      ga.error.textContent = "请输入纯数字的 GA4 property ID，例如 123456789；不是 G- 开头的衡量 ID。";
+      ga.property.focus();
       return;
     }
-    // mock 阶段：本地移除并刷新，不真正调后端
-    acctData = acctData.filter((x) => x.id !== id);
-    renderAccounts(acctData);
+    ga.connect.disabled = true;
+    location.assign("/api/business/ga-connector/oauth/authorize?propertyId=" + encodeURIComponent(propertyId));
   }
-
-  // 事件：列表内「解除」按钮（事件委托）
-  acctEl.list.addEventListener("click", (ev) => {
-    const btn = ev.target.closest && ev.target.closest(".acct-revoke");
-    if (btn) openRevokeModal(btn.getAttribute("data-id"));
+  ga.connect.addEventListener("click", connectGa);
+  ga.property.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") { ev.preventDefault(); connectGa(); }
   });
-  acctEl.revokeCancel.addEventListener("click", closeRevokeModal);
-  acctEl.revokeConfirm.addEventListener("click", confirmRevoke);
-  acctEl.modal.addEventListener("click", (ev) => { if (ev.target === acctEl.modal) closeRevokeModal(); });
-
-  loadAuthAccounts();
+  ga.refresh.addEventListener("click", loadGaStatus);
+  window.addEventListener("pageshow", (ev) => {
+    ga.connect.disabled = false;
+    if (ev.persisted) loadGaStatus();
+  });
+  loadGaStatus();
 })();

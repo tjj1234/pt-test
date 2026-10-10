@@ -1,5 +1,17 @@
 "use strict";
 const { encryptWithKey, decryptWithKey } = require('../../../shell/keys.cjs');
+// Metadata only: never select or decrypt credentials for the settings page.
+async function readGaConnectionStatus(pool, tenantId) {
+ const c = await pool.connect();
+ try {
+  await c.query('BEGIN');
+  await c.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
+  const row = (await c.query('SELECT property_id, updated_at FROM ga_connections WHERE tenant_id=$1::uuid', [tenantId])).rows[0];
+  await c.query('COMMIT');
+  return {ok:true,connected:!!row,propertyId:row?.property_id || null,updatedAt:row?.updated_at || null};
+ } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; }
+ finally { c.release(); }
+}
 function createGaStore({ pool, key }) {
  if (!Buffer.isBuffer(key) || key.length !== 32) throw new Error('GA_TOKEN_ENCRYPTION_KEY must decode to 32 bytes');
  async function scoped(tenantId, fn) {
@@ -36,4 +48,4 @@ function createGaStore({ pool, key }) {
   }
  };
 }
-module.exports = {createGaStore};
+module.exports = {createGaStore,readGaConnectionStatus};
