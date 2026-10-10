@@ -23,25 +23,14 @@
   .mask{font:600 30px/1.4 ui-monospace,Consolas,monospace;letter-spacing:2px;margin:16px 0 4px;color:var(--ink)}
   .sub{font-size:12px;color:var(--sub);margin-bottom:18px}
 
-  /* M7：广告与数据源授权分节 */
-  .acct-list{display:flex;flex-direction:column;gap:10px;margin:12px 0 4px}
-  .acct-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fff}
-  .acct-main{flex:1;min-width:0}
-  .acct-type{font-size:14px;font-weight:600;color:var(--ink)}
-  .acct-scope{font-size:12.5px;color:var(--sub);margin-top:3px;word-break:break-word}
-  .acct-updated{font-size:11.5px;color:var(--sub);margin-top:6px;opacity:.85}
-  .acct-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}
-  .acct-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px}
-  .acct-badge.ok{color:#0f7a3d;background:#e8f7ee}      /* 有效：绿 */
-  .acct-badge.warn{color:#9a6b00;background:#fff4d6}     /* 即将过期：琥珀 */
-  .acct-badge.danger{color:#b42318;background:#fde7e4}  /* 需重验：红 */
+  /* 两张卡片（Key 绑定 / 修改登录密码）上下排列：
+     基础 .login-wrap 是 flex 居中容器，默认横排会把两张卡挤在同一行、窄屏时互相压住。
+     这里改成纵向流 + 间距，两张卡各占一行。 */
+  .login-wrap{flex-direction:column;gap:18px;padding:24px 16px}
   @media (max-width:480px){
-    .login-wrap{flex-direction:column}
+    .login-wrap{padding:16px}
     .login-card{width:100%;flex-shrink:0}
-    .acct-item{flex-direction:column}
-    .acct-side{flex-direction:row;align-items:center;justify-content:space-between;width:100%}
   }
-
 </style>
 </head>
 <body>
@@ -87,21 +76,12 @@
 
     <div class="err" id="e"></div>
     <div class="hint">你的 PT key 只在你点「保存绑定」时进入浏览器内存并立即 POST 到服务端加密落库，提交后输入框马上清空；明文 key 不会写入本地存储、不会打印到控制台、也不会出现在网址里。服务端也只回显末 4 位。</div>
-    <section aria-labelledby="sourcesHeading"><h2 id="sourcesHeading">广告与数据源授权</h2>
-      <p class="status" id="acctStatus" role="status" aria-live="polite">读取中…</p>
-      <div id="acctList" class="acct-list"></div>
-      <label for="gaPropertyId">GA4 property ID</label>
-      <input id="gaPropertyId" type="text" inputmode="numeric" placeholder="例如 123456789" autocomplete="off" spellcheck="false" aria-describedby="gaHint gaError">
-      <p class="hint" id="gaHint">在 Google Analytics「管理 → 媒体资源设置」查看数字 ID。授权账号需有该媒体资源的读取权限；重新连接会替换当前绑定。</p>
-      <button type="button" class="btn" id="gaConnect">连接Google Analytics</button>
-      <button type="button" class="ghost wide" id="gaRefresh">刷新连接状态</button>
-      <div class="err" id="gaError" role="alert"></div>
-    </section>
+    <!-- GA 授权已挪到「技能」页面：技能详情里完成连接 / 解除连接 / 更换 Property -->
     <p><a href="/">返回工作区</a></p>
   </form>
 
   <!-- U3：修改登录密码（与 PT Key 绑定互不干扰，独立区块） -->
-  <form class="login-card" id="pwf" autocomplete="off" style="margin-top:18px;display:none">
+  <form class="login-card" id="pwf" autocomplete="off" style="display:none">
     <div class="brand">
       <div class="logo">P</div>
       <div><h1>PowerTokens Agent</h1><p>修改登录密码 · 账户安全</p></div>

@@ -150,63 +150,6 @@
   renderLoading();
   loadState();
 
-  /* GA4: real tenant-scoped connection metadata and browser OAuth. */
-  const ga = {
-    status: $("#acctStatus"), list: $("#acctList"), property: $("#gaPropertyId"),
-    connect: $("#gaConnect"), error: $("#gaError"), refresh: $("#gaRefresh"),
-  };
-  function addText(parent, tag, className, value) {
-    const node = document.createElement(tag);
-    node.className = className;
-    node.textContent = value;
-    parent.appendChild(node);
-    return node;
-  }
-  async function loadGaStatus() {
-    ga.status.textContent = "读取 Google Analytics 连接状态…";
-    ga.list.replaceChildren();
-    ga.refresh.disabled = true;
-    try {
-      const r = await fetch("/api/business/ga-connector/status", { credentials: "same-origin", cache: "no-store" });
-      if (r.status === 401) { location.replace("/login"); return; }
-      const j = await r.json().catch(() => null);
-      if (!r.ok || !j || j.ok !== true || typeof j.connected !== "boolean") {
-        ga.status.textContent = "无法读取 Google Analytics 连接状态，请稍后刷新。";
-        return;
-      }
-      ga.status.textContent = j.connected ? "Google Analytics 已连接" : "尚未连接 Google Analytics";
-      if (j.connected) {
-        const item = addText(ga.list, "div", "acct-item", "");
-        const main = addText(item, "div", "acct-main", "");
-        addText(main, "div", "acct-type", "Google Analytics 4");
-        addText(main, "div", "acct-scope", "Property ID：" + j.propertyId + " · 只读查询");
-        if (j.updatedAt) addText(main, "div", "acct-updated", "连接更新：" + new Date(j.updatedAt).toLocaleString("zh-CN"));
-        addText(item, "span", "acct-badge ok", "已连接");
-        if (!ga.property.value) ga.property.value = j.propertyId;
-      }
-    } catch (_) {
-      ga.status.textContent = "无法读取 Google Analytics 连接状态，请检查网络后刷新。";
-    } finally { ga.refresh.disabled = false; }
-  }
-  function connectGa() {
-    const propertyId = ga.property.value.trim();
-    ga.error.textContent = "";
-    if (!/^\d+$/.test(propertyId)) {
-      ga.error.textContent = "请输入纯数字的 GA4 property ID，例如 123456789；不是 G- 开头的衡量 ID。";
-      ga.property.focus();
-      return;
-    }
-    ga.connect.disabled = true;
-    location.assign("/api/business/ga-connector/oauth/authorize?propertyId=" + encodeURIComponent(propertyId));
-  }
-  ga.connect.addEventListener("click", connectGa);
-  ga.property.addEventListener("keydown", (ev) => {
-    if (ev.key === "Enter") { ev.preventDefault(); connectGa(); }
-  });
-  ga.refresh.addEventListener("click", loadGaStatus);
-  window.addEventListener("pageshow", (ev) => {
-    ga.connect.disabled = false;
-    if (ev.persisted) loadGaStatus();
-  });
-  loadGaStatus();
+  /* 注：GA 连接已整体挪到「技能」页面（技能详情里的连接/解除/更换 Property），
+     那套真实逻辑现在由 shell/public/ga-connect.js 提供，本页不再重复实现。 */
 })();
