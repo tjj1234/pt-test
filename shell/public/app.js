@@ -903,7 +903,7 @@ async function loadStatus() {
       ["产品 DSH_HOME（隔离边界）", j.dshHome],
       ["产品工作区", j.workspace],
       ["产品技能数", (j.skills == null ? 0 : j.skills) + " 个"],
-      ["看板后端 127.0.0.1:" + j.dashboard, j.dashboardOk ? "✅ 在线" : "❌ 离线（先启动北极星后端）"],
+      ["看板后端 127.0.0.1:" + j.dashboard, j.dashboardOk ? "✅ 在线" : "❌ 离线（先启动后端服务）"],
       ["DSH 对外端口", "无（headless 不开端口）"],
       ["用户与 DSH 的关系", "用户只跟业务壳说话，永远碰不到 DSH"],
     ];
