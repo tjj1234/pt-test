@@ -251,10 +251,22 @@
           <!-- 快捷问题：按 /api/skills 返回的技能列表动态渲染，有几个技能显示几个；
                技能例句来自基座的 sampleQuestion 字段，未返回时整块收起 -->
           <div class="quick" id="quickRow" hidden></div>
+          <!-- 素材生成类型：与 media.route 的 taskType 一一对应（文生图 / 图生图 / 文生视频 / 图生视频）。
+               「文生*」不要求先传参考图，「图生*」才需要一张参考图。
+               #imgInput 的 accept 由 JS 按当前类型写入，这里不再写死 image/*。 -->
+          <div class="gen-type" id="genType" role="group" aria-label="素材生成类型">
+            <span class="gt-label">生成</span>
+            <button type="button" class="gt-btn on" data-type="auto" title="自动：不指定生成方式，由 Agent 根据你说的话自行判断">自动</button>
+            <button type="button" class="gt-btn" data-type="text2image" title="文生图：只用文字描述生成图片，不需要参考图">文生图</button>
+            <button type="button" class="gt-btn" data-type="image2image" title="图生图：需要一张参考图">图生图</button>
+            <button type="button" class="gt-btn" data-type="text2video" title="文生视频：只用文字描述生成视频，不需要参考图">文生视频</button>
+            <button type="button" class="gt-btn" data-type="image2video" title="图生视频：需要一张参考图">图生视频</button>
+            <span class="gt-hint" id="genHint"></span>
+          </div>
           <div class="empty-input" id="emptyInput">
-            <div class="img-preview" id="imgPreview" hidden><img id="imgThumb" alt="待发图片"><button id="imgClear" type="button">×</button></div>
-            <input type="file" id="imgInput" accept="image/*" hidden>
-            <button class="composer-add-btn" id="imgBtn" type="button" title="添加图片 / 文件"><span class="ico" data-ico="plus"></span></button>
+            <div class="img-preview" id="imgPreview" hidden><img id="imgThumb" alt="待发素材"><button id="imgClear" type="button">×</button></div>
+            <input type="file" id="imgInput" hidden>
+            <button class="composer-add-btn" id="imgBtn" type="button" title="添加参考图"><span class="ico" data-ico="plus"></span></button>
             <textarea id="ta" rows="1" placeholder="输入问题，或用 @引用数据面板内容… (Enter 发送 / Shift+Enter 换行)"></textarea>
             <div class="foot-bar">
               <div class="model-switcher" id="modelSwitcher">
