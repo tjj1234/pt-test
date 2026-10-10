@@ -6,7 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const {createPgCompatPool} = require('../../../analytics/lib/db.cjs');
-const {createGaStore} = require('./store');
+const {createGaStore,readGaConnectionStatus} = require('./store');
 const {createGoogleClient,SCOPE} = require('./client');
 const {createGaConnector,gaQueryToolDefinition,validateArgs,connectorFromEnv} = require('./index');
 const {buildUnifiedServer} = require('../../../analytics/backend/server');
@@ -44,6 +44,18 @@ test('real HTTP auth gate and input validation',async()=>{
  assert.throws(()=>validateArgs({...args,tenantId:B}));
  assert.throws(()=>validateArgs({...args,dateRange:{startDate:'2026-02-30',endDate:'today'}}));
 });
+test('status uses real SQL without Google config, rejects unauthenticated requests and ignores tenant query input',async()=>{
+ const url='/api/business/ga-connector/status';
+ assert.equal((await app.inject({method:'GET',url})).statusCode,401);
+ assert.equal((await app.inject({method:'GET',url,headers:{authorization:'Bearer expired'}})).statusCode,401);
+ assert.equal((await app.inject({method:'GET',url,headers:{authorization:'Bearer invalid'}})).statusCode,403);
+ const r=await app.inject({method:'GET',url:url+'?tenantId='+B,headers});
+ assert.equal(r.statusCode,200);assert.equal(r.headers['cache-control'],'no-store');
+ assert.deepEqual(r.json(),{ok:true,connected:false,propertyId:null,updatedAt:null});
+ const f=require('../../../analytics/node_modules/fastify')();
+ require('../../../analytics/backend/ga-connector/routes').registerGaConnectorRoutes(f,{pool,parseAuthorization:()=> 'test',verifyAnalyticsToken:async()=>({tenant_id:A,scopes:[]})});
+ try {assert.equal((await f.inject({method:'GET',url,headers})).statusCode,403);} finally {await f.close();}
+});
 test('OAuth redirect, PKCE, tenant/session binding, single-use callback and encrypted SQL storage',async()=>{
  const u=await authorize(),state=u.searchParams.get('state');
  assert.equal(u.origin,'https://accounts.google.com');assert.equal(u.searchParams.get('scope'),SCOPE);assert.equal(u.searchParams.get('code_challenge_method'),'S256');
@@ -58,6 +70,21 @@ test('OAuth redirect, PKCE, tenant/session binding, single-use callback and encr
  assert.equal((await store.get(A)).refreshToken,'refresh-secret');assert.equal(await store.get(B),null);
  const exchange=requests.find(x=>new URLSearchParams(x.options.body).get('grant_type')==='authorization_code');
  assert.equal(crypto.createHash('sha256').update(new URLSearchParams(exchange.options.body).get('code_verifier')).digest('base64url'),u.searchParams.get('code_challenge'));
+});
+test('status returns only tenant-owned metadata after callback; browser callback returns to settings',async()=>{
+ const u=await authorize();
+ const callback=await app.inject({method:'GET',url:`/api/business/ga-connector/oauth/callback?state=${u.searchParams.get('state')}&code=browser-code`,headers:{...headers,accept:'text/html'}});
+ assert.equal(callback.statusCode,302);assert.equal(callback.headers.location,'/settings');
+ const r=await app.inject({method:'GET',url:'/api/business/ga-connector/status?tenantId='+B,headers});
+ assert.equal(r.statusCode,200);assert.deepEqual(Object.keys(r.json()).sort(),['connected','ok','propertyId','updatedAt']);
+ assert.equal(r.json().connected,true);assert.equal(r.json().propertyId,'12345');assert.ok(Date.parse(r.json().updatedAt));
+ assert.ok(!r.body.includes('refresh-secret'));assert.ok(!r.body.includes('ciphertext'));
+ const other=await app.inject({method:'GET',url:'/api/business/ga-connector/status?tenantId='+A,headers:{authorization:'Bearer B'}});
+ assert.deepEqual(other.json(),{ok:true,connected:false,propertyId:null,updatedAt:null});
+ // Production status path must work without constructing the OAuth client or a decryption key.
+ const f=require('../../../analytics/node_modules/fastify')();
+ require('../../../analytics/backend/ga-connector/routes').registerGaConnectorRoutes(f,{pool,parseAuthorization:()=> 'test',verifyAnalyticsToken:async()=>({tenant_id:A,scopes:['analytics:read']})});
+ try {assert.equal((await f.inject({method:'GET',url:'/api/business/ga-connector/status',headers})).json().propertyId,'12345');} finally {await f.close();}
 });
 test('GA4 runReport request and existing report renderer preserve exact Google values',async()=>{
  const r=await app.inject({method:'POST',url:'/api/business/ga-connector/query',headers,payload:args});assert.equal(r.statusCode,200);
@@ -99,6 +126,8 @@ test('ciphertext authentication rejects wrong encryption key',async()=>{
 test('encrypted connection survives actual database close/reopen and RLS hides other tenant',async()=>{
  await pool.end();pool=await createPgCompatPool({dataDir:dir,migrationsDir:path.resolve(__dirname,'../../../analytics/backend/db')});
  const restored=createGaStore({pool,key});assert.equal((await restored.get(A)).refreshToken,'refresh-secret');
+ assert.equal((await readGaConnectionStatus(pool,A)).propertyId,'12345');
+ assert.equal((await readGaConnectionStatus(pool,B)).connected,false);
  const c=await pool.connect();try {await c.query('BEGIN');await c.query("SELECT set_config('app.current_tenant_id',$1,true)",[B]);assert.equal((await c.query('SELECT * FROM ga_connections')).rows.length,0);await c.query('COMMIT');}finally{c.release();}
 });
 test('OAuth route logging does not leak callback code or state',async()=>{
