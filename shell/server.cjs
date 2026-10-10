@@ -40,7 +40,7 @@ const panelSharesMod = require("./panel-share.cjs");
 const toolCallsMod = require("./tool-calls.cjs");
 const toolsRegistry = require("./tools/registry.cjs");
 const { loadBusinessTools, loadBusinessConstraints } = require("./tools/autoload.cjs");
-const { queryBusinessWorkspace, normalizeEnabledStatus } = require("./workspace-enabled-status.cjs");
+const { queryBusinessWorkspace, normalizeEnabledStatus, queryGaConnectorStatus } = require("./workspace-enabled-status.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
 
 // ---- 路径：全部相对 repo 根，可用环境变量覆盖 ----
@@ -770,24 +770,50 @@ async function handle(req, res) {
   }
 
   if (p === "/api/skills") {
-    const list = [];
-    try {
-      for (const d of fs.readdirSync(SKILLS, { withFileTypes: true })) {
-        if (!d.isDirectory()) continue;
-        let title = d.name, desc = "";
-        const md = path.join(SKILLS, d.name, "SKILL.md");
-        if (fs.existsSync(md)) {
-          const txt = fs.readFileSync(md, "utf8").slice(0, 2000);
-          const h = txt.match(/^#\s+(.+)$/m);
-          if (h) title = h[1].trim();
-          const para = txt.split(/\n\s*\n/).map((s) => s.trim())
-            .find((s) => s && s[0] !== "#" && s.indexOf("---") !== 0 && s[0] !== ">");
-          if (para) desc = para.replace(/\s+/g, " ").slice(0, 170);
+    // 技能清单 = 已注册的业务工具（与「业务流库」/api/tools 同一数据源 toolsRegistry）。
+    // 不再读从未被写入过的 runtime/workspace/.dsh/skills/ 目录。
+    const context = { userId: me.user.id, tenantId: me.tenant.id, workspaceId: workspaceIdFor(me) };
+    const SKILL_TITLES = { "attribution.query": "归因查询", "media.route": "媒体生成", "ga.query": "GA 数据查询" };
+    const SKILL_QUESTIONS = {
+      "attribution.query": "最近7天各渠道素材表现如何？",
+      "media.route": "帮我生成一张产品宣传图：画面是一杯咖啡放在木桌上，暖色灯光，简约高级风格。",
+      "ga.query": "这周我的GA网站访问量多少？",
+    };
+    const SKILL_DESCRIPTIONS = {
+      "attribution.query": "查询广告归因漏斗与素材投放表现，回答转化、渠道、素材效果等问题。",
+      "media.route": "根据文字描述或参考图生成图片/视频，支持文生图、图生图、文生视频、图生视频。",
+      "ga.query": "授权你自己的 Google Analytics 账户后，可以直接在对话里问真实网站数据。",
+    };
+    const REQUIRES_CONNECTOR = { "ga.query": true };
+
+    let gaConnected = false;
+    const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
+    if (INTERNAL_KEY) {
+      try {
+        const raw = await queryGaConnectorStatus({ internalKey: INTERNAL_KEY, dashPort: DASH_PORT, tenantId: me.tenant.id });
+        if (raw.statusCode === 200) {
+          try { gaConnected = Boolean(JSON.parse(raw.body || "{}").connected); } catch (e) {}
         }
-        list.push({ id: d.name, title, desc });
+      } catch (e) {
+        log.error("ga_connector_status_failed", { error: e && e.message ? e.message : String(e) });
       }
-    } catch (e) { log.error("skills_list_failed", { error: e && e.message ? e.message : String(e) }); return json(res, 500, { ok: false, error: "服务器内部错误" }); }
-    return json(res, 200, { ok: true, skills: list });
+    }
+
+    const tools = await toolsRegistry.listToolsForWorkspace(context.workspaceId, context);
+    const skills = tools.map((t) => {
+      const requiresConnector = REQUIRES_CONNECTOR[t.name] || false;
+      const skill = {
+        id: t.name,
+        title: SKILL_TITLES[t.name] || t.name,
+        desc: t.description || "",
+        description: SKILL_DESCRIPTIONS[t.name] || t.description || "",
+        sampleQuestion: SKILL_QUESTIONS[t.name] || "",
+        requiresConnector,
+      };
+      if (requiresConnector) skill.connectorStatus = gaConnected;
+      return skill;
+    });
+    return json(res, 200, { ok: true, skills });
   }
 
   if (p === "/api/status") {
