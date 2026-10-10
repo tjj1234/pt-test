@@ -1,7 +1,7 @@
 "use strict";
 const {isUuid} = require('../collect/validate');
 const {connectorFromEnv} = require('../../../business/attribution/ga-connector');
-const {readGaConnectionStatus} = require('../../../business/attribution/ga-connector/store');
+const {readGaConnectionStatus,deleteGaConnection} = require('../../../business/attribution/ga-connector/store');
 function registerGaConnectorRoutes(app,opts) {
  let connector=opts.gaConnector;
  const getConnector=()=>connector||(connector=connectorFromEnv(opts.pool));
@@ -21,6 +21,7 @@ function registerGaConnectorRoutes(app,opts) {
   }
  }
  app.get('/api/business/ga-connector/status',(req,reply)=>handle(req,reply,(_,t)=>readGaConnectionStatus(opts.pool,t),false));
+ app.delete('/api/business/ga-connector/connection',(req,reply)=>handle(req,reply,(_,t)=>deleteGaConnection(opts.pool,t),false));
  app.get('/api/business/ga-connector/oauth/authorize',{logLevel:'silent'},(req,reply)=>handle(req,reply,async(c,t)=>reply.redirect(await c.authorize(t,req.headers.cookie,req.query.propertyId))));
  app.get('/api/business/ga-connector/oauth/callback',{logLevel:'silent'},(req,reply)=>handle(req,reply,async(c,t)=>{
   const result=await c.callback(t,req.headers.cookie,req.query);
