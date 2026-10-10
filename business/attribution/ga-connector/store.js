@@ -48,4 +48,16 @@ function createGaStore({ pool, key }) {
   }
  };
 }
-module.exports = {createGaStore,readGaConnectionStatus};
+// Disconnect is local credential deletion, independent of OAuth configuration.
+async function deleteGaConnection(pool, tenantId) {
+ const c = await pool.connect();
+ try {
+  await c.query('BEGIN');
+  await c.query("SELECT set_config('app.current_tenant_id', $1, true)", [tenantId]);
+  await c.query('DELETE FROM ga_connections WHERE tenant_id=$1::uuid', [tenantId]);
+  await c.query('COMMIT');
+  return {ok:true,connected:false,propertyId:null,updatedAt:null};
+ } catch (e) { await c.query('ROLLBACK').catch(() => {}); throw e; }
+ finally { c.release(); }
+}
+module.exports = {createGaStore,readGaConnectionStatus,deleteGaConnection};
