@@ -1,7 +1,7 @@
 ﻿<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PowerTokens Agent · 你的增长小助手</title>
+<title>北极星 · PowerTokens 归因与增长 Agent</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
   /* P0-2：未绑 key 提示条（侧边栏「我的 Key」入口已移除，统一走左下角用户菜单「账户与授权」） */
@@ -21,7 +21,7 @@
   <aside class="side">
     <div class="brand" id="brandHome" role="button" tabindex="0" title="返回首页">
       <div class="logo">P</div>
-      <div><h1>PowerTokens Agent</h1><p>你的增长小助手</p></div>
+      <div><h1>社媒增长 Agent</h1><p>北极星 · 归因与增长</p></div>
     </div>
 
     <button class="side-newconv" id="newConv">＋ 新建对话</button>
@@ -242,8 +242,8 @@
       <div class="chat-pane">
         <div class="chat" id="chat">
           <div class="empty" id="hello">
-            <h3>你好，我是 PowerTokens Agent 👋</h3>
-            <p>你的小助手，可以帮你分析增长数据、生成图片和视频。</p>
+            <h3>你好，我是社媒增长 Agent 👋</h3>
+            <p>我可以帮你把社媒流量运营 + 广告归因两件事闭环起来</p>
             <p class="empty-hint">直接在下面提问，或点左侧「＋ 新建对话」开始。</p>
           </div>
         </div>
@@ -278,6 +278,8 @@
     <section class="view" id="v-skills"><div class="page">
       <div class="note">这些是<b>产品工作区</b>里的技能。DSH 的开发技能（社媒那 10 个）<b>不在产品里</b> —— 隔离已经生效。</div>
       <div class="grid" id="skillGrid"></div>
+      <!-- 技能详情：点卡片后在下方展开（说明 + 去使用 + 需要时先引导连接账户） -->
+      <div class="skill-detail" id="skillDetail" hidden></div>
     </div></section>
 
     <!-- ============ 能力：运行状态 ============ -->
@@ -355,6 +357,7 @@
 <script src="/assets/report-drawer.js"></script>
 <script src="/assets/key-drawer.js"></script>
 <script src="/assets/chat-media.js"></script>
+<script src="/assets/ga-connect.js"></script>
 <script src="/assets/app.js"></script>
 <script src="/assets/members.js"></script>
 </body></html>

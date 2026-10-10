@@ -855,41 +855,289 @@ if (memAdd) memAdd.addEventListener("click", async () => {
   else alert((j && j.error) || "保存失败");
 });
 
-/* ---- 技能 ---- */
+/* ---- 技能：卡片 → 详情（说明 + 去使用 + 按需连接账户引导） ---- */
+/* SKILL_DETAIL_BEGIN */
+function mkNode(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;
+  return n;
+}
+
+// 「去使用」三种走向的唯一判定入口（纯函数，验收脚本直接测它）：
+//   不需要连接账户 → go-chat
+//   需要且已连接   → go-chat
+//   需要但没连过   → need-connector（先引导走真实授权）
+function skillUseDecision(skill, connected) {
+  if (!skill || skill.requiresConnector !== true) return "go-chat";
+  return connected === true ? "go-chat" : "need-connector";
+}
+
+// 弹窗被拦截时的续接：授权完成后后端会落在 /settings，回到工作区时把这一步补上
+const PENDING_USE_KEY = "ptSkillUseAfterGaConnect";
+function savePendingUse(q) {
+  try { sessionStorage.setItem(PENDING_USE_KEY, JSON.stringify({ q: q || "" })); } catch (e) { /* 隐私模式下忽略 */ }
+}
+async function resumePendingUse() {
+  let q = "";
+  try {
+    const raw = sessionStorage.getItem(PENDING_USE_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PENDING_USE_KEY);
+    q = (JSON.parse(raw) || {}).q || "";
+  } catch (e) { return; }
+  const ga = (typeof window !== "undefined" ? window.GaConnect : null);
+  if (!ga) return;
+  let st = null;
+  try { st = await ga.loadStatus(); } catch (x) { st = null; }   // 没连上就不打扰用户
+  if (st && st.connected) gotoChatWithQuestion(q);
+}
+
+// 跳回对话并把示例问题预填进输入框（不自动发送，用户确认后再发）
+function gotoChatWithQuestion(q) {
+  const fill = () => {
+    switchView("chat");
+    if (q) ta.value = q;
+    ta.focus();
+    ta.style.height = "auto";
+    ta.style.height = Math.min(ta.scrollHeight, 170) + "px";
+  };
+  if (state.activeId) fill();
+  else if (state.list && state.list.length) openConversation(state.list[0].id).then(fill, fill);
+  else newConversation().then(fill, fill);
+}
+
+/* 连接区块：
+ *   已连接 → property ID + 连接时间，配「解除连接」「更换 Property」两个独立按钮
+ *            （一个只解绑、一个只换绑，不身兼两职；已连接时不再出现「连接」按钮）
+ *   未连接 → property ID 输入 +「连接 Google 账户」按钮，走 GaConnect 的真实授权
+ * 所有动作都调 GaConnect（= settings.js 那套逻辑搬出来的共享模块），不在此重写。
+ */
+function renderConnectorBlock(box, opts) {
+  const o = opts || {};
+  const ga = o.ga || (typeof window !== "undefined" ? window.GaConnect : null) || null;
+  const status = o.status || null;
+  const connected = !!(status && status.connected);
+  const fmt = o.fmt || fmtTime;
+  box.textContent = "";
+
+  const err = mkNode("div", "sd-err", "");
+  err.hidden = true;
+  const setErr = (m) => { err.textContent = m || ""; err.hidden = !m; };
+
+  if (!ga) {
+    box.appendChild(mkNode("p", "sd-conn-tip", "连接组件未加载，刷新页面后重试。"));
+    return { error: err, input: null, go: null };
+  }
+
+  if (connected && o.mode !== "form") {
+    const line = mkNode("div", "sd-conn-line");
+    line.appendChild(mkNode("span", "sd-badge ok", "已连接"));
+    line.appendChild(mkNode("span", "sd-conn-tip", "Google Analytics 4 · 只读查询"));
+
+    const kv = mkNode("div", "sd-conn-kv");
+    kv.appendChild(mkNode("span", "sd-conn-k", "Property ID"));
+    kv.appendChild(mkNode("span", "sd-conn-v", String(status.propertyId || "—")));
+    if (status.updatedAt) {
+      kv.appendChild(mkNode("span", "sd-conn-k", "连接时间"));
+      kv.appendChild(mkNode("span", "sd-conn-v", fmt(status.updatedAt) || "—"));
+    }
+
+    const btns = mkNode("div", "sd-conn-btns");
+    const dis = mkNode("button", "sd-btn danger", "解除连接"); dis.type = "button";
+    const chg = mkNode("button", "sd-btn", "更换 Property"); chg.type = "button";
+    dis.addEventListener("click", async () => {
+      const sure = typeof o.confirm === "function"
+        ? o.confirm("确定要解除 Google Analytics 连接吗？解除后需要重新授权才能使用「GA 数据查询」。")
+        : true;
+      if (!sure) return;
+      dis.disabled = true; dis.textContent = "解除中…"; setErr("");
+      let ok = false;
+      try { ok = await ga.disconnect(); } catch (x) { ok = false; }
+      dis.disabled = false; dis.textContent = "解除连接";
+      if (!ok) { setErr("解除失败，请稍后重试。"); return; }
+      if (typeof o.onChanged === "function") o.onChanged({ connected: false });
+    });
+    chg.addEventListener("click", () => {
+      renderConnectorBlock(box, Object.assign({}, o, { mode: "form" }));
+    });
+    btns.appendChild(dis); btns.appendChild(chg);
+
+    box.appendChild(line); box.appendChild(kv); box.appendChild(btns); box.appendChild(err);
+    return { error: err, input: null, go: null };
+  }
+
+  // 未连接 / 换绑：填 property ID → 真实授权
+  const tip = o.mode === "form"
+    ? "填写新的 property ID，重新授权后会替换当前绑定。"
+    : "这个技能要先连接你的 Google Analytics 账户：填 property ID → 点连接 → 在 Google 页面完成授权，授权后会自动继续。";
+  const row = mkNode("div", "sd-conn-row");
+  const input = mkNode("input", "sd-prop");
+  input.type = "text";
+  input.placeholder = "GA4 property ID，例如 123456789";
+  // 刻意不预填：未连接时后端 propertyId 本就是 null，换绑时也不该替用户填旧值
+  // （否则会出现「看着像填过了、一点就发起授权」的误操作）
+  const btn = mkNode("button", "sd-btn primary", "连接 Google 账户"); btn.type = "button";
+  row.appendChild(input); row.appendChild(btn);
+
+  const go = () => {
+    const pid = String(input.value == null ? "" : input.value).trim();
+    if (!ga.validatePropertyId(pid)) {
+      setErr(ga.PROPERTY_ID_HINT || "请输入纯数字的 GA4 property ID。");
+      if (typeof input.focus === "function") input.focus();
+      return;
+    }
+    setErr("");
+    btn.disabled = true; btn.textContent = "等待授权…";
+    ga.connect({
+      propertyId: pid,
+      onDone: (st) => { btn.disabled = false; btn.textContent = "连接 Google 账户"; if (typeof o.onChanged === "function") o.onChanged(st); },
+      onFail: (m) => { btn.disabled = false; btn.textContent = "连接 Google 账户"; setErr(m); },
+      onInvalid: (m) => { btn.disabled = false; btn.textContent = "连接 Google 账户"; setErr(m); },
+      // 弹窗被浏览器拦截时只能整页跳走（授权完成后后端固定回 /settings），
+      // 记一笔待办，等回到工作区时自动补上「去使用」那一步。
+      onRedirect: () => { savePendingUse(o.pendingQuestion || ""); location.assign(ga.authorizeUrl ? ga.authorizeUrl(pid) : "/"); },
+    });
+  };
+  btn.addEventListener("click", go);
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") { ev.preventDefault(); go(); } });
+
+  box.appendChild(mkNode("p", "sd-conn-tip", tip));
+  box.appendChild(row);
+  if (ga.PROPERTY_ID_TIP) box.appendChild(mkNode("p", "sd-conn-sub", ga.PROPERTY_ID_TIP));
+  if (o.mode === "form") {
+    const cancel = mkNode("button", "sd-btn", "取消"); cancel.type = "button";
+    cancel.addEventListener("click", () => { if (typeof o.onChanged === "function") o.onChanged(status); });
+    box.appendChild(cancel);
+  }
+  box.appendChild(err);
+  return { error: err, input: input, go: go };
+}
+
+// 技能详情：标题 + 说明 + 去使用；需要连接账户的额外挂「连接状态/引导」区块
+async function renderSkillDetail(skill, box, hooks) {
+  const h = hooks || {};
+  const target = box || $("#skillDetail");
+  if (!target || !skill) return null;
+  const ga = h.ga || (typeof window !== "undefined" ? window.GaConnect : null) || null;
+  const onUse = h.onUse || gotoChatWithQuestion;
+  const needs = skill.requiresConnector === true;
+
+  target.textContent = "";
+  target.hidden = false;
+
+  const card = mkNode("div", "sd-card");
+  const head = mkNode("div", "sd-head");
+  head.appendChild(mkNode("h3", "", skill.title || "（无标题）"));
+  const back = mkNode("button", "sd-back", "← 返回技能列表"); back.type = "button";
+  back.addEventListener("click", () => { target.hidden = true; target.textContent = ""; });
+  head.appendChild(back);
+
+  const desc = mkNode("p", "sd-desc", skill.description || skill.desc || "这个技能暂时没有说明。");
+
+  const connBox = mkNode("div", "sd-connector");
+  const actions = mkNode("div", "sd-actions");
+  const useBtn = mkNode("button", "sd-use", "去使用"); useBtn.type = "button";
+  actions.appendChild(useBtn);
+
+  card.appendChild(head);
+  card.appendChild(desc);
+  if (needs) card.appendChild(connBox);
+  card.appendChild(actions);
+  target.appendChild(card);
+
+  let status = null;
+  let connRef = null;
+  let useAfterConnect = false;   // 「去使用」触发的引导：连上后自动继续到对话
+
+  const paintConnector = (st, mode) => {
+    if (!needs) return;
+    status = st || null;
+    connRef = renderConnectorBlock(connBox, {
+      ga: ga, status: status, mode: mode, fmt: h.fmt, confirm: h.confirm,
+      pendingQuestion: pickQuickQuestion(skill),
+      onChanged: (s) => {
+        const next = s && s.connected ? s : { connected: false };
+        paintConnector(next);
+        if (next.connected && useAfterConnect) { useAfterConnect = false; onUse(pickQuickQuestion(skill)); }
+      },
+    });
+  };
+
+  if (needs && ga) {
+    let st = null;
+    try { st = await ga.loadStatus(); } catch (x) { st = null; }
+    paintConnector(st);
+  }
+
+  useBtn.addEventListener("click", () => {
+    const q = pickQuickQuestion(skill);
+    if (!needs) { onUse(q); return; }                       // ① 不需要连接账户：直接去对话
+    // ② 已连接：直接去对话。这里刻意不再 await —— 授权弹窗必须在点击的同步栈里打开，
+    //    否则浏览器会当成非用户操作拦掉，退化成整页跳走、丢掉「去使用」的连续性。
+    if (skillUseDecision(skill, status && status.connected) === "go-chat") { onUse(q); return; }
+    // ③ 需要连接但没连过：先引导。引导框里已填好 property ID 就直接发起授权，
+    //    没填就提示并聚焦，绝不静默失败、也不跳过授权。
+    useAfterConnect = true;
+    if (!ga) return;
+    const input = connRef && connRef.input;
+    const pid = input ? String(input.value == null ? "" : input.value).trim() : "";
+    if (pid && ga.validatePropertyId(pid)) {
+      if (connRef && typeof connRef.go === "function") connRef.go();
+      return;
+    }
+    if (connRef && connRef.error) {
+      connRef.error.textContent = ga.PROPERTY_ID_HINT || "请先填写 GA4 property ID，再点连接。";
+      connRef.error.hidden = false;
+    }
+    if (input && typeof input.focus === "function") input.focus();
+  });
+
+  return { card: card, useBtn: useBtn, connector: connBox };
+}
+
 async function loadSkills() {
   const g = $("#skillGrid");
+  const detail = $("#skillDetail");
+  if (detail) { detail.hidden = true; detail.textContent = ""; }
   g.textContent = "";
-  const loading = document.createElement("div"); loading.className = "card";
-  const lp = document.createElement("p"); lp.textContent = "读取中…";
-  loading.appendChild(lp); g.appendChild(loading);
+  const loading = mkNode("div", "card");
+  loading.appendChild(mkNode("p", "", "读取中…"));
+  g.appendChild(loading);
   try {
     const j = await (await fetch("/api/skills")).json();
-    $("#pSkills").textContent = "技能 " + j.skills.length;
+    const list = Array.isArray(j && j.skills) ? j.skills : [];
+    $("#pSkills").textContent = "技能 " + list.length;
     $("#pSkills").className = "pill ok";
     g.textContent = "";
-    const skills = Array.isArray(j.skills) ? j.skills : [];
-    if (!skills.length) {
-      const c = document.createElement("div"); c.className = "card";
-      const p = document.createElement("p"); p.textContent = "没有技能";
-      c.appendChild(p); g.appendChild(c);
-    } else {
-      // P1-3：用 textContent 构建 DOM，杜绝 innerHTML 注入（技能标题/描述/ID 都可能含用户内容）
-      for (const s of skills) {
-        const card = document.createElement("div"); card.className = "card";
-        const h = document.createElement("h4"); h.textContent = s.title || "（无标题）";
-        const d = document.createElement("p"); d.textContent = s.desc || "（无描述）";
-        const tag = document.createElement("span"); tag.className = "tag"; tag.textContent = s.id || "";
-        card.appendChild(h); card.appendChild(d); card.appendChild(tag);
-        g.appendChild(card);
-      }
+    if (!list.length) {
+      const c = mkNode("div", "card");
+      c.appendChild(mkNode("p", "", "没有技能"));
+      g.appendChild(c);
+      return;
+    }
+    // P1-3：用 textContent 构建 DOM，杜绝 innerHTML 注入（技能标题/描述/ID 都可能含用户内容）
+    for (const s of list) {
+      const card = mkNode("div", "card clickable");
+      card.tabIndex = 0;                                   // 键盘也能打开详情
+      card.appendChild(mkNode("h4", "", s.title || "（无标题）"));
+      card.appendChild(mkNode("p", "", s.desc || s.description || "（无描述）"));
+      card.appendChild(mkNode("span", "tag", s.id || ""));
+      const open = () => renderSkillDetail(s, detail);
+      card.addEventListener("click", open);
+      card.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); open(); }
+      });
+      g.appendChild(card);
     }
   } catch (x) {
     g.textContent = "";
-    const c = document.createElement("div"); c.className = "card";
-    const p = document.createElement("p"); p.textContent = "读不到技能列表";
-    c.appendChild(p); g.appendChild(c);
+    const c = mkNode("div", "card");
+    c.appendChild(mkNode("p", "", "读不到技能列表"));
+    g.appendChild(c);
   }
 }
+/* SKILL_DETAIL_END */
 
 /* ---- 状态 ---- */
 async function loadStatus() {
@@ -903,7 +1151,7 @@ async function loadStatus() {
       ["产品 DSH_HOME（隔离边界）", j.dshHome],
       ["产品工作区", j.workspace],
       ["产品技能数", (j.skills == null ? 0 : j.skills) + " 个"],
-      ["看板后端 127.0.0.1:" + j.dashboard, j.dashboardOk ? "✅ 在线" : "❌ 离线（先启动后端服务）"],
+      ["看板后端 127.0.0.1:" + j.dashboard, j.dashboardOk ? "✅ 在线" : "❌ 离线（先启动北极星后端）"],
       ["DSH 对外端口", "无（headless 不开端口）"],
       ["用户与 DSH 的关系", "用户只跟业务壳说话，永远碰不到 DSH"],
     ];
@@ -1488,6 +1736,7 @@ function impOnEnter() {
   loadMe();
   loadModels();
   loadQuickQuestions();   // 首页快捷问题按技能动态渲染
+  resumePendingUse();     // 若上次是从技能页跳出去做 GA 授权，回来补上「去使用」
   await refreshList();   // 预拉对话列表，侧边栏对话历史即时可见
   switchView("home");    // 默认落地首页（U0 三卡片 + chip 行）
 })();
