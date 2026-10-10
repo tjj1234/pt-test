@@ -248,12 +248,9 @@
           </div>
         </div>
         <div class="compose">
-          <div class="quick">
-            <button>近 7 天哪个广告渠道的 ROI 最高？</button>
-            <button>哪些素材在烧钱但没转化？</button>
-            <button>埋点质量有没有漏埋或重复埋点？</button>
-            <button>哪个国家的用户带来的价值最大？</button>
-          </div>
+          <!-- 快捷问题：按 /api/skills 返回的技能列表动态渲染，有几个技能显示几个；
+               技能例句来自基座的 sampleQuestion 字段，未返回时整块收起 -->
+          <div class="quick" id="quickRow" hidden></div>
           <div class="empty-input" id="emptyInput">
             <div class="img-preview" id="imgPreview" hidden><img id="imgThumb" alt="待发图片"><button id="imgClear" type="button">×</button></div>
             <input type="file" id="imgInput" accept="image/*" hidden>

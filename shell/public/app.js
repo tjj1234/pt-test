@@ -564,7 +564,54 @@ stopBtn.addEventListener("click", async () => {
 });
 ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(ta.value); } });
 ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 170) + "px"; });
-document.querySelectorAll(".quick button").forEach(b => b.addEventListener("click", () => ask(b.textContent)));
+/* ---- 快捷问题：读 /api/skills 动态渲染，有几个技能显示几个 ---- */
+/* QUICK_QUESTIONS_BEGIN */
+// 取一个技能「点击即可问」的例句。优先基座给的 sampleQuestion；
+// 基座没给例句时，用技能标题兜底拼一句，保证按钮数量始终 = 技能数量。
+function pickQuickQuestion(s) {
+  if (!s || typeof s !== "object") return "";
+  let q = "";
+  if (typeof s.sampleQuestion === "string") q = s.sampleQuestion.trim();
+  else if (typeof s.sample_question === "string") q = s.sample_question.trim();
+  if (q) return q;
+  const t = (typeof s.title === "string" ? s.title.trim() : "")
+    || (typeof s.id === "string" ? s.id.trim() : "");
+  return t ? t + " 可以帮我做什么？" : "";
+}
+
+// 把技能列表渲染成按钮。P1-3：一律 textContent 赋值，杜绝 innerHTML 注入。
+// box / onPick 可注入（自动化测试用），默认写 #quickRow、点击走真实提问 ask()。
+function renderQuickRow(skills, box, onPick) {
+  const target = box || $("#quickRow");
+  if (!target) return 0;
+  target.textContent = "";
+  const list = Array.isArray(skills) ? skills : [];
+  let n = 0;
+  for (const s of list) {
+    const q = pickQuickQuestion(s);
+    if (!q) continue;
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = q;
+    if (s && s.id) b.dataset.skillId = String(s.id);
+    if (s && s.title) b.title = "技能：" + s.title;
+    b.addEventListener("click", () => (onPick || ask)(q));
+    target.appendChild(b);
+    n++;
+  }
+  target.hidden = n === 0;  // 没有可用例句时整块收起，不留空 margin
+  return n;
+}
+
+async function loadQuickQuestions() {
+  try {
+    const r = await fetch("/api/skills", { credentials: "same-origin" });
+    if (!r.ok) return;
+    const j = await r.json().catch(() => null);
+    renderQuickRow(j && Array.isArray(j.skills) ? j.skills : []);
+  } catch (e) { /* 静默：拿不到技能列表就保持收起，不影响主流程 */ }
+}
+/* QUICK_QUESTIONS_END */
 
 /* ---- 用户菜单（底部头像点击弹出） ---- */
 const userEntry = $("#userEntry"), userMenu = $("#userMenu");
@@ -1440,6 +1487,7 @@ function impOnEnter() {
   loadKeyState();
   loadMe();
   loadModels();
+  loadQuickQuestions();   // 首页快捷问题按技能动态渲染
   await refreshList();   // 预拉对话列表，侧边栏对话历史即时可见
   switchView("home");    // 默认落地首页（U0 三卡片 + chip 行）
 })();
