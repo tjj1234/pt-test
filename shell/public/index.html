@@ -4,15 +4,7 @@
 <title>北极星 · PowerTokens 归因与增长 Agent</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-  /* P0-2：主界面「我的 Key」入口 + 未绑 key 提示条（沿用 styles.css 变量，不新造配色） */
-  .nav .keynav{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;margin:1px 0;
-    border-radius:8px;color:#5f5f5f;font-size:14px;text-decoration:none;font-family:inherit;
-    border:1px solid transparent;transition:background .15s,color .15s,border-color .15s}
-  .nav .keynav:hover{background:#fff;color:#1a1a1a;border-color:#e8e8e8}
-  .nav .keynav .ico{width:18px;text-align:center;flex-shrink:0}
-  .keydot{flex:0 0 auto;width:8px;height:8px;border-radius:50%;background:#dc2626;
-    box-shadow:0 0 0 2px rgba(220,38,38,.15)}
-  .keylast{flex:0 0 auto;font-size:11px;color:#b8b8b8;font-family:ui-monospace,Consolas,monospace}
+  /* P0-2：未绑 key 提示条（侧边栏「我的 Key」入口已移除，统一走左下角用户菜单「账户与授权」） */
   .keybanner{display:flex;align-items:center;gap:10px;padding:10px 24px;
     background:linear-gradient(90deg,#fdf6e7,#fdeaea);border-bottom:1px solid #f5d9b8;
     color:#9a5b13;font-size:13px;text-decoration:none}
@@ -52,32 +44,24 @@
         <button data-v="import"><span class="ico" data-ico="upload"></span>广告数据导入</button>
       </div>
 
-      <!-- ③ 对话历史 -->
+      <!-- ③ 对话历史：侧边栏内联展开，点击直接切换，不再跳转整页 -->
       <div class="nav-group">
         <div class="nav-group-title">对话历史</div>
-        <button data-v="history"><span class="ico" data-ico="chat"></span>对话历史</button>
+        <div class="side-conv-scroll" id="convList"></div>
       </div>
 
-      <!-- ④ 能力（保留 dc8abfd 既有能力视图） -->
+      <!-- ④ 能力（保留 dc8abfd 既有能力视图；运行状态/记忆入口已移除，仅保留技能） -->
       <div class="nav-group">
         <div class="nav-group-title">能力</div>
         <button data-v="skills"><span class="ico" data-ico="sparkle"></span>技能</button>
-        <button data-v="status"><span class="ico" data-ico="shield"></span>运行状态</button>
-        <button data-v="memory"><span class="ico" data-ico="brain"></span>记忆</button>
       </div>
-
-      <a class="keynav" id="keyNav" href="/settings">
-        <span class="ico" data-ico="key"></span><span>我的 Key</span>
-        <span class="keydot" id="keyDot" hidden></span>
-        <span class="keylast" id="keyLast4" hidden></span>
-      </a>
     </nav>
 
     <div class="side-foot">
       <div class="user-entry" id="userEntry">
-        <span class="avatar ue-avatar">A</span>
+        <span class="avatar ue-avatar">U</span>
         <div class="ue-meta">
-          <div class="ue-name">Alex Chen</div>
+          <div class="ue-name" id="ueName">账户</div>
         </div>
         <span class="ue-arrow" id="ueArrow"><span class="ico" data-ico="chevron"></span></span>
       </div>
@@ -253,12 +237,6 @@
 
     </div></section>
 
-    <!-- ============ 对话历史（可折叠列表，复用 /api/conversations） ============ -->
-    <section class="view" id="v-history"><div class="page">
-      <div class="hist-head"><h3>对话历史</h3><span class="hist-hint">按时间分组，点击进入对话</span></div>
-      <div class="hist-list" id="historyList"><div class="side-conv-scroll" id="convList"></div></div>
-    </div></section>
-
     <!-- ============ 对话（多对话窗口：左对话列表 + 右聊天区） ============ -->
     <section class="view" id="v-chat">
       <div class="chat-pane">
@@ -271,10 +249,10 @@
         </div>
         <div class="compose">
           <div class="quick">
-            <button>近7天哪些素材在烧钱？</button>
-            <button>哪几个国家表现最好？</button>
-            <button>埋点质量帮我体检一下</button>
-            <button>这周整体干得怎么样？</button>
+            <button>近 7 天哪个广告渠道的 ROI 最高？</button>
+            <button>哪些素材在烧钱但没转化？</button>
+            <button>埋点质量有没有漏埋或重复埋点？</button>
+            <button>哪个国家的用户带来的价值最大？</button>
           </div>
           <div class="empty-input" id="emptyInput">
             <div class="img-preview" id="imgPreview" hidden><img id="imgThumb" alt="待发图片"><button id="imgClear" type="button">×</button></div>
@@ -347,10 +325,10 @@
   <!-- 用户菜单（点击底部用户入口弹出） -->
   <div class="user-menu" id="userMenu" hidden>
     <div class="um-head">
-      <span class="avatar ue-avatar">A</span>
+      <span class="avatar ue-avatar">U</span>
       <div>
-        <div style="font-weight:600;font-size:13px">Alex Chen</div>
-        <div style="font-size:11px;color:#8c8c8c">@alex</div>
+        <div style="font-weight:600;font-size:13px" id="umName">账户</div>
+        <div style="font-size:11px;color:#8c8c8c" id="umHandle">@user</div>
       </div>
     </div>
     <a class="um-item" href="/settings"><span class="ico" data-ico="gear"></span> 账户与授权</a>
