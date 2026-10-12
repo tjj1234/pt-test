@@ -50,7 +50,9 @@ function registerImportRoutes(app, opts = {}) {
     return { tenantId, workspaceId, actorId: auth.label || null };
   }
 
-  app.get("/api/business/attribution/import", async (_req, reply) => {
+  app.get("/api/business/attribution/import", async (request, reply) => {
+    await authContext(request, reply);
+    if (reply.sent) return;
     const html = fs.readFileSync(PAGE_PATH, "utf8");
     return reply.type("text/html; charset=utf-8").send(html);
   });
