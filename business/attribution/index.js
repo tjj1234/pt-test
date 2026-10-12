@@ -15,6 +15,7 @@ const ingestionAdapter = require("./ingestion-adapter");
 const attributionApi = require("./api");
 
 module.exports = {
+  quality: require('./quality'),
   gaConnector: require('./ga-connector'),
   ...contracts,
   parsers,

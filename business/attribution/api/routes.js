@@ -5,6 +5,7 @@
  */
 const { isUuid } = require("../contracts/validate");
 const { createAttributionApi } = require("./service");
+const { createQualityService } = require("../quality/service");
 
 function mapErrorStatus(err) {
   const code = err && err.code;
@@ -104,6 +105,10 @@ function registerAttributionApiRoutes(app, opts = {}) {
   app.get("/api/attribution/roi", (req, reply) =>
     handle(attributionApi.creativeRoi, req, reply)
   );
+
+  // 数据源复用生产 pool；鉴权、scope、workspace 派生与其他归因接口一致。
+  const quality = createQualityService({ pool, now });
+  app.get("/api/attribution/quality", (req, reply) => handle(quality, req, reply));
 
   return { attributionApi };
 }
