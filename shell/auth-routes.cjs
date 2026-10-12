@@ -154,7 +154,7 @@ async function handleAuthRoutes(req, res, auth) {
 
     // ===== U3：忘记 / 重置 / 改密码（仅新增这三个端点，不改动既有登录/注册/会话逻辑）=====
 
-    // ---- 忘记密码（返回重置令牌；开发态 PT_RESET_DELIVERY=return 直接在响应返回，不假设任何发信通道）----
+    // ---- 忘记密码（安全默认：不返回任何重置凭据；仅显式 PT_RESET_DELIVERY=return 才回传开发态 token）----
     if (p === "/api/auth/forgot-password" && method === "POST") {
       let body = {};
       try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
@@ -162,6 +162,8 @@ async function handleAuthRoutes(req, res, auth) {
         return sendJson(res, 429, { ok: false, error: "请求过于频繁，请稍后再试" }), true;
       }
       const identifier = String(body.username || body.email || "").trim();
+      // 安全默认：留空不返回任何凭据；只有显式设置 PT_RESET_DELIVERY=return 才直返开发态 token/resetUrl
+      const delivery = String(process.env.PT_RESET_DELIVERY || "").trim().toLowerCase();
       let tokenInfo = null;
       if (identifier) {
         const r = await auth.db.query(
@@ -176,16 +178,15 @@ async function handleAuthRoutes(req, res, auth) {
             "INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES ($1,$2,$3)",
             [sha256(token), r.rows[0].id, expiresAt]
           );
-          // 开发态：直接把重置链接返回前端，绕开「尚不存在的发信基础设施」
-          const delivery = (process.env.PT_RESET_DELIVERY || "return").toLowerCase();
+          // 仅开发态显式 return 才把重置链接直接返回前端，绕开「尚不存在的发信基础设施」
           if (delivery === "return") {
             const host = req.headers.host || "localhost";
             tokenInfo = { delivery, token, resetUrl: "http://" + host + "/reset?token=" + token };
           }
         }
       }
-      // 抗账户枚举：无论是否找到用户，都返回同一套成功文案；仅 return 模式才附带令牌
-      const out = { ok: true, message: "若该账号存在，已生成重置链接（开发态直接返回在下方）。" };
+      // 抗账户枚举：无论是否找到用户，都返回同一套通用成功文案；仅显式 return 模式才附带令牌
+      const out = { ok: true, message: "若该账号存在，已生成重置链接。" };
       if (tokenInfo) { out.delivery = tokenInfo.delivery; out.token = tokenInfo.token; out.resetUrl = tokenInfo.resetUrl; }
       return sendJson(res, 200, out), true;
     }
