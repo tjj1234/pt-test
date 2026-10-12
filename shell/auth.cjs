@@ -112,11 +112,11 @@ async function initAuth(opts = {}) {
       if (em.rows.length) return { ok: false, code: "EMAIL_TAKEN", error: "邮箱已被注册" };
     }
 
-    const cnt = await db.query("SELECT count(*)::int AS n FROM users");
-    const isFirst = cnt.rows[0].n === 0;
-    // P0 修复：role 绝不再从参数/请求体取，只按「是否首个用户」决定
-    // B4-fix: 使用 VIEWER 角色替代 MEMBER 角色以保持一致性
-    const finalRole = isFirst ? "admin" : "viewer";
+    // 每次注册都会创建全新租户（见 _createUser 的 INSERT INTO tenants），
+    // 注册者就是该租户的创建者 → 固定为 admin。
+    // 不再按「全平台用户总数」判断：那样只有全平台第 1 个注册者能拿 admin，
+    // 后续开新租户的人会永远沦为 viewer，且 viewer 无任何页面路径自我提升 → 死锁。
+    const finalRole = "admin";
 
     try {
       const created = await _createUser({ username: uname, email: mail, password: pass, role: finalRole });
