@@ -363,6 +363,14 @@ async function handleChat(req, res, me, body) {
   const documents = Array.isArray(body.documents)
     ? body.documents.map((d) => String(d == null ? "" : d).trim()).filter(Boolean)
     : [];
+  // 只接受本租户上传目录里的文档。docsToNote 对跨租户/失效路径是「静默跳过」的，
+  // 那样用户会以为文档生效了却拿不到任何提示，所以这里先拦一道并说清楚原因。
+  for (const d of documents) {
+    const m = /^\/uploads\/([^/?#]+)\/([^/?#]+)$/.exec(d);
+    if (!m || m[1] !== me.tenant.id || !/^[A-Za-z0-9._-]+$/.test(m[2])) {
+      return json(res, 400, { ok: false, error: "无法读取该文档（不属于当前租户或文件已失效），请重新上传" });
+    }
+  }
 
   // 素材生成类型（前端聊天框选择，对应 media.route 的 taskType）。
   // 不传 / 非法值 = 自动：不在提示里强加生成指令，交给 Agent 自己判断，

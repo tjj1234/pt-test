@@ -185,6 +185,14 @@ function renderMessage(m, opts) {
     img.className = "bubimg"; img.src = m.image; img.alt = "上传图片"; img.loading = "lazy";
     bub.appendChild(img);
   }
+  // 随这条消息一起提交的文本文档。服务端只持久化 URL（不含原始文件名），
+  // 所以这里统一显示数量，乐观渲染和历史回放保持一致。
+  if (Array.isArray(m.documents) && m.documents.length) {
+    const dl = document.createElement("div");
+    dl.className = "bubdocs";
+    dl.textContent = "附带 " + m.documents.length + " 个文档（正文已作为回答的参考上下文）";
+    bub.appendChild(dl);
+  }
   // 输出侧：渲染 assistant 返回的媒体（图片/视频 URL）——字段形状与基座 media.route 对齐
   // （当前按 { type:"image"|"video", url } 约定；字段名待基座确认，集中在 chat-media.js 提取）
   if (m.media && window.renderMediaInto) window.renderMediaInto(bub, m.media);
@@ -614,13 +622,17 @@ async function ask(msg) {
   // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
   if (currentPanel) payload.context = { panel: currentPanel, panelLabel: TITLES[currentPanel] || currentPanel };
   if (pendingImage) payload.image = pendingImage;
+  // 文本文档：只传后端返回的 url 列表（/uploads/<租户>/<随机名>.<ext>），
+  // 正文由服务端读出来注入上下文，URL 本身不下发给模型。
+  if (pendingDocs.length) payload.documents = pendingDocs.map(d => d.url);
   // 素材生成类型：text2image / image2image / text2video / image2video。
   // 选「自动」时不传，交给 Agent 自己判断，免得普通问答被带偏成素材生成。
   if (genCfg.taskType) payload.taskType = genCfg.taskType;
   // 立即渲染用户消息（乐观更新），AI 回复回来后再用服务器完整列表覆盖
-  renderMessage({ role: "user", text: msg, ts: Date.now(), image: pendingImage || undefined });
+  renderMessage({ role: "user", text: msg, ts: Date.now(), image: pendingImage || undefined, documents: payload.documents });
   chat.scrollTop = chat.scrollHeight;
   clearPendingImage();
+  clearPendingDocs();
   await runChat(payload);
 }
 
@@ -804,6 +816,7 @@ if (userEntry && userMenu) {
 /* ---- 技能 ---- *//* ---- ⑨ 素材上传：图片 / 视频生成（选择类型 + Ctrl+V 粘贴 + 拖拽） ---- */
 const imgInput = $("#imgInput"), imgBtn = $("#imgBtn"), imgPreview = $("#imgPreview"), imgThumb = $("#imgThumb"), imgClear = $("#imgClear");
 const genTypeEl = $("#genType"), genHintEl = $("#genHint"), emptyInputEl = $("#emptyInput");
+const docInput = $("#docInput"), docBtn = $("#docBtn"), docListEl = $("#docList"), composerNoticeEl = $("#composerNotice");
 let pendingImage = null;
 
 /* 素材生成类型：与 media.route 的 taskType 一一对应。
@@ -875,29 +888,133 @@ async function uploadImageDataUrl(b64) {
     });
     const j = await r.json().catch(() => null);
     if (j && j.ok && j.url) { setPendingImage(j.url); return true; }
-    alert((j && j.error) || "上传失败");
+    composerNotice((j && j.error) || "上传失败", "err");
     return false;
-  } catch (e) { alert("上传失败：" + e.message); return false; }
+  } catch (e) { composerNotice("上传失败：" + e.message, "err"); return false; }
 }
 
-/** 聊天框收到一个素材文件 —— 点「+」选择、拖进来、Ctrl+V 粘贴，三条路都走这里。 */
+/* ---- 文本文档上传（.txt / .md / .csv，单文件 ≤5MB）----
+ * 走基座已合并的 POST /api/upload-doc，只把返回的 url 存下来，
+ * 发消息时作为 documents 数组提交；正文由后端读出来注入上下文（URL 本身不给模型）。
+ * 下面的扩展名 / 体积校验只是「早点给提示」，后端还会按内容再判一次纯文本，两道都在。 */
+const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv"]);
+const DOC_MAX_BYTES = 5 * 1024 * 1024;
+let pendingDocs = [];   // [{ url, name, size, chars }]
+
+function docExtOf(name) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(name || "").trim());
+  return m ? m[1].toLowerCase() : "";
+}
+function isDocFile(f) { return !!f && DOC_EXT_WHITELIST.has(docExtOf(f.name)); }
+function fmtSize(n) {
+  n = Number(n) || 0;
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return Math.round(n / 1024) + " KB";
+  return (n / 1048576).toFixed(1) + " MB";
+}
+
+/** 输入区提示条：上传成功/失败都说清楚，不用 alert 打断正在打的字。 */
+let noticeTimer = null;
+function composerNotice(msg, kind) {
+  msg = String(msg == null ? "" : msg);
+  if (!composerNoticeEl) { if (typeof alert === "function") alert(msg); return; }
+  composerNoticeEl.hidden = false;
+  composerNoticeEl.className = "composer-notice" + (kind === "ok" ? " ok" : "");
+  composerNoticeEl.innerHTML =
+    '<span class="ico" data-ico="' + (kind === "ok" ? "checkCircle" : "warn") + '"></span><span class="cn-text"></span>';
+  const slot = composerNoticeEl.querySelector(".cn-text");
+  if (slot) slot.textContent = msg;
+  if (window.initIcons) window.initIcons();
+  clearTimeout(noticeTimer);
+  noticeTimer = setTimeout(() => { composerNoticeEl.hidden = true; }, kind === "ok" ? 3000 : 6000);
+}
+
+/** 已附加文档的胶囊列表（可逐个移除）。 */
+function renderDocList() {
+  if (!docListEl) return;
+  docListEl.hidden = !pendingDocs.length;
+  docListEl.innerHTML = "";
+  pendingDocs.forEach((d, i) => {
+    const chip = document.createElement("div");
+    chip.className = "doc-chip";
+    chip.innerHTML = '<span class="ico" data-ico="fileText"></span>';
+    const nm = document.createElement("span");
+    nm.className = "doc-name"; nm.textContent = d.name || "文档"; nm.title = d.name || "";
+    const sz = document.createElement("span");
+    sz.className = "doc-size"; sz.textContent = fmtSize(d.size);
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "doc-del"; del.title = "移除这个文档"; del.textContent = "×";
+    del.addEventListener("click", () => { pendingDocs.splice(i, 1); renderDocList(); });
+    chip.appendChild(nm); chip.appendChild(sz); chip.appendChild(del);
+    docListEl.appendChild(chip);
+  });
+  if (window.initIcons) window.initIcons();
+}
+function clearPendingDocs() { pendingDocs = []; renderDocList(); if (docInput) docInput.value = ""; }
+
+/** 上传一个文本文档 → 加入 pendingDocs。任何一步失败都给出具体原因。 */
+async function uploadDocFile(f) {
+  if (!f) return false;
+  const name = f.name || "未命名文件";
+  if (!DOC_EXT_WHITELIST.has(docExtOf(name))) {
+    composerNotice("只支持 .txt / .md / .csv 纯文本文档，「" + name + "」不是", "err");
+    return false;
+  }
+  if (!f.size) { composerNotice("「" + name + "」是空文件，没有可读取的内容", "err"); return false; }
+  if (f.size > DOC_MAX_BYTES) {
+    composerNotice("文档太大：单文件上限 5MB，「" + name + "」是 " + fmtSize(f.size), "err");
+    return false;
+  }
+  let b64;
+  try { b64 = await readFileAsDataUrl(f); }
+  catch (e) { composerNotice("读取失败：" + e.message, "err"); return false; }
+  try {
+    const r = await fetch("/api/upload-doc", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, data: b64 }),
+    });
+    const j = await r.json().catch(() => null);
+    if (j && j.ok && j.url) {
+      pendingDocs.push({ url: j.url, name: name, size: j.size || f.size, chars: j.chars || 0 });
+      renderDocList();
+      composerNotice("已附加「" + name + "」（" + fmtSize(j.size || f.size) + "）", "ok");
+      return true;
+    }
+    // 后端拒绝（非文本 / 超限 / 配额满 / 非本租户）都把原因原样说清楚
+    composerNotice((j && j.error) || ("上传失败（HTTP " + r.status + "）"), "err");
+    return false;
+  } catch (e) {
+    composerNotice("上传失败：" + (e && e.message ? e.message : "网络错误"), "err");
+    return false;
+  }
+}
+
+/** 聊天框收到一个文件 —— 点「+」/「文档」选择、拖进来、Ctrl+V 粘贴，三条路都走这里。 */
 async function handleComposerFile(f) {
   if (!f) return;
+  if (isDocFile(f)) { await uploadDocFile(f); return; }          // 文档 → /api/upload-doc
   if (!/^image\//.test(f.type || "")) {
-    alert("目前只支持图片作为参考素材（media.route 暂未提供视频参考素材能力）");
+    composerNotice("只支持图片（参考素材）或 .txt / .md / .csv 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
     return;
   }
-  if (f.size > 15 * 1024 * 1024) { alert("素材太大（≤15MB）"); return; }
+  if (f.size > 15 * 1024 * 1024) { composerNotice("素材太大（≤15MB）", "err"); return; }
   try { await uploadImageDataUrl(await readFileAsDataUrl(f)); }
-  catch (e) { alert("读取失败：" + e.message); }
+  catch (e) { composerNotice("读取失败：" + e.message, "err"); }
 }
 
 if (imgBtn) imgBtn.addEventListener("click", () => imgInput.click());
+if (docBtn) docBtn.addEventListener("click", () => { if (docInput) docInput.click(); });
+if (docInput) docInput.addEventListener("change", async () => {
+  const files = Array.prototype.slice.call(docInput.files || []);
+  for (const f of files) await uploadDocFile(f);
+  docInput.value = "";   // 清空，同一个文件可以再选一次
+});
 if (imgClear) imgClear.addEventListener("click", clearPendingImage);
 if (imgInput) imgInput.addEventListener("change", async () => {
   const f = imgInput.files && imgInput.files[0];
   if (!f) return;
-  if (f.size > 15 * 1024 * 1024) { alert("素材太大（≤15MB）"); imgInput.value = ""; return; }
+  if (f.size > 15 * 1024 * 1024) { composerNotice("素材太大（≤15MB）", "err"); imgInput.value = ""; return; }
   await handleComposerFile(f);
 });
 

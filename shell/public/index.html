@@ -273,8 +273,12 @@
           </div>
           <div class="empty-input" id="emptyInput">
             <div class="img-preview" id="imgPreview" hidden><img id="imgThumb" alt="待发素材"><button id="imgClear" type="button">×</button></div>
+            <!-- 已附加的文本文档（.txt/.md/.csv）：发送时随 documents 数组一起提交，正文由后端注入上下文 -->
+            <div class="doc-list" id="docList" hidden></div>
             <input type="file" id="imgInput" hidden>
+            <input type="file" id="docInput" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" multiple hidden>
             <button class="composer-add-btn" id="imgBtn" type="button" title="添加参考图"><span class="ico" data-ico="plus"></span></button>
+            <button class="composer-add-btn doc" id="docBtn" type="button" title="上传文档（.txt / .md / .csv，单文件 ≤5MB）"><span class="ico" data-ico="fileText"></span></button>
             <textarea id="ta" rows="1" placeholder="输入问题，或用 @引用数据面板内容… (Enter 发送 / Shift+Enter 换行)"></textarea>
             <div class="foot-bar">
               <div class="model-switcher" id="modelSwitcher">
@@ -289,6 +293,8 @@
               <button class="stop" id="stop" hidden title="停止"><span class="ico" data-ico="close"></span></button>
             </div>
           </div>
+          <!-- 上传结果 / 失败原因提示：inline 显示，比 alert 清楚也不打断输入 -->
+          <div class="composer-notice" id="composerNotice" hidden role="status" aria-live="polite"></div>
           <div class="meta" style="max-width:820px;margin:8px auto 0" id="cm"></div>
         </div>
       </div>
