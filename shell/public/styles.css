@@ -354,6 +354,38 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 /* 素材拖到聊天输入区上方时的高亮（与 .imp-drop.over 同一套观感） */
 .empty-input.over{border-color:#1a1a1a;border-style:dashed;background:#f6f6f6}
 
+/* 文档上传按钮：紧跟在 + 号（参考图）右边 */
+.composer-add-btn.doc{left:46px}
+
+/* 已附加文档的胶囊列表 */
+.doc-list{display:flex;flex-wrap:wrap;gap:6px;padding:2px 10px 6px 46px}
+.doc-chip{
+  display:inline-flex;align-items:center;gap:5px;max-width:280px;
+  padding:4px 8px;border:1px solid var(--line);border-radius:8px;
+  background:#fafafa;font-size:12px;color:var(--text-2);
+}
+.doc-chip .ico{width:13px;height:13px;color:var(--text-3);flex-shrink:0}
+.doc-chip .doc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-chip .doc-size{color:var(--text-3);flex-shrink:0}
+.doc-chip .doc-del{
+  border:0;background:none;padding:0 0 0 2px;cursor:pointer;
+  color:var(--bad);font-size:14px;line-height:1;font-family:inherit;
+}
+.doc-chip .doc-del:hover{color:#a31b1b}
+
+/* 输入区提示条：上传失败原因 / 成功回执，比 alert 清楚也不打断输入 */
+.composer-notice{
+  max-width:780px;margin:8px auto 0;display:flex;align-items:flex-start;gap:6px;
+  font-size:12.5px;line-height:1.5;color:var(--bad);
+}
+.composer-notice .ico{width:14px;height:14px;flex-shrink:0;margin-top:2px}
+.composer-notice.ok{color:var(--ok)}
+
+/* 气泡里「附带 N 个文档」的说明行 */
+.bubdocs{
+  display:block;margin-bottom:6px;font-size:12px;color:var(--text-3);
+}
+
 /* 底部栏：模型胶囊 + 发送按钮 */
 .empty-input .foot-bar{
   display:flex;align-items:center;justify-content:flex-end;
