@@ -104,6 +104,11 @@ const DRY_RUN_CHAT = process.env.PT_CHAT_DRYRUN === "1";
 const RATE_CHAT_PER_MIN = Number(process.env.PT_RATE_CHAT_PER_MIN || 20);
 const chatLimiter = createRateLimiter({ windowMs: 60000, max: RATE_CHAT_PER_MIN });
 
+// ---- 文档上传（纯文本 v1：.txt/.md/.csv）与上下文注入限制 ----
+const DOC_UPLOAD_MAX_BYTES = Number(process.env.PT_DOC_UPLOAD_MB || 5) * 1024 * 1024;
+const DOC_CONTEXT_MAX_CHARS = Number(process.env.PT_DOC_CONTEXT_CHARS || 100000);
+const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv"]);
+
 let auth = null;                 // 身份库句柄
 let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
@@ -234,6 +239,57 @@ function uploadsToDataUrl(url) {
   return "data:" + mime + ";base64," + buf.toString("base64");
 }
 
+/** 把上传字节按 UTF-8 严格解码为纯文本；非文本（NUL / 非法 UTF-8 / UTF-16）返回 null。 */
+function decodeTextBuffer(buf) {
+  if (!buf || !buf.length) return null;
+  let start = 0;
+  // 跳过 UTF-8 BOM
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) start = 3;
+  // 文本内容里不该出现 NUL 字节（二进制 / UTF-16 的特征），据此拒绝伪装成文本的文件
+  for (let i = start; i < buf.length; i++) {
+    if (buf[i] === 0) return null;
+  }
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(buf.subarray(start));
+  } catch (e) {
+    return null;
+  }
+}
+
+/** 把本租户的文档 URL 读成正文并拼成上下文说明（累计字符上限 DOC_CONTEXT_MAX_CHARS）。 */
+function docsToNote(urls, tenantId) {
+  const items = (Array.isArray(urls) ? urls : []).map((u) => String(u == null ? "" : u).trim()).filter(Boolean);
+  if (!items.length) return "";
+  const dir = path.join(RUNTIME, "_uploads", tenantId);
+  let note = "用户这次附带上传了以下文档，请把文档内容作为回答问题的参考上下文（除非用户明确要求，否则不要复述全文）：";
+  let total = note.length;
+  let used = 0;
+  let truncated = false;
+  for (const url of items) {
+    const m = String(url).match(/\/uploads\/([^\/?#]+)\/([^\/?#]+)/);
+    if (!m || m[1] !== tenantId) continue; // 只认本租户文件，拒绝跨租户路径
+    const abs = path.join(dir, m[2]);
+    let text;
+    try { text = decodeTextBuffer(fs.readFileSync(abs)); } catch (e) { text = null; }
+    if (text == null) continue;
+    used++;
+    const remaining = DOC_CONTEXT_MAX_CHARS - total;
+    if (remaining <= 0) { truncated = true; break; }
+    const header = "\n\n=== 文档 " + used + "（" + m[2] + "）===\n";
+    let body = text;
+    if (header.length + body.length > remaining) {
+      body = body.slice(0, Math.max(0, remaining - header.length)) + "\n…（已截断）";
+      truncated = true;
+    }
+    note += header + body;
+    total = note.length;
+    if (truncated) break;
+  }
+  if (!used) return "";
+  if (truncated) note += "\n\n（文档总长度超过上下文上限，部分内容已截断）";
+  return note;
+}
+
 /** P1-2：启动时清理超过 7 天的上传文件（按租户目录遍历）。 */
 function pruneUploads() {
   const root = path.join(RUNTIME, "_uploads");
@@ -298,6 +354,11 @@ async function handleChat(req, res, me, body) {
   // ⑨ 发消息附带的图片（URL 或本地路径）落到消息里
   const image = String(body.image || "").trim() || null;
 
+  // 文档上传（纯文本 v1）：附带的文档 URL 列表，后端读取正文注入上下文（不传 URL 给模型）
+  const documents = Array.isArray(body.documents)
+    ? body.documents.map((d) => String(d == null ? "" : d).trim()).filter(Boolean)
+    : [];
+
   // 素材生成类型（前端聊天框选择，对应 media.route 的 taskType）。
   // 不传 / 非法值 = 自动：不在提示里强加生成指令，交给 Agent 自己判断，
   // 免得普通问答被带偏成素材生成。
@@ -345,6 +406,7 @@ async function handleChat(req, res, me, body) {
   } else {
     const um = { role: "user", text: question, ts: new Date().toISOString() };
     if (image) um.image = image;
+    if (documents.length) um.documents = documents;
     messages = messages.concat([um]);
   }
 
@@ -408,6 +470,12 @@ async function handleChat(req, res, me, body) {
     }
   }
 
+  // 文档上下文说明（纯文本 v1）：把上传文档正文读出来拼进 prompt（有累计长度上限）
+  let docNote = "";
+  if (lastUser && Array.isArray(lastUser.documents) && lastUser.documents.length) {
+    docNote = docsToNote(lastUser.documents, me.tenant.id);
+  }
+
   // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -435,6 +503,7 @@ async function handleChat(req, res, me, body) {
     history: histText,
     memory: memText,
     imageNote,
+    docNote,
     context,
     capabilities,
     constraints,
@@ -1007,6 +1076,42 @@ async function handle(req, res) {
     const abs = path.join(dir, name);
     fs.writeFileSync(abs, buf);
     return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs });
+  }
+
+  // ---- 文档上传（纯文本 v1：只收 .txt/.md/.csv，按内容判纯文本；5MB 上限；复用租户隔离落盘）----
+  if (p === "/api/upload-doc" && req.method === "POST") {
+    let body = {};
+    try { body = JSON.parse((await readBody(req, 16 << 20)) || "{}"); } catch (e) {}
+    // 扩展名白名单（先粗筛，最终以内容解码为准）
+    const rawName = String(body.name || body.filename || "").trim();
+    const ext = path.extname(rawName).slice(1).toLowerCase();
+    if (!DOC_EXT_WHITELIST.has(ext)) {
+      return json(res, 400, { ok: false, error: "仅支持 .txt / .md / .csv 纯文本文档" });
+    }
+    const b64 = String(body.data || body.content || "").trim();
+    if (!b64) return json(res, 400, { ok: false, error: "缺少文档数据" });
+    const dm = b64.match(/^data:[^;]*;base64,(.+)$/);
+    const data = dm ? dm[1] : b64;
+    let buf;
+    try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "文档数据无效" }); }
+    if (!buf.length) return json(res, 400, { ok: false, error: "文档数据无效" });
+    if (buf.length > DOC_UPLOAD_MAX_BYTES) {
+      return json(res, 400, { ok: false, error: "文档过大（单文件上限 " + Math.round(DOC_UPLOAD_MAX_BYTES / 1048576) + "MB）" });
+    }
+    // 按内容判断是否纯文本（不看扩展名）：UTF-8 严格解码，NUL/非法字节一律拒绝
+    const text = decodeTextBuffer(buf);
+    if (text == null) return json(res, 400, { ok: false, error: "不是有效的纯文本文件" });
+    const dir = path.join(RUNTIME, "_uploads", me.tenant.id);
+    fs.mkdirSync(dir, { recursive: true });
+    // 复用租户磁盘配额（默认 100MB，可用 PT_UPLOAD_QUOTA_MB 覆盖）
+    const quotaBytes = Number(process.env.PT_UPLOAD_QUOTA_MB || 100) * 1024 * 1024;
+    let used = 0;
+    try { for (const fn of fs.readdirSync(dir)) { try { used += fs.statSync(path.join(dir, fn)).size; } catch (e) {} } } catch (e) {}
+    if (used + buf.length > quotaBytes) return json(res, 400, { ok: false, error: "上传空间已满（配额 " + Math.round(quotaBytes / 1048576) + "MB）" });
+    const name = crypto.randomBytes(16).toString("hex") + "." + ext; // 128 位高熵随机名
+    const abs = path.join(dir, name);
+    fs.writeFileSync(abs, buf);
+    return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs, name, size: buf.length, chars: text.length });
   }
 
   // ---- 面板分享 API（需登录 owner；只读 + 整面板）----

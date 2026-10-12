@@ -27,6 +27,7 @@
  *     capabilities: object[],// [能力] 段（可空，如 [{ name, description }]，按当前用户授权过滤）
  *     memory: string,        // 长期记忆（可空）
  *     imageNote: string,     // 图片说明（可空）
+ *     docNote: string,       // 文档正文说明（可空，纯文本上传后注入的上下文）
  *     context: object,       // 当前上下文（可空，如 { panel, panelLabel }），由 runtime 拼进系统提示
  *     history: string,       // 截断历史（仅冷启动注入）
  *     question: string,      // 当前问题（必填）
@@ -161,6 +162,7 @@ function assembleSystemPrompt(spec = {}) {
   if (capabilityText) parts.push(capabilityText);
   if (spec.memory) parts.push("用户长期记忆：\n" + String(spec.memory));
   if (spec.imageNote) parts.push(String(spec.imageNote));
+  if (spec.docNote) parts.push(String(spec.docNote));
   if (spec.history) parts.push("以下是本次对话的历史（仅供理解上下文，不要复述）：\n" + String(spec.history));
   parts.push("用户现在问：" + String(spec.question || ""));
   return parts.join("\n\n");
