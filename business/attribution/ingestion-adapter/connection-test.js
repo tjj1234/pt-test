@@ -18,7 +18,7 @@ const DIAG = Object.freeze({
   SECRET_MISSING: {
     code: "SECRET_MISSING",
     title: "缺少密钥",
-    hint: "请求未携带 Secret。请确认 Authorization / X-Webhook-Secret 头已配置。",
+    hint: "请求未携带 Secret。请确认 X-PT-Webhook-Secret 头已配置。",
   },
   TARGET_BAD_GATEWAY: {
     code: "TARGET_BAD_GATEWAY",
@@ -147,6 +147,7 @@ async function runConnectionTest(opts = {}) {
       method: "POST",
       headers: {
         "content-type": "application/json",
+        "x-pt-webhook-secret": secret,
         authorization: `Bearer ${secret}`,
         "x-webhook-secret": secret,
       },
