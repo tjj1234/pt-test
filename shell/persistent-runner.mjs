@@ -74,6 +74,36 @@ function attributionQuery(args, tenantId) {
   });
 }
 
+// attribution.quality 真实 executor：GET /api/attribution/quality（带 HMAC Authorization）。
+// from/to 为 YYYY-MM-DD（后端按 UTC 归一），返回 report（outputType=report）。
+function attributionQuality(args, tenantId) {
+  const internalKey = process.env.PT_DASH_INTERNAL_KEY || "";
+  const dashPort = Number(process.env.DASH_PORT || 0);
+  return new Promise((resolve, reject) => {
+    const qs = Object.keys(args || {})
+      .filter((k) => args[k] != null && args[k] !== "")
+      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(String(args[k])))
+      .join("&");
+    const path = "/api/attribution/quality" + (qs ? "?" + qs : "");
+    const req = http.request({
+      host: "127.0.0.1",
+      port: dashPort,
+      path,
+      method: "GET",
+      headers: { authorization: "Bearer " + computeAnalyticsToken(internalKey, tenantId), accept: "application/json" },
+    }, (res) => {
+      let data = ""; res.setEncoding("utf8");
+      res.on("data", (c) => { data += c; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error("attribution.quality 返回非 JSON")); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(20000, () => req.destroy(new Error("attribution.quality 超时")));
+    req.end();
+  });
+}
+
 /**
  * persistent-runner —— 常驻 agent 驱动插件（替代 headless 一次性 runner）。
  * 挂载在 dsh-base 上（无 headless），通过 stdin/stdout 走 JSON-lines 协议：
@@ -135,7 +165,7 @@ function apply(ctx) {
     const stepNames = new Map();      // callId -> 工具名（tool/result 时回填名字）
     let lastMediaRouteResult = null;  // 本 turn 最近一次 media.route 的结构化结果 { type, url }
     let currentTenantId = "";         // 本 turn 租户上下文（cmd.tenantId 注入，供 ga.query / attribution.query）
-    let lastReport = null;            // 本 turn 最近一次 ga.query 返回的 report（outputType=report，透传前端抽屉）
+    let lastReport = null;            // 本 turn 最近一次 ga.query / attribution.quality 返回的 report（outputType=report，透传前端抽屉）
 
     // 逐字流 + 轨迹：把 assistant 文本增量 / 工具调用路由到对应 sessionId
     ctx.on("session/event", (session, event) => {
@@ -329,6 +359,30 @@ function apply(ctx) {
                 async execute(args) {
                   if (!currentTenantId) throw new Error("attribution.query 需要 tenantId");
                   return attributionQuery(args || {}, currentTenantId);
+                },
+              }));
+
+              // attribution.quality：只读分析归因埋点质量，outputType=report，结果透传前端抽屉。
+              agentCtx.tools.register(defineTool({
+                name: "attribution_quality",
+                description: "只读分析当前租户真实归因事件的六类关键事件覆盖率、user_id完整率及已导入sGTM日志的有效ID重复率；返回评分、问题与规则建议。当用户询问归因埋点质量、事件覆盖、数据完整度时使用此工具。对应业务工具「attribution.quality」。",
+                parameters: {
+                  from: { type: "string", description: "UTC 起始日期 YYYY-MM-DD，默认最近7天，最多31天" },
+                  to: { type: "string", description: "UTC 结束日期（含当日）YYYY-MM-DD" },
+                },
+                output: {
+                  schema: { type: "object", additionalProperties: true },
+                  render: (_args, value) => {
+                    const title = value && value.title ? value.title : "埋点质量分析";
+                    const score = value && value.score && value.score.value != null ? "；评分 " + value.score.value : "";
+                    return [{ type: "text", text: title + score }];
+                  },
+                },
+                async execute(args) {
+                  if (!currentTenantId) throw new Error("attribution.quality 需要 tenantId");
+                  const report = await attributionQuality(args || {}, currentTenantId);
+                  lastReport = report && typeof report === "object" ? report : null;
+                  return report;
                 },
               }));
             },

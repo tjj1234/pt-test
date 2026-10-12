@@ -111,6 +111,12 @@ function buildGaQueryExecutor({ internalKey, dashPort }) {
   return attribution.gaConnector.buildGaQueryExecutor({ internalKey, dashPort });
 }
 
+/** attribution.quality 真实 executor：直接复用业务线公开导出的 buildAttributionQualityExecutor。 */
+function buildAttributionQualityExecutor({ internalKey, dashPort }) {
+  const attribution = require("../../business/attribution/index.js");
+  return attribution.quality.buildAttributionQualityExecutor({ internalKey, dashPort });
+}
+
 /** 按 "." 路径读取对象上的公开导出（如 "registry.attributionToolDefinition"）。 */
 function resolvePath(obj, pathStr) {
   return String(pathStr).split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
@@ -140,6 +146,11 @@ const PROVIDERS = [
     modulePath: "../../business/attribution/index.js",
     definitionGetter: "gaConnector.gaQueryToolDefinition",
     buildExecutor: buildGaQueryExecutor,
+  },
+  {
+    modulePath: "../../business/attribution/index.js",
+    definitionGetter: "quality.attributionQualityToolDefinition",
+    buildExecutor: buildAttributionQualityExecutor,
   },
 ];
 
