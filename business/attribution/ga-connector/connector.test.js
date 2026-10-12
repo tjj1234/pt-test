@@ -89,6 +89,7 @@ test('status returns only tenant-owned metadata after callback; browser callback
 test('GA4 runReport request and existing report renderer preserve exact Google values',async()=>{
  const r=await app.inject({method:'POST',url:'/api/business/ga-connector/query',headers,payload:args});assert.equal(r.statusCode,200);
  const report=r.json();assert.deepEqual(report.table.rows,[['Japan<script>','42']]);
+ assert.ok(report.stats.some(([label,value])=>label==='汇总 · activeUsers'&&value==='已返回行合计 42；行均值 42'));
  assert.deepEqual(validateOutput('report',report),{ok:true,issues:[]});
  const html=renderReportHTML(report);assert.ok(html.includes('Japan&lt;script&gt;'));assert.ok(html.includes('<td>42</td>'));
  const call=requests.find(x=>x.url.includes(':runReport'));assert.equal(call.url,'https://analyticsdata.googleapis.com/v1beta/properties/12345:runReport');assert.deepEqual(JSON.parse(call.options.body).dateRanges,[args.dateRange]);

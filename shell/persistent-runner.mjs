@@ -332,7 +332,9 @@ function apply(ctx) {
                     const title = value && value.title ? value.title : "GA 查询结果";
                     const meta = value && value.meta ? "（" + value.meta + "）" : "";
                     const rows = value && value.table && Array.isArray(value.table.rows) ? value.table.rows.length : 0;
-                    return [{ type: "text", text: title + meta + (rows ? "；表格 " + rows + " 行" : "") }];
+                    // 表格留给抽屉；元信息与指标汇总必须进入模型可见的工具结果。
+                    const stats = value && Array.isArray(value.stats) ? value.stats.map((row) => Array.isArray(row) ? row.join(": ") : "").filter(Boolean).join("\n") : "";
+                    return [{ type: "text", text: title + meta + (rows ? "；表格 " + rows + " 行" : "") + (stats ? "\n" + stats : "") }];
                   },
                 },
                 async execute(args) {
