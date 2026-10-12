@@ -2,7 +2,7 @@ const $ = s => document.querySelector(s);
 const chat = $("#chat"), ta = $("#ta"), send = $("#send"), stopBtn = $("#stop"), cm = $("#cm");
 const convListEl = $("#convList"), newBtn = $("#newConv");
 let dashLoaded = false;
-const state = { list: [], activeId: null, busy: false };
+const state = { list: [], activeId: null, loadedId: null, busy: false };
 
 /* ---- 时间格式化 ---- */
 function fmtTime(ts) {
@@ -246,7 +246,9 @@ function renderList() {
     menu.addEventListener("click", (e) => { e.stopPropagation(); openMenu(c, menu); });
     item.appendChild(menu);
 
-    item.addEventListener("click", () => { if (state.activeId !== c.id) openConversation(c.id); });
+    // 不再用「activeId 已经是它就跳过」来省一次请求 —— 那样从别的页面点回同一条会整个不响应。
+    // 是否重新拉内容交给 openConversation 自己判断（已渲染过就只切视图）。
+    item.addEventListener("click", () => openConversation(c.id));
     return item;
   };
 
@@ -315,32 +317,64 @@ async function refreshList() {
   } catch (e) { /* 静默 */ }
 }
 
-async function openConversation(id) {
+async function openConversation(id, opts) {
+  const force = !!(opts && opts.force);
   state.activeId = id;
-  switchView("chat");  // ← 切回对话视图
+  // 不管这条对话之前是不是已激活，都必须切回对话视图：
+  // 否则「开 A → 切到别的页 → 再点 A」时 activeId 还是 A，旧代码会整个跳过 openConversation，
+  // 结果停在原来的页面，右侧看起来就像内容没同步。
+  switchView("chat");
   renderList();
+  // 右侧已经渲染着这个对话 → 只切视图，不重复拉取（避免闪烁和滚动跳动）
+  if (!force && state.loadedId === id) return;
   try {
     const r = await fetch("/api/conversations/" + encodeURIComponent(id), { credentials: "same-origin" });
-    if (!r.ok) { renderChat([]); return; }
+    if (!r.ok) { renderChat([]); state.loadedId = null; return; }
     const j = await r.json().catch(() => null);
     renderChat(j && j.conversation ? j.conversation.messages : []);
-  } catch (e) { renderChat([]); }
+    state.loadedId = id;
+  } catch (e) { renderChat([]); state.loadedId = null; }
 }
 
-async function newConversation() {
-  try {
-    const r = await fetch("/api/conversations", {
-      method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json" }, body: "{}",
-    });
-    const j = await r.json().catch(() => null);
-    if (j && j.ok && j.id) {
-      await refreshList();
-      await openConversation(j.id);
-      return j.id;
-    }
-  } catch (e) { /* 静默 */ }
+/** 一条消息都还没有的空对话（用来复用，避免堆出一串空记录）。 */
+function convIsEmpty(c) {
+  if (!c || !c.id || c.archived) return false;
+  if (typeof c.msgCount === "number") return c.msgCount === 0;
+  return !c.preview;   // 后端没给 msgCount 时退化用 preview 判断
+}
+function findEmptyConversation() {
+  const list = Array.isArray(state.list) ? state.list : [];
+  for (const c of list) if (convIsEmpty(c)) return c;
   return null;
+}
+
+/** 互斥锁：同一时刻只允许一个创建请求在飞。 */
+let creatingConv = null;
+
+async function newConversation() {
+  // 连点 / 并发场景（新建按钮、ask 里没有 activeId、gotoChatWithQuestion、技能跳转）
+  // 共用同一个在飞请求，保证快速连点 N 次最多只产生 1 条空对话。
+  if (creatingConv) return creatingConv;
+  creatingConv = (async () => {
+    try {
+      // 已经存在一条没发过消息的空对话 → 直接复用，不再新建
+      const empty = findEmptyConversation();
+      if (empty) { await openConversation(empty.id); return empty.id; }
+      const r = await fetch("/api/conversations", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }, body: "{}",
+      });
+      const j = await r.json().catch(() => null);
+      if (j && j.ok && j.id) {
+        await refreshList();
+        await openConversation(j.id);
+        return j.id;
+      }
+    } catch (e) { /* 静默 */ }
+    finally { creatingConv = null; }
+    return null;
+  })();
+  return creatingConv;
 }
 
 async function renameConversation(c) {
@@ -460,6 +494,12 @@ async function runChat(payload) {
 
 async function ask(msg) {
   if (state.busy || !msg.trim()) return;
+  // 只有「图生*」才必须有参考图；「文生*」和「自动」都不强制用户先传图
+  const genCfg = genTypeCfg(state.genType);
+  if (genCfg.needsRef && !pendingImage) {
+    alert("「" + genCfg.label + "」需要一张参考图，请先点输入框左下角的 + 上传图片。");
+    return;
+  }
   if (!state.activeId) {
     const id = await newConversation();
     if (!id) return;
@@ -469,6 +509,9 @@ async function ask(msg) {
   // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
   if (currentPanel) payload.context = { panel: currentPanel, panelLabel: TITLES[currentPanel] || currentPanel };
   if (pendingImage) payload.image = pendingImage;
+  // 素材生成类型：text2image / image2image / text2video / image2video。
+  // 选「自动」时不传，交给 Agent 自己判断，免得普通问答被带偏成素材生成。
+  if (genCfg.taskType) payload.taskType = genCfg.taskType;
   // 立即渲染用户消息（乐观更新），AI 回复回来后再用服务器完整列表覆盖
   renderMessage({ role: "user", text: msg, ts: Date.now(), image: pendingImage || undefined });
   chat.scrollTop = chat.scrollHeight;
@@ -639,11 +682,60 @@ if (userEntry && userMenu) {
   });
 }
 
-/* ---- 技能 ---- *//* ---- ⑨ 图片上传（含 NEW-1 Ctrl+V 粘贴） ---- */
+/* ---- 技能 ---- *//* ---- ⑨ 素材上传：图片 / 视频生成（选择类型 + Ctrl+V 粘贴 + 拖拽） ---- */
 const imgInput = $("#imgInput"), imgBtn = $("#imgBtn"), imgPreview = $("#imgPreview"), imgThumb = $("#imgThumb"), imgClear = $("#imgClear");
+const genTypeEl = $("#genType"), genHintEl = $("#genHint"), emptyInputEl = $("#emptyInput");
 let pendingImage = null;
+
+/* 素材生成类型：与 media.route 的 taskType 一一对应。
+ * needsRef = 是否必须有一张参考图（「图生*」需要；「文生*」不需要，不强制用户先传图）。
+ * accept   = 该类型允许的参考素材。目前 media.route 没有 video2video、/api/upload 也只收图片，
+ *            所以参考素材统一是 image/*；将来后端放开视频参考素材，只改这一张表即可。
+ * auto     = 不指定，交给 Agent 自己判断（默认，避免普通问答被带偏成素材生成）。 */
+const GEN_TYPES = {
+  auto:        { label: "自动",     taskType: null,           needsRef: false, accept: "image/*" },
+  text2image:  { label: "文生图",   taskType: "text2image",   needsRef: false, accept: "image/*" },
+  image2image: { label: "图生图",   taskType: "image2image",  needsRef: true,  accept: "image/*" },
+  text2video:  { label: "文生视频", taskType: "text2video",   needsRef: false, accept: "image/*" },
+  image2video: { label: "图生视频", taskType: "image2video",  needsRef: true,  accept: "image/*" },
+};
+const DEFAULT_GEN_TYPE = "auto";
+state.genType = DEFAULT_GEN_TYPE;
+
+function genTypeCfg(t) { return GEN_TYPES[t] || GEN_TYPES[DEFAULT_GEN_TYPE]; }
+
+function setGenType(t) {
+  if (!GEN_TYPES[t]) t = DEFAULT_GEN_TYPE;
+  state.genType = t;
+  const cfg = genTypeCfg(t);
+  if (genTypeEl) genTypeEl.querySelectorAll(".gt-btn").forEach(b => b.classList.toggle("on", b.dataset.type === t));
+  if (imgInput) imgInput.accept = cfg.accept;          // accept 随类型动态写入，不再写死 image/*
+  if (genHintEl) genHintEl.textContent = cfg.needsRef ? "需要一张参考图" : "不需要参考图，可直接描述";
+  if (imgBtn) imgBtn.title = cfg.needsRef ? "添加参考图（这个类型需要）" : "添加参考图（可选）";
+}
+
+if (genTypeEl) {
+  genTypeEl.querySelectorAll(".gt-btn").forEach(b => {
+    b.addEventListener("click", () => setGenType(b.dataset.type));
+  });
+}
+setGenType(DEFAULT_GEN_TYPE);
+
 function setPendingImage(url) { pendingImage = url; imgThumb.src = url; imgPreview.hidden = false; }
 function clearPendingImage() { pendingImage = null; imgThumb.removeAttribute("src"); imgPreview.hidden = true; if (imgInput) imgInput.value = ""; }
+
+/** 通用拖拽投放区：dragenter / dragover / dragleave / drop 这套逻辑只写一次，
+ *  导入面板（#impDrop）和聊天输入区（#emptyInput）都复用它，不各写一遍。 */
+function attachDropZone(zone, onFile, overClass) {
+  if (!zone) return;
+  const cls = overClass || "over";
+  ["dragenter", "dragover"].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.add(cls); }));
+  ["dragleave", "drop"].forEach(ev => zone.addEventListener(ev, e => { e.preventDefault(); zone.classList.remove(cls); }));
+  zone.addEventListener("drop", e => {
+    const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if (f && onFile) onFile(f);
+  });
+}
 
 /** 读文件 → dataURL（base64）。 */
 function readFileAsDataUrl(f) {
@@ -669,15 +761,29 @@ async function uploadImageDataUrl(b64) {
   } catch (e) { alert("上传失败：" + e.message); return false; }
 }
 
+/** 聊天框收到一个素材文件 —— 点「+」选择、拖进来、Ctrl+V 粘贴，三条路都走这里。 */
+async function handleComposerFile(f) {
+  if (!f) return;
+  if (!/^image\//.test(f.type || "")) {
+    alert("目前只支持图片作为参考素材（media.route 暂未提供视频参考素材能力）");
+    return;
+  }
+  if (f.size > 15 * 1024 * 1024) { alert("素材太大（≤15MB）"); return; }
+  try { await uploadImageDataUrl(await readFileAsDataUrl(f)); }
+  catch (e) { alert("读取失败：" + e.message); }
+}
+
 if (imgBtn) imgBtn.addEventListener("click", () => imgInput.click());
 if (imgClear) imgClear.addEventListener("click", clearPendingImage);
 if (imgInput) imgInput.addEventListener("change", async () => {
   const f = imgInput.files && imgInput.files[0];
   if (!f) return;
-  if (f.size > 15 * 1024 * 1024) { alert("图片太大（≤15MB）"); imgInput.value = ""; return; }
-  try { await uploadImageDataUrl(await readFileAsDataUrl(f)); }
-  catch (e) { alert("读取失败：" + e.message); }
+  if (f.size > 15 * 1024 * 1024) { alert("素材太大（≤15MB）"); imgInput.value = ""; return; }
+  await handleComposerFile(f);
 });
+
+// 把素材直接拖进聊天输入区：复用 impDrop 那套 drop 逻辑（attachDropZone）
+attachDropZone(emptyInputEl, handleComposerFile);
 
 // NEW-1：Ctrl+V / 右键粘贴图片（读剪贴板 image/* 项，自动上传并预览）
 if (ta) ta.addEventListener("paste", async (e) => {
@@ -690,9 +796,7 @@ if (ta) ta.addEventListener("paste", async (e) => {
   e.preventDefault(); // 拦截，避免图片以 base64 文本污染输入框
   const f = imgItem.getAsFile();
   if (!f) return;
-  if (f.size > 15 * 1024 * 1024) { alert("图片太大（≤15MB）"); return; }
-  try { await uploadImageDataUrl(await readFileAsDataUrl(f)); }
-  catch (err) { alert("读取失败：" + (err && err.message)); }
+  await handleComposerFile(f);
 });
 
 /* ---- ⑦ 搜索 ---- */
@@ -1711,12 +1815,8 @@ function impOnEnter() {
     if (drop && fi) {
       drop.addEventListener("click", e => { if (e.target.closest("#impFileClear")) return; fi.click(); });
       fi.addEventListener("change", () => impSetFile(fi.files && fi.files[0]));
-      ["dragenter", "dragover"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add("over"); }));
-      ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
-      drop.addEventListener("drop", e => {
-        const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (f) impSetFile(f);
-      });
+      // 拖拽逻辑不在这里重复写一遍，和聊天输入区共用 attachDropZone
+      attachDropZone(drop, impSetFile);
     }
     const clr = impEl("impFileClear");
     if (clr) clr.addEventListener("click", e => { e.stopPropagation(); impReset(); });

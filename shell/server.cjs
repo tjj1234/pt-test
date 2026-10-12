@@ -298,6 +298,12 @@ async function handleChat(req, res, me, body) {
   // ⑨ 发消息附带的图片（URL 或本地路径）落到消息里
   const image = String(body.image || "").trim() || null;
 
+  // 素材生成类型（前端聊天框选择，对应 media.route 的 taskType）。
+  // 不传 / 非法值 = 自动：不在提示里强加生成指令，交给 Agent 自己判断，
+  // 免得普通问答被带偏成素材生成。
+  const MEDIA_TASK_TYPES = { text2image: 1, image2image: 1, text2video: 1, image2video: 1 };
+  const taskType = (body.taskType && MEDIA_TASK_TYPES[String(body.taskType)]) ? String(body.taskType) : null;
+
   // M2：当前上下文（如 { panel, panelLabel }），透传给 DSH 拼进系统提示
   const context = (body.context && typeof body.context === "object" && !Array.isArray(body.context)) ? body.context : null;
 
@@ -363,9 +369,32 @@ async function handleChat(req, res, me, body) {
   // 使 media.route（图生图 / 图生视频）能把 inputImageUrl 直接外链给 PowerTokens，
   // 规避 /uploads 相对路径需登录+租户校验、无法被外部访问的问题。
   const lastUser = messages[messages.length - 1];
+  const dataUrl = (lastUser && lastUser.image) ? uploadsToDataUrl(lastUser.image) : null;
+  const TASK_LABEL = {
+    text2image: "text2image（文生图）",
+    image2image: "image2image（图生图）",
+    text2video: "text2video（文生视频）",
+    image2video: "image2video（图生视频）",
+  };
   let imageNote = "";
-  if (lastUser && lastUser.image) {
-    const dataUrl = uploadsToDataUrl(lastUser.image);
+  if (taskType) {
+    // 前端明确选了生成类型：直接按 media.route 的 taskType 下指令
+    const needsImage = (taskType === "image2image" || taskType === "image2video");
+    if (needsImage && !dataUrl) {
+      imageNote = "用户选择了「" + TASK_LABEL[taskType] + "」，但没有提供参考图。请据实说明需要先上传一张参考图再生成。";
+    } else if (needsImage) {
+      imageNote =
+        "用户选择了「" + TASK_LABEL[taskType] + "」。请调用 media.route 工具：taskType 用 " + taskType +
+        "，并把 inputImageUrl 设为下面的 data URL 原文：\n" + dataUrl;
+    } else {
+      // text2image / text2video：只靠文字描述，不要求参考图
+      imageNote =
+        "用户选择了「" + TASK_LABEL[taskType] + "」，只给了文字描述、没有参考图。请调用 media.route 工具：" +
+        "taskType 用 " + taskType + "，不要传 inputImageUrl。" +
+        "注意：不要因为「没有参考图」就擅自改成图生图 / 图生视频，就按用户选的类型走。";
+    }
+  } else if (lastUser && lastUser.image) {
+    // 自动模式：沿用原来的图片说明（图生图 / 图生视频）
     if (dataUrl) {
       imageNote =
         "用户这次附带了一张图片（内容已编码为下面的 data URL）。" +
