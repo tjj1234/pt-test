@@ -171,7 +171,7 @@
 (function () {
   const $ = (s) => document.querySelector(s);
 
-  const USE_MOCK_AUTH_ACCOUNTS = true;   // ★ 基座 /api/auth-accounts 上线后改为 false
+  const USE_MOCK_AUTH_ACCOUNTS = false;   // ★ 基座 /api/auth-accounts 已上线，切换真实接口
   const MOCK_ACCOUNTS = [
     { id: "acc_ssgtm_01", tenantId: "t_default", accountType: "SS-GTM", status: "有效",
       scope: "Server 容器 GTM-WP7H3CBN 全量事件转发", updatedAt: "2026-09-28T14:20:00+08:00" },
