@@ -27,6 +27,35 @@
      基础 .login-wrap 是 flex 居中容器，默认横排会把两张卡挤在同一行、窄屏时互相压住。
      这里改成纵向流 + 间距，两张卡各占一行。 */
   .login-wrap{flex-direction:column;gap:18px;padding:24px 16px}
+
+  /* 广告与数据源授权（非 GA）：沿用 U-M-B「先 mock 再换血」模式重补回来。
+     GA4 的连接/解除/更换 Property 已挪去技能页，这里只管 SS-GTM / Meta / MCP 之类。 */
+  .acct-list{display:flex;flex-direction:column;gap:10px;margin:12px 0 4px}
+  .acct-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fff}
+  .acct-main{flex:1;min-width:0}
+  .acct-type{font-size:14px;font-weight:600;color:var(--ink)}
+  .acct-scope{font-size:12.5px;color:var(--sub);margin-top:3px;word-break:break-word}
+  .acct-updated{font-size:11.5px;color:var(--sub);margin-top:6px;opacity:.85}
+  .acct-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}
+  .acct-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px}
+  .acct-badge.ok{color:#0f7a3d;background:#e8f7ee}      /* 有效：绿 */
+  .acct-badge.warn{color:#9a6b00;background:#fff4d6}     /* 即将过期：琥珀 */
+  .acct-badge.danger{color:#b42318;background:#fde7e4}  /* 需重验：红 */
+  .acct-revoke{border:1px solid var(--line);background:#fff;color:var(--bad);border-radius:7px;
+    padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit}
+  .acct-revoke:hover{background:#fdeaea}
+  /* 解除确认弹框（含解除影响提醒） */
+  .modal-mask{display:none;position:fixed;inset:0;background:rgba(17,20,26,.45);
+    align-items:center;justify-content:center;padding:16px;z-index:60}
+  .modal-card{width:420px;max-width:100%;background:#fff;border-radius:14px;padding:20px;
+    box-shadow:0 18px 48px rgba(16,24,40,.22)}
+  .modal-card h3{margin:0 0 10px;font-size:15px}
+  .modal-card p{margin:0;white-space:pre-line;font-size:13px;color:var(--sub)}
+  .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+  .modal-actions .btn{padding:9px 16px}
+  .btn.danger{background:#b42318;color:#fff;border:0;border-radius:10px;
+    padding:9px 16px;font-weight:600;font-family:inherit;font-size:13px;cursor:pointer}
+  .btn.danger:hover{filter:brightness(.94)}
   @media (max-width:480px){
     .login-wrap{padding:16px}
     .login-card{width:100%;flex-shrink:0}
@@ -43,6 +72,11 @@
 
     <section aria-labelledby="accountHeading"><h2 id="accountHeading">当前账户</h2>
       <p class="status" id="accountIdentity" role="status">读取账户信息…</p>
+    </section>
+    <section aria-labelledby="sourcesHeading"><h2 id="sourcesHeading">广告与数据源授权</h2>
+      <p class="status" id="acctStatus" role="status" aria-live="polite">读取中…</p>
+      <div id="acctList" class="acct-list"></div>
+      <p class="hint">GA4 的连接 / 解除 / 更换 Property 已挪到「技能」页；这里管的是其余数据源（SS-GTM 容器、Meta CAPI、MCP 等）。</p>
     </section>
     <h2>大模型与 PowerTokens Key</h2>
     <!-- 要素 1：跳转 PT 门户获取 key -->
@@ -94,6 +128,17 @@
     <button class="btn" id="pwSave" type="submit">更新密码</button>
     <div class="err" id="pwe"></div>
   </form>
+</div>
+<!-- M7：解除授权前的「解除影响提醒」弹框 -->
+<div class="modal-mask" id="revokeModal" role="dialog" aria-modal="true" aria-labelledby="revokeTitle">
+  <div class="modal-card">
+    <h3 id="revokeTitle">解除授权</h3>
+    <p id="revokeBody"></p>
+    <div class="modal-actions">
+      <button type="button" class="ghost" id="revokeCancel">取消</button>
+      <button type="button" class="btn danger" id="revokeConfirm">确认解除</button>
+    </div>
+  </div>
 </div>
 <script src="/assets/settings.js"></script>
 <script src="/assets/pw-strength.js"></script>
