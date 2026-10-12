@@ -32,12 +32,18 @@ absent("GA4 property ID 输入框", /gaPropertyId/);
 absent("「连接Google Analytics」按钮", /gaConnect/);
 absent("刷新连接状态按钮", /gaRefresh/);
 absent("GA 错误提示区", /gaError/);
-absent("授权列表容器", /acctList|acctStatus/);
-absent("「广告与数据源授权」标题", /广告与数据源授权/);
-absent("acct-* 样式类", /acct-item|acct-main|acct-badge|acct-side|acct-scope|acct-updated/);
-ok("不再请求 ga-connector 接口", !/ga-connector/.test(js));
-ok("不再出现 Google Analytics 字样（注释里的去向说明除外）",
-  !/Google Analytics/.test(html.replace(/<!--[\s\S]*?-->/g, "")));
+/* ---------- 1b. 非 GA 的「广告与数据源授权」清单已按 M7 交互模式补回 ----------
+ * 10/10 删那节的理由只是「GA 挪去技能页」，结果把非 GA 的账户清单一起误杀了。
+ * PRD 3.4（清单 + 授权范围 + 三态 + 解除影响提醒）并没有撤销，所以这里恢复 negative
+ * 断言的范围仅限 GA，下面的 acct-* 反而必须存在。
+ */
+present("已补回「广告与数据源授权」小节", /id="sourcesHeading"/, html);
+present("授权列表容器不为空占位", /id="acctList"[\s\S]{0,80}id="acctStatus"|id="acctStatus"[\s\S]{0,200}id="acctList"/, html);
+present("三态徽标样式齐全", /\.acct-badge\.ok[\s\S]{0,200}\.acct-badge\.warn[\s\S]{0,200}\.acct-badge\.danger/, html);
+present("解除确认弹框（取消 / 确认解除）", /id="revokeModal"[\s\S]{0,600}id="revokeCancel"[\s\S]{0,300}id="revokeConfirm"/, html);
+present("mock 开关 + 契约注释", /USE_MOCK_AUTH_ACCOUNTS[\s\S]{0,200}\/api\/auth-accounts/, js);
+present("解除影响提醒文案", /解除影响/, js);
+ok("不再出现 GA property 连接入口（仍只走技能页）", !/gaPropertyId|gaConnect|gaRefresh|gaError/.test(html));
 
 /* ---------- 2. 该保留的都还在 ---------- */
 present("PT key 表单", /id="f"/, html);
@@ -66,7 +72,11 @@ try {
   syntaxErr = String((e.stderr && e.stderr.toString()) || e.message);
 }
 ok("settings.js 语法可解析", syntaxOk, syntaxErr);
-ok("settings.js 不再引用被删的 DOM id", !/\$\("#(gaPropertyId|gaConnect|gaRefresh|gaError|acctList|acctStatus)"\)/.test(js));
+// 比「列黑名单」更硬的不变量：settings.js 里 $("#X") 引用的每个 id，HTML 里都必须真存在。
+// 否则少一个节点就是线上 null 引用崩 —— 这正是上一次删节时要防的事。
+const referenced = [...js.matchAll(/\$\("#([A-Za-z0-9_-]+)"\)/g)].map((m) => m[1]);
+const missing = [...new Set(referenced)].filter((id) => !new RegExp('id="' + id + '"').test(html));
+ok("settings.js 引用的 DOM id 在 HTML 里都存在", missing.length === 0, "缺：" + missing.join(", "));
 ok("settings.js 仍是自执行闭包（无全局泄漏）", /^\(function \(\) \{[\s\S]*\}\)\(\);?\s*$/m.test(js.trim()));
 
 const head = "设置页瘦身验收：" + pass + " PASS / " + fail + " FAIL  （共 " + (pass + fail) + " 项）";

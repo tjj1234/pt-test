@@ -16,6 +16,12 @@ function markUnread(id) {
 /** 界面当前显示的还是不是这条对话（切到别的对话 / 别的页面都不算）。 */
 function isViewing(id) { return !!id && state.activeId === id; }
 
+/** 这条对话是不是已归档 —— 以列表为准；列表里还没有它时保守按「未归档」处理。 */
+function convIsArchived(id) {
+  const c = (state.list || []).find((x) => x.id === id);
+  return !!(c && c.archived);
+}
+
 /* ---- 时间格式化 ---- */
 function fmtTime(ts) {
   if (!ts) return "";
@@ -53,6 +59,42 @@ function switchView(v) {
   if (v === "flows") bizLoadFlows();
   if (v === "usage") bizLoadUsage();
   if (v === "schedule") bizLoadSchedule();
+  state.view = v;
+  syncArchBanner();   // 归档提示条只在对话视图露脸，切到别的页就不该还挂着
+  saveRoute();        // 刷新后能回到这里（会话级）
+}
+
+/* ---- 刷新记住当前位置（会话级：关掉标签页才丢）----
+ * 以前注释写着「自动选中最近一个」，实际永远 switchView("home") —— 刷新就回首页，
+ * 注释和实现是反的。现在按 PENDING_USE_KEY 那套 sessionStorage 老办法记住 view + 对话 id。
+ */
+const ROUTE_KEY = "ptShellRoute";
+const RESTORABLE_VIEWS = Object.keys(TITLES);
+function saveRoute() {
+  try { sessionStorage.setItem(ROUTE_KEY, JSON.stringify({ v: state.view, id: state.activeId })); }
+  catch (e) { /* 隐私模式下忽略 */ }
+}
+function readRoute() {
+  try {
+    const o = JSON.parse(sessionStorage.getItem(ROUTE_KEY) || "null") || {};
+    const v = typeof o.v === "string" ? o.v : "";
+    if (!v || RESTORABLE_VIEWS.indexOf(v) < 0) return null;   // 不认识的视图不猜，直接作废
+    return { v, id: typeof o.id === "string" ? o.id : null };
+  } catch (e) { return null; }
+}
+/** 按记住的位置恢复。失败返回 false，由调用方兜底回首页 —— 宁可回首页，也不留白屏。 */
+async function restoreRoute(rt) {
+  try {
+    if (rt.v === "chat" && rt.id) {
+      // 只尝试恢复「列表里还在」的对话：被删了 / 不属于你，列表里就不会有它
+      if (!state.list.some((c) => c.id === rt.id)) return false;
+      await openConversation(rt.id);
+      // 列表里还在、但实际 GET 404（竞态被删）时 loadedId 落不下来 —— 这也算恢复失败
+      return state.loadedId === rt.id;
+    }
+    if (rt.v !== "chat") { switchView(rt.v); return true; }
+  } catch (e) { /* 落到 return false */ }
+  return false;
 }
 document.querySelectorAll(".nav button").forEach(b => b.addEventListener("click", () => switchView(b.dataset.v)));
 
@@ -345,14 +387,20 @@ async function openConversation(id, opts) {
   // 结果停在原来的页面，右侧看起来就像内容没同步。
   switchView("chat");
   renderList();
+  // 归档对话只读：这条一打开就把输入框锁上（详见 setComposerLocked）
+  setComposerLocked(convIsArchived(id));
+  saveRoute();
   // 右侧已经渲染着这个对话 → 只切视图，不重复拉取（避免闪烁和滚动跳动）
   if (!force && state.loadedId === id) return;
   try {
     const r = await fetch("/api/conversations/" + encodeURIComponent(id), { credentials: "same-origin" });
     if (!r.ok) { renderChat([]); state.loadedId = null; return; }
     const j = await r.json().catch(() => null);
-    renderChat(j && j.conversation ? j.conversation.messages : []);
+    const conv = (j && j.conversation) ? j.conversation : null;
+    renderChat(conv && conv.messages ? conv.messages : []);
     state.loadedId = id;
+    // 详情带 archived 就以它为准 —— 列表可能是上一版缓存（刚归档完刷新列表的间隙）
+    if (conv && typeof conv.archived === "boolean") setComposerLocked(conv.archived);
   } catch (e) { renderChat([]); state.loadedId = null; }
 }
 
@@ -425,13 +473,33 @@ async function deleteConversation(c) {
 }
 
 /* ---- 发消息 / 重新生成 / 停止 ---- */
+/**
+ * 输入框可用状态 = 「正在生成」or「对话已归档」。
+ * 两个开关各自会来回切（生成结束要解锁、恢复归档也要解锁），所以统一在这里算 ——
+ * 否则任何一个先恢复都会把另一个的锁抹掉（常见的是生成完一解锁，归档就又能打字了）。
+ */
+function applyComposerState() {
+  const locked = state.busy || state.composerLocked;
+  ta.disabled = locked;
+  send.disabled = locked;
+  send.hidden = locked;
+  stopBtn.hidden = !state.busy;
+}
 function setBusy(b) {
   state.busy = b;
-  send.disabled = b;
-  send.hidden = b;
-  ta.disabled = b;
-  stopBtn.hidden = !b;
-  if (!b) ta.focus();
+  applyComposerState();
+  if (!b && !state.composerLocked) ta.focus();
+}
+/** 归档对话只读：锁输入框 / 发送按钮，并亮起顶部提示条。 */
+function setComposerLocked(locked) {
+  state.composerLocked = !!locked;
+  applyComposerState();
+  syncArchBanner();
+  if (!locked && !state.busy) ta.focus();
+}
+function syncArchBanner() {
+  const b = $("#archBanner");
+  if (b) b.hidden = !(state.composerLocked && state.view === "chat");
 }
 
 async function runChat(payload) {
@@ -529,7 +597,8 @@ async function runChat(payload) {
 }
 
 async function ask(msg) {
-  if (state.busy || !msg.trim()) return;
+  // composerLocked 这里再兜一道：输入框 disabled 挡得住手点，挡不住脚本/回车以外的路径
+  if (state.busy || state.composerLocked || !msg.trim()) return;
   // 只有「图生*」才必须有参考图；「文生*」和「自动」都不强制用户先传图
   const genCfg = genTypeCfg(state.genType);
   if (genCfg.needsRef && !pendingImage) {
@@ -575,6 +644,20 @@ async function toggleArchive(c) {
     await refreshList();
   } catch (e) { /* 静默 */ }
 }
+
+/* 顶部「该对话已归档 · 只读」提示条上的「恢复」按钮。
+ * 不新建接口 —— 直接复用上面 toggleArchive 里已有的那条 /unarchive 请求。 */
+const archRestoreBtn = $("#archRestore");
+if (archRestoreBtn) archRestoreBtn.addEventListener("click", async () => {
+  const id = state.activeId;
+  const c = (state.list || []).find((x) => x.id === id);
+  if (!c || !c.archived || state.busy) return;
+  archRestoreBtn.disabled = true; archRestoreBtn.textContent = "恢复中…";
+  try { await toggleArchive(c); } catch (e) { /* toggleArchive 内部已静默 */ }
+  archRestoreBtn.disabled = false; archRestoreBtn.textContent = "恢复";
+  // 恢复了才解锁：请求失败时列表里它还是 archived，这里会重新锁上，不骗用户说好了
+  setComposerLocked(convIsArchived(id));
+});
 
 /* ---- ⑧ 导出（Content-Disposition 触发下载） ---- */
 function exportConversation(c, fmt) {
@@ -1874,7 +1957,12 @@ function impOnEnter() {
   loadQuickQuestions();   // 首页快捷问题按技能动态渲染
   resumePendingUse();     // 若上次是从技能页跳出去做 GA 授权，回来补上「去使用」
   await refreshList();   // 预拉对话列表，侧边栏对话历史即时可见
-  switchView("home");    // 默认落地首页（U0 三卡片 + chip 行）
+
+  // 刷新前在哪，就回哪（sessionStorage 记住的 view + 对话 id）。
+  // 记不住 / 记录失效（对话被删、404、视图已下线）→ 兜底回首页，不留白屏。
+  const rt = readRoute();
+  if (rt && await restoreRoute(rt)) return;
+  switchView("home");    // 保底落地首页（U0 三卡片 + chip 行）
 })();
 
 /* ---- M-UI-B：仅业务流库、用量日志与上传记录。?m-ui-b=mock 显式演示；

@@ -153,3 +153,138 @@
   /* 注：GA 连接已整体挪到「技能」页面（技能详情里的连接/解除/更换 Property），
      那套真实逻辑现在由 shell/public/ga-connect.js 提供，本页不再重复实现。 */
 })();
+
+/* ============================================================================
+ * 【广告与数据源授权 · 非 GA 部分】mock 先行，待基座接口就绪换血
+ * ----------------------------------------------------------------------------
+ * 历史上这节在 10/8 加过（M7）、10/10 连同 GA property 连接一起被整节删掉 ——
+ * 删它的理由是「GA 挪去技能页」，但那样把**非 GA 的清单也一起误杀了**。PRD 3.4
+ * 要的「已授权账户清单 + 授权范围 + 三态 + 解除影响提醒」并没有撤销，所以这里
+ * 按同一套交互模式补回来，只收 SS-GTM / Meta / MCP 这类非 GA 数据源。
+ *
+ * 契约（基座尚未实现，前端先 mock；上线后改一个常量即可换血）：
+ *   GET    /api/auth-accounts      -> [{id,tenantId,accountType,status,scope,updatedAt}]
+ *   DELETE /api/auth-accounts/:id  -> 解除该账户授权
+ * 换血方式：USE_MOCK_AUTH_ACCOUNTS 置 false。renderAccounts(list) 对来源无感知，
+ *          渲染层零改动。
+ * ========================================================================== */
+(function () {
+  const $ = (s) => document.querySelector(s);
+
+  const USE_MOCK_AUTH_ACCOUNTS = true;   // ★ 基座 /api/auth-accounts 上线后改为 false
+  const MOCK_ACCOUNTS = [
+    { id: "acc_ssgtm_01", tenantId: "t_default", accountType: "SS-GTM", status: "有效",
+      scope: "Server 容器 GTM-WP7H3CBN 全量事件转发", updatedAt: "2026-09-28T14:20:00+08:00" },
+    { id: "acc_meta_01", tenantId: "t_default", accountType: "Meta", status: "即将过期",
+      scope: "Meta CAPI & 像素回传（像素 ID 1029…）", updatedAt: "2026-07-12T09:05:00+08:00" },
+    { id: "acc_mcp_01", tenantId: "t_default", accountType: "Ryze MCP", status: "需重验",
+      scope: "MCP 数据源只读", updatedAt: "2026-06-30T18:42:00+08:00" },
+  ];
+
+  const acctEl = {
+    status: $("#acctStatus"), list: $("#acctList"),
+    modal: $("#revokeModal"), modalBody: $("#revokeBody"),
+    revokeCancel: $("#revokeCancel"), revokeConfirm: $("#revokeConfirm"),
+  };
+  // 页面上没有这些节点（比如改版后又被拿掉）就整体静默退出，绝不在 null 上挂事件
+  if (!acctEl.list || !acctEl.status || !acctEl.modal) return;
+
+  let acctData = [];
+  let pendingRevokeId = null;
+
+  const STATUS_BADGE = { "有效": "ok", "即将过期": "warn", "需重验": "danger" };
+  const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+  /** 纯渲染层：GET 真数据或 mock 都走这一条路径，换源即回归。 */
+  function renderAccounts(list) {
+    acctData = Array.isArray(list) ? list : [];
+    if (!acctData.length) {
+      acctEl.status.textContent = "暂无已授权账户，业务线接入后可在此配置。";
+      acctEl.list.innerHTML = "";
+      return;
+    }
+    // mock 期间明说是示例数据 —— 免得运营同学把演示数量当成线上真实授权去汇报
+    acctEl.status.textContent = "共 " + acctData.length + " 个数据源授权"
+      + (USE_MOCK_AUTH_ACCOUNTS ? "（示例数据，接口上线后自动切换）" : "");
+    acctEl.list.innerHTML = acctData.map((a) => {
+      const bc = STATUS_BADGE[a.status] || "ok";
+      const upd = a.updatedAt ? new Date(a.updatedAt).toLocaleString("zh-CN") : "未知";
+      return '<div class="acct-item" data-id="' + esc(a.id) + '">'
+        + '<div class="acct-main">'
+        +   '<div class="acct-type">' + esc(a.accountType) + "</div>"
+        +   '<div class="acct-scope">' + esc(a.scope) + "</div>"
+        +   '<div class="acct-updated">最后更新：' + esc(upd) + "</div>"
+        + "</div>"
+        + '<div class="acct-side">'
+        +   '<span class="acct-badge ' + bc + '">' + esc(a.status) + "</span>"
+        +   '<button type="button" class="acct-revoke" data-id="' + esc(a.id) + '">解除</button>'
+        + "</div>"
+        + "</div>";
+    }).join("");
+  }
+
+  async function loadAuthAccounts() {
+    if (!USE_MOCK_AUTH_ACCOUNTS) {
+      try {
+        const r = await fetch("/api/auth-accounts", { credentials: "same-origin" });
+        if (r.status === 401) { location.replace("/login"); return; }
+        const j = await r.json().catch(() => null);
+        renderAccounts(Array.isArray(j) ? j : (j && j.accounts) || []);
+      } catch (x) {
+        acctEl.status.textContent = "读取授权账户失败：" + x.message;
+      }
+      return;
+    }
+    renderAccounts(MOCK_ACCOUNTS);
+  }
+
+  /** 解除前必须让用户知道代价 —— PRD 3.4 的「解除影响提醒」就落在这里。 */
+  function openRevokeModal(id) {
+    const a = acctData.find((x) => x.id === id);
+    if (!a) return;
+    pendingRevokeId = id;
+    acctEl.modalBody.textContent =
+      "确认解除「" + a.accountType + "」的授权吗？\n\n"
+      + "解除影响：\n"
+      + "• 该数据源将停止向归因面板回传数据；\n"
+      + "• 已生成的归因结果不受影响，但新的事件将不再归集；\n"
+      + "• 依赖它的数据面板与业务流会取不到新数据（历史数据保留）；\n"
+      + "• 如需恢复，可在对应平台（GTM 容器 / Meta / MCP）重新授权后再次添加。";
+    acctEl.modal.style.display = "flex";
+  }
+  function closeRevokeModal() {
+    pendingRevokeId = null;
+    acctEl.modal.style.display = "none";
+  }
+  async function confirmRevoke() {
+    const id = pendingRevokeId;
+    closeRevokeModal();
+    if (!id) return;
+    if (!USE_MOCK_AUTH_ACCOUNTS) {
+      try {
+        const r = await fetch("/api/auth-accounts/" + encodeURIComponent(id),
+          { method: "DELETE", credentials: "same-origin" });
+        if (r.status === 401) { location.replace("/login"); return; }
+        await loadAuthAccounts();
+      } catch (x) {
+        acctEl.status.textContent = "解除失败：" + x.message;
+      }
+      return;
+    }
+    // mock 阶段：本地移除并刷新，不真正调后端
+    acctData = acctData.filter((x) => x.id !== id);
+    renderAccounts(acctData);
+  }
+
+  // 事件委托：列表里的「解除」按钮（mock/真实数据共用）
+  acctEl.list.addEventListener("click", (ev) => {
+    const btn = ev.target && ev.target.closest && ev.target.closest(".acct-revoke");
+    if (btn) openRevokeModal(btn.getAttribute("data-id"));
+  });
+  acctEl.revokeCancel.addEventListener("click", closeRevokeModal);
+  acctEl.revokeConfirm.addEventListener("click", confirmRevoke);
+  acctEl.modal.addEventListener("click", (ev) => { if (ev.target === acctEl.modal) closeRevokeModal(); });
+
+  loadAuthAccounts();
+})();

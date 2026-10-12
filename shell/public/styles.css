@@ -769,6 +769,16 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 }
 .keygo:hover{background:#333}
 
+/* ---------- 归档只读提示条 ---------- */
+/* 和未绑 key 提示条同一套骨架，多一个右侧「恢复」按钮；配色改成中性灰蓝，
+   避免和「没绑 key」那条橙红色预警混淆 —— 归档是用户主动做的，不是故障。 */
+.keybanner.arch{background:linear-gradient(90deg,#eef2f7,#e9edf3);border-bottom:1px solid #d6dde8;color:#41506a}
+.keybanner .ico{flex:0 0 auto}
+.keybanner.arch .kb-btn{margin-left:auto;flex:0 0 auto;border:1px solid #c3ccdb;border-radius:8px;
+  padding:5px 14px;background:#fff;color:#2f3c52;font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.keybanner.arch .kb-btn:hover{background:#f3f6fa}
+.keybanner.arch .kb-btn[disabled]{opacity:.55;cursor:default}
+
 /* 全局 hidden */
 [hidden]{display:none!important}
 
