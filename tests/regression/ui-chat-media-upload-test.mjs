@@ -501,6 +501,20 @@ console.log("\n[8] 前后端白名单一致（后端改动未落盘时跳过）"
     // 后端返回的是 kind 字段（不是 type），前端两种都要认
     ok("后端返回体里带 kind 字段", /ok: true, url[\s\S]{0,200}?kind: media\.kind/.test(srv) || /kind: media\.kind/.test(srv));
     ok("前端能读后端返回的 kind", run("normMediaType({ type: undefined, kind: 'audio' }.kind)") === "audio");
+
+    // ⚠️ 契约冲突探测（不计失败，但要醒目）：前端发 media:[{type,url}]，
+    //   后端 /api/chat 若照 documents 那套把每一项 String() 化，会得到 "[object Object]"，
+    //   过不了 /uploads/<租户>/<文件名> 归属校验 → 400「无法读取该媒体附件」，消息直接发不出去。
+    //   这里只负责把冲突喊出来，改哪边由人决定。
+    const stringified = /body\.media\.map\(\(m\)\s*=>\s*String\(m == null \? "" : m\)/.test(srv);
+    if (stringified) {
+      console.log("  ⚠️  契约冲突：后端 /api/chat 把 media 当 URL 字符串数组处理，前端发的是 [{type,url}]");
+      console.log("      String({type,url}) 会得到 \"[object Object]\"，过不了 /uploads/ 归属校验 → 400");
+      console.log("      后端改法：String(m && m.url != null ? m.url : m)（校验与归属判断都不用动）");
+      console.log("      连带：后端存进消息的是 URL 数组，刷新回放时 chat-media.js 只认对象项，播放器会消失 —— 需一并对齐");
+    } else {
+      ok("后端 /api/chat 直接按对象取 url（与前端 media 形状一致）", !stringified);
+    }
   }
 }
 
