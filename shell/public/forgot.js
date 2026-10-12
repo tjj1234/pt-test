@@ -3,8 +3,8 @@
  * forgot.js —— 忘记密码页前端（U3）
  * ----------------------------------------------------------------------------
  * 后端契约：POST /api/auth/forgot-password { username|email }
- *   -> 200 { ok, message } 并（仅开发态 return 模式）附带 { delivery, token, resetUrl }
- * 抗枚举：无论账号是否存在，后端都返回同一套成功文案；只有 return 模式才回传令牌。
+ *   -> 200 { ok, message }；仅当显式设置 PT_RESET_DELIVERY=return 时才附带 { delivery, token, resetUrl }
+ * 抗枚举：无论账号是否存在，后端都返回同一套通用成功文案；只有显式 return 模式才回传令牌。
  * ========================================================================== */
 (function () {
   const $ = (s) => document.querySelector(s);
