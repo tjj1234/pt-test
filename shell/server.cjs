@@ -110,6 +110,9 @@ const DOC_UPLOAD_MAX_BYTES = Number(process.env.PT_DOC_UPLOAD_MB || 5) * 1024 * 
 const DOC_CONTEXT_MAX_CHARS = Number(process.env.PT_DOC_CONTEXT_CHARS || 100000);
 const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv"]);
 
+// ---- 视频/音频上传（mp4/webm/mov/mp3/wav/m4a；单文件上限默认 50MB，PT_MEDIA_UPLOAD_MB 覆盖）----
+const MEDIA_UPLOAD_MAX_BYTES = Number(process.env.PT_MEDIA_UPLOAD_MB || 50) * 1024 * 1024;
+
 let auth = null;                 // 身份库句柄
 let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
@@ -257,6 +260,27 @@ function decodeTextBuffer(buf) {
   }
 }
 
+/** 按文件内容魔数识别视频/音频真实类型（不信任扩展名），返回 { kind, ext } 或 null。 */
+function detectMediaType(buf) {
+  if (!buf || buf.length < 12) return null;
+  const ascii = (o, n) => buf.toString("ascii", o, o + n);
+  // WebM：EBML 头 1A 45 DF A3
+  if (buf[0] === 0x1a && buf[1] === 0x45 && buf[2] === 0xdf && buf[3] === 0xa3) return { kind: "video", ext: "webm" };
+  // WAV：RIFF .... WAVE
+  if (ascii(0, 4) === "RIFF" && ascii(8, 4) === "WAVE") return { kind: "audio", ext: "wav" };
+  // MP3：ID3 头或帧同步头（0xFF 后接 3 位同步 111）
+  if (ascii(0, 3) === "ID3") return { kind: "audio", ext: "mp3" };
+  if (buf[0] === 0xff && (buf[1] & 0xe0) === 0xe0) return { kind: "audio", ext: "mp3" };
+  // MP4 家族（ISO BMFF）：第 4 字节起为 ftyp，brand 区分 mp4 / mov / m4a
+  if (ascii(4, 4) === "ftyp") {
+    const brand = ascii(8, 4);
+    if (brand === "qt  ") return { kind: "video", ext: "mov" };
+    if (brand === "M4A " || brand === "M4B ") return { kind: "audio", ext: "m4a" };
+    return { kind: "video", ext: "mp4" };
+  }
+  return null;
+}
+
 /** 把本租户的文档 URL 读成正文并拼成上下文说明（累计字符上限 DOC_CONTEXT_MAX_CHARS）。 */
 function docsToNote(urls, tenantId) {
   const items = (Array.isArray(urls) ? urls : []).map((u) => String(u == null ? "" : u).trim()).filter(Boolean);
@@ -373,6 +397,27 @@ async function handleChat(req, res, me, body) {
     }
   }
 
+  // 视频/音频附件：前端发来的是 [{ type, url }] 对象数组（气泡里要区分视频/音频），
+  // 与 documents 的纯 URL 字符串数组不同。模型无法解析音视频内容，后端只做归属校验并注入提示，
+  // 不读取正文（URL 本身也不下发给模型）。
+  const mediaAttachments = Array.isArray(body.media)
+    ? body.media
+        .map((m) => {
+          if (!m || typeof m !== "object") return null;
+          const url = String(m.url == null ? "" : m.url).trim();
+          const typeRaw = String(m.type != null ? m.type : m.kind).trim().toLowerCase();
+          const type = typeRaw === "video" || typeRaw === "audio" ? typeRaw : null;
+          return url && type ? { type, url } : null;
+        })
+        .filter(Boolean)
+    : [];
+  for (const att of mediaAttachments) {
+    const m = /^\/uploads\/([^/?#]+)\/([^/?#]+)$/.exec(att.url);
+    if (!m || m[1] !== me.tenant.id || !/^[A-Za-z0-9._-]+$/.test(m[2])) {
+      return json(res, 400, { ok: false, error: "无法读取该媒体附件（不属于当前租户或文件已失效），请重新上传" });
+    }
+  }
+
   // 素材生成类型（前端聊天框选择，对应 media.route 的 taskType）。
   // 不传 / 非法值 = 自动：不在提示里强加生成指令，交给 Agent 自己判断，
   // 免得普通问答被带偏成素材生成。
@@ -421,6 +466,7 @@ async function handleChat(req, res, me, body) {
     const um = { role: "user", text: question, ts: new Date().toISOString() };
     if (image) um.image = image;
     if (documents.length) um.documents = documents;
+    if (mediaAttachments.length) um.media = mediaAttachments;
     messages = messages.concat([um]);
   }
 
@@ -490,6 +536,14 @@ async function handleChat(req, res, me, body) {
     docNote = docsToNote(lastUser.documents, me.tenant.id);
   }
 
+  // 视频/音频附件说明：模型无法解析音视频内容，只加一句提示，避免模型假装「看过/听过」
+  let mediaNote = "";
+  if (lastUser && Array.isArray(lastUser.media) && lastUser.media.length) {
+    mediaNote = "用户这次附带上传了 " + lastUser.media.length +
+      " 个视频/音频附件。这些文件的内容无法被模型解析（既看不到画面也听不到声音），" +
+      "请不要假装已经查看或听懂它们，也不要虚构其中内容；如果用户的问题依赖这些附件，请如实说明你无法解析其内容。";
+  }
+
   // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -518,6 +572,7 @@ async function handleChat(req, res, me, body) {
     memory: memText,
     imageNote,
     docNote,
+    mediaNote,
     context,
     capabilities,
     constraints,
@@ -1150,6 +1205,36 @@ async function handle(req, res) {
     const abs = path.join(dir, name);
     fs.writeFileSync(abs, buf);
     return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs, name, size: buf.length, chars: text.length });
+  }
+
+  // ---- 视频/音频上传（base64 JSON；按魔数校验真实类型；单文件上限 PT_MEDIA_UPLOAD_MB）----
+  if (p === "/api/upload-media" && req.method === "POST") {
+    let body = {};
+    try { body = JSON.parse((await readBody(req, 80 << 20)) || "{}"); } catch (e) {}
+    const b64 = String(body.data || body.content || "").trim();
+    if (!b64) return json(res, 400, { ok: false, error: "缺少媒体数据" });
+    const dm = b64.match(/^data:[^;]*;base64,(.+)$/);
+    const data = dm ? dm[1] : b64;
+    let buf;
+    try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "媒体数据无效" }); }
+    if (!buf.length) return json(res, 400, { ok: false, error: "媒体数据无效" });
+    if (buf.length > MEDIA_UPLOAD_MAX_BYTES) {
+      return json(res, 400, { ok: false, error: "媒体过大（单文件上限 " + Math.round(MEDIA_UPLOAD_MAX_BYTES / 1048576) + "MB）" });
+    }
+    // 按内容魔数校验真实类型（拒绝伪装成视频/音频的其他文件）
+    const media = detectMediaType(buf);
+    if (!media) return json(res, 400, { ok: false, error: "不是有效的视频/音频文件（支持 mp4/webm/mov/mp3/wav/m4a）" });
+    const dir = path.join(RUNTIME, "_uploads", me.tenant.id);
+    fs.mkdirSync(dir, { recursive: true });
+    // 复用租户磁盘配额（默认 100MB，可用 PT_UPLOAD_QUOTA_MB 覆盖）
+    const quotaBytes = Number(process.env.PT_UPLOAD_QUOTA_MB || 100) * 1024 * 1024;
+    let used = 0;
+    try { for (const fn of fs.readdirSync(dir)) { try { used += fs.statSync(path.join(dir, fn)).size; } catch (e) {} } } catch (e) {}
+    if (used + buf.length > quotaBytes) return json(res, 400, { ok: false, error: "上传空间已满（配额 " + Math.round(quotaBytes / 1048576) + "MB）" });
+    const name = crypto.randomBytes(16).toString("hex") + "." + media.ext; // 128 位高熵随机名
+    const abs = path.join(dir, name);
+    fs.writeFileSync(abs, buf);
+    return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs, name, size: buf.length, kind: media.kind, ext: media.ext });
   }
 
   // ---- 面板分享 API（需登录 owner；只读 + 整面板）----

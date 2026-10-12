@@ -342,6 +342,7 @@ function createDshRuntime(opts = {}) {
         memory: spec.memory,
         imageNote: spec.imageNote,
         docNote: spec.docNote,
+        mediaNote: spec.mediaNote,
         history: !warm ? spec.history : undefined,
         question: spec.question,
       });
