@@ -295,9 +295,10 @@ function apply(ctx) {
                     additionalProperties: false,
                   },
                   render: (_args, value) => {
-                    const url = value && value.url;
+                    // 图片/视频本身已通过 media 字段传给前端渲染，文字里不再重复原始链接，
+                    // 避免 AI 把 URL 念出来。只给一句不带链接的简短提示。
                     const label = value && value.label;
-                    return [{ type: "text", text: url ? `已生成${label || ""}，结果地址：${url}` : JSON.stringify(value) }];
+                    return [{ type: "text", text: label ? `已生成${label}` : "已生成" }];
                   },
                 },
                 async execute(args) {
