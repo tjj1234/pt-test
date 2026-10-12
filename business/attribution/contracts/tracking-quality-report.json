@@ -1,0 +1,456 @@
+{
+  "$id": "attribution.tracking-quality-report.v1",
+  "title": "TrackingQualityAuditReport",
+  "description": "Skill-2 报告事实契约；评分由真实工作区质量统计计算，禁止凭空补全核心事件覆盖。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "outputType",
+    "title",
+    "template",
+    "workspaceId",
+    "generatedAt",
+    "scoreBar",
+    "kv",
+    "issuesTable",
+    "recommendations",
+    "source",
+    "coverage",
+    "limitations",
+    "interpretation"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "tracking-quality-report.v1"
+    },
+    "outputType": {
+      "const": "report"
+    },
+    "title": {
+      "type": "string"
+    },
+    "template": {
+      "const": "saas_token_marketplace"
+    },
+    "workspaceId": {
+      "type": "string"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "scoreBar": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "max",
+        "status",
+        "label",
+        "method",
+        "components"
+      ],
+      "properties": {
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 100
+        },
+        "max": {
+          "const": 100
+        },
+        "status": {
+          "enum": [
+            "insufficient_data",
+            "healthy",
+            "attention",
+            "high_risk"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string"
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "label",
+              "weight",
+              "numerator",
+              "denominator",
+              "deduction"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "weight": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "numerator": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "denominator": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "deduction": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "minimum": 0,
+                "maximum": 100
+              }
+            }
+          }
+        }
+      }
+    },
+    "kv": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "key",
+          "label",
+          "value",
+          "unit"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "unit": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "issuesTable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "columns",
+        "rows"
+      ],
+      "properties": {
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "key",
+              "label"
+            ],
+            "properties": {
+              "key": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "severity",
+              "title",
+              "evidence",
+              "impact"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "severity": {
+                "enum": [
+                  "high",
+                  "medium"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "evidence": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "metric",
+                  "count",
+                  "denominator",
+                  "ratio",
+                  "summary"
+                ],
+                "properties": {
+                  "metric": {
+                    "type": "string"
+                  },
+                  "count": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "denominator": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "ratio": {
+                    "type": [
+                      "number",
+                      "null"
+                    ],
+                    "minimum": 0,
+                    "maximum": 1
+                  },
+                  "summary": {
+                    "type": "string"
+                  }
+                }
+              },
+              "impact": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "issueId",
+          "priority",
+          "action",
+          "verification"
+        ],
+        "properties": {
+          "issueId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "priority": {
+            "enum": [
+              "P1",
+              "P2"
+            ]
+          },
+          "action": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "scope",
+        "window",
+        "snapshot"
+      ],
+      "properties": {
+        "kind": {
+          "const": "ingestion-quality-stats"
+        },
+        "scope": {
+          "const": "workspace"
+        },
+        "window": {
+          "type": "string"
+        },
+        "snapshot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "workspaceId",
+            "totalAdapted",
+            "ignored",
+            "unmappedEventCount",
+            "eventIdQuality",
+            "timestampFallback",
+            "mappedViaConfig",
+            "updatedAt"
+          ],
+          "properties": {
+            "workspaceId": {
+              "type": "string"
+            },
+            "totalAdapted": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "ignored": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "unmappedEventCount": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "eventIdQuality": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "client_native_unique",
+                "adapter_fallback",
+                "client_native_ratio"
+              ],
+              "properties": {
+                "client_native_unique": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "adapter_fallback": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "client_native_ratio": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            },
+            "timestampFallback": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "count",
+                "ratio",
+                "client_count"
+              ],
+              "properties": {
+                "count": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "ratio": {
+                  "type": [
+                    "number",
+                    "null"
+                  ],
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "client_count": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "mappedViaConfig": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "updatedAt": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        }
+      }
+    },
+    "coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "expectedEvents",
+        "reason"
+      ],
+      "properties": {
+        "status": {
+          "const": "not_assessed"
+        },
+        "expectedEvents": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reason": {
+          "type": "string"
+        }
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "interpretation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "instruction"
+      ],
+      "properties": {
+        "mode": {
+          "const": "backend_rules"
+        },
+        "instruction": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
