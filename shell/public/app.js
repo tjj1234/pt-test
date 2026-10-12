@@ -1843,8 +1843,8 @@ function impOnEnter() {
 
 /* ---- M-UI-B：仅业务流库、用量日志与上传记录。?m-ui-b=mock 显式演示；
  * M1 未上线时仅 404/501 使用标注的示例数据，401/403/故障不会伪装成成功。
- * U5 路径交付后填 #v-flows .page[data-onboarding-path]。
- * enabled-count 契约尚未交付，启用状态暂为独立 mock，不代表真实接入状态。
+ * 启用状态已接真实接口 GET /api/workspaces/enabled-status（见 bizLoadFlowStatus），
+ * 不再是写死的示例状态；#v-flows .page[data-onboarding-path] 仍留作外部跳转覆盖。
  * 上传记录沿用 U4 的 import API、字段和状态语义，上传复用现有 impOnEnter。
  */
 const bizMock = new URLSearchParams(location.search).get("m-ui-b") === "mock";
@@ -1873,7 +1873,7 @@ function bizTable(host, headers, rows) {
 let bizFlowsRequest = 0;
 async function bizLoadFlows() {
   const seq = ++bizFlowsRequest; $("#toolsStatus").textContent = "读取工具…";
-  $("#flowStatus").textContent = "未启用 · 示例状态（启用查询待接入）";
+  bizLoadFlowStatus();   // 启用状态走独立接口，与工具列表并行、互不阻塞
   try {
     const result = await bizRead("/api/tools", () => bizToolSamples);
     if (seq !== bizFlowsRequest) return;
@@ -1893,10 +1893,58 @@ async function bizLoadFlows() {
     });
   } catch (e) { if (seq === bizFlowsRequest) { $("#toolsList").replaceChildren(); $("#toolsStatus").textContent = e.message; } }
 }
+/* ---- 业务流库的「启用状态」：真实查询，不再写死示例值 ----
+ * 权威信号是业务线 A16 落地的 firstConnectedAt（非空 = 真的接入过广告归因数据），
+ * 由基座 GET /api/workspaces/enabled-status 归一化成 features.attributionEnabled：
+ *   { ok, workspaceId, features: { attributionEnabled: bool }, firstConnectedAt, updatedAt }
+ * 故障（502 业务线不可用 / 503 内部密钥没配 / 401 没登录）只说「读不到」，
+ * 绝不显示成「未启用」——后者会让用户误以为自己没接入过。 */
+let bizFlowStatusRequest = 0;
+let bizAttributionEnabled = null;   // true / false / null（还没读到或读失败）
+function bizFlowStatusSample() {
+  return { ok: true, workspaceId: "mock", features: { attributionEnabled: false }, firstConnectedAt: null };
+}
+async function bizLoadFlowStatus() {
+  const seq = ++bizFlowStatusRequest;
+  const statusEl = $("#flowStatus"), hintEl = $("#flowHint"), btn = $("#flowEnable");
+  statusEl.textContent = "读取启用状态…";
+  bizAttributionEnabled = null;
+  if (btn) btn.textContent = "启用";
+  try {
+    // 只有 ?m-ui-b=mock 才用示例；404/501 不再回落假数据，免得把「接口没交付」说成「未启用」
+    const result = bizMock
+      ? { data: bizFlowStatusSample(), mock: true }
+      : await bizRead("/api/workspaces/enabled-status", null);
+    if (seq !== bizFlowStatusRequest) return;
+    const features = result.data && result.data.features;
+    if (!features || typeof features.attributionEnabled !== "boolean") throw new Error("启用状态接口返回格式不正确");
+    bizAttributionEnabled = features.attributionEnabled;
+    statusEl.textContent = (result.mock ? "示例状态 · " : "")
+      + (bizAttributionEnabled
+        ? "已启用 · 首次接入 " + (fmtTime(result.data.firstConnectedAt) || "—")
+        : "未启用 · 还没有接入广告归因数据");
+    if (btn) btn.textContent = bizAttributionEnabled ? "去归因面板" : "启用";
+    hintEl.textContent = "";
+  } catch (e) {
+    if (seq !== bizFlowStatusRequest) return;
+    bizAttributionEnabled = null;
+    statusEl.textContent = "启用状态暂时读不到";
+    hintEl.textContent = (e && e.message) ? e.message : "读取失败，请刷新重试";
+    if (btn) btn.textContent = "启用";
+  }
+}
 $("#flowEnable").addEventListener("click", () => {
+  // data-onboarding-path 仍作外部覆盖：填了合法绝对路径就跳过去（将来若挂 U5 向导整页）
   const path = $("#v-flows .page").dataset.onboardingPath;
-  if (path && path.startsWith("/") && !path.startsWith("//")) location.assign(path);
-  else $("#flowHint").textContent = "首次接入向导入口待接通；当前尚未启用广告归因分析。";
+  if (path && path.startsWith("/") && !path.startsWith("//")) { location.assign(path); return; }
+  if (bizAttributionEnabled === null) {
+    $("#flowHint").textContent = "启用状态还没读到，先点「刷新」重试，再决定要不要启用。";
+    return;
+  }
+  // 未启用 → 去本应用内建的「广告数据导入」页完成首次接入
+  //   （同一套 import API，导入确认后写 firstConnectedAt，启用状态随后自动变「已启用」）
+  // 已启用 → 直达归因面板看数据
+  switchView(bizAttributionEnabled ? "dash" : "import");
 });
 $("#toolsRetry").addEventListener("click", bizLoadFlows);
 let bizUsageRange = "today", bizUsageRequest = 0;
