@@ -21,6 +21,32 @@ function validateArgs(a) {
  if (/^\d{4}-/.test(d.startDate)&&/^\d{4}-/.test(d.endDate)&&d.startDate>d.endDate) throw fail('INVALID_QUERY');
  return a;
 }
+/** 所有格式均提供模型可读数字；GA totals 优先，局部行合计不可冒充全量指标。 */
+function metricSummary(a,r,rows) {
+ const offset=(a.dimensions||[]).length;
+ const numeric=value=> {
+  if(typeof value!=='string'||!/^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/.test(value)||!Number.isFinite(Number(value))) throw fail('GOOGLE_BAD_RESPONSE',502);
+  return Number(value);
+ };
+ const totals=r.totals||[];
+ if(!Array.isArray(totals)||totals.length>1) throw fail('GOOGLE_BAD_RESPONSE',502);
+ const values=totals.length?totals[0].metricValues:null;
+ if(values&&(!Array.isArray(values)||values.length!==a.metrics.length)) throw fail('GOOGLE_BAD_RESPONSE',502);
+ if(totals.length&&!values) throw fail('GOOGLE_BAD_RESPONSE',502);
+ const summary=[['汇总口径',values?'GA Data API TOTAL 聚合（完整查询结果）；非可加指标以 GA 聚合口径为准':rows.length?'仅已返回行的算术合计／行均值；非全量、非去重用户数、非日均；比率和均值指标不可视为业务总量':'无数据，未计算汇总']];
+ for(let i=0;i<a.metrics.length;i++) {
+  const nums=rows.map(row=>numeric(row[offset+i]));
+  let value;
+  if(values) { numeric(values[i]?.value); value=values[i].value; }
+  else if(nums.length) {
+   const sum=nums.reduce((s,n)=>s+n,0);
+   if(!Number.isFinite(sum)) throw fail('GOOGLE_BAD_RESPONSE',502);
+   value=`已返回行合计 ${Number(sum.toPrecision(12))}；行均值 ${Number((sum/nums.length).toPrecision(12))}`;
+  } else value='无数据（不等于0）';
+  summary.push(['汇总 · '+a.metrics[i],values?'GA TOTAL '+value:value]);
+ }
+ return summary;
+}
 function createGaConnector({store,google,now=Date.now}) {
  return {
   async authorize(t,cookie,property) {
@@ -46,12 +72,13 @@ function createGaConnector({store,google,now=Date.now}) {
    const a=validateArgs(args),connection=await store.get(t);
    if (!connection) throw fail('GA_AUTHORIZATION_REQUIRED',409);
    const token=await google.refresh(connection.refreshToken);
-   const r=await google.runReport(connection.property,token.access_token,{metrics:a.metrics.map(name=>({name})),dimensions:(a.dimensions||[]).map(name=>({name})),dateRanges:[a.dateRange],limit:'10000'});
+   const r=await google.runReport(connection.property,token.access_token,{metrics:a.metrics.map(name=>({name})),dimensions:(a.dimensions||[]).map(name=>({name})),dateRanges:[a.dateRange],limit:'10000',metricAggregations:['TOTAL']});
    const head=[...(r.dimensionHeaders||[]),...(r.metricHeaders||[])].map(h=>h.name);
    if (head.join('\0')!==[...(a.dimensions||[]),...a.metrics].join('\0')) throw fail('GOOGLE_BAD_RESPONSE',502);
    const rows=(r.rows||[]).map(row=>[...(row.dimensionValues||[]),...(row.metricValues||[])].map(v=>v.value));
    if (rows.some(row=>row.length!==head.length||row.some(v=>typeof v!=='string'))) throw fail('GOOGLE_BAD_RESPONSE',502);
    const report={title:'Google Analytics 4 查询',meta:`property ${connection.property} · ${a.dateRange.startDate} ~ ${a.dateRange.endDate} · 时区 ${r.metadata?.timeZone||'未返回'} · 返回 ${rows.length}/${r.rowCount||0} 行`,stats:[['数据源','Google Analytics Data API'],['结果',rows.length?'有数据':'无数据'],['总行数',r.rowCount||0],['返回行数',rows.length],['截断',(r.rowCount||0)>rows.length?'是（仅前 10000 行）':'否'],['元数据',JSON.stringify(r.metadata||{})]]};
+   report.stats.push(...metricSummary(a,r,rows));
    if (a.format==='table'&&rows.length) report.table={title:'GA4 数据',head,rows};
    if (a.format!=='table') {
     for (const row of rows) report.stats.push([row.slice(0,(a.dimensions||[]).length).join(' / ')||'指标',a.metrics.map((m,i)=>`${m}: ${row[(a.dimensions||[]).length+i]}`).join(' · ')]);
