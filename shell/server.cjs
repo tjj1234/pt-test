@@ -343,6 +343,11 @@ async function handleChat(req, res, me, body) {
   const conv = await conversations.get(uid, conversationId);
   if (!conv) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
 
+  // 归档对话只读：后端硬拦截（不依赖前端禁用），防止绕开前端直接调接口继续生成
+  if (conv.archived) {
+    return json(res, 409, { ok: false, archived: true, error: "该对话已归档，请先解除归档" });
+  }
+
   let messages = Array.isArray(conv.messages) ? conv.messages : [];
   let question = msgRaw;
 
@@ -540,6 +545,29 @@ async function handleChat(req, res, me, body) {
   // 成功（dry-run 或真实 DSH 输出）
   let reply = r.text;
   let steps = Array.isArray(r.steps) ? r.steps : [];
+  // 任务1：对话内 DSH 调用不经过 /api/tools/:name/execute，这里把本轮真实用到的工具补写进 tool_calls 表
+  if (toolCalls && !DRY_RUN_CHAT) {
+    try {
+      for (const step of steps) {
+        if (!step || !step.name) continue;
+        const { id } = await toolCalls.start({
+          tenantId: me.tenant.id,
+          workspaceId: "ws_" + me.tenant.id,
+          userId: uid,
+          toolName: String(step.name),
+          inputSummary: step.args != null ? String(step.args) : "",
+        });
+        await toolCalls.finish(id, {
+          outputSummary: step.result != null ? String(step.result) : "",
+          durationMs: 0,
+          tokenCount: 0,
+          status: step.isError === true ? "failed" : "completed",
+        });
+      }
+    } catch (e) {
+      log.error("tool_calls.log_failed", { error: e && e.message ? e.message : String(e) });
+    }
+  }
   if (DRY_RUN_CHAT) {
     reply = "[PT_CHAT_DRYRUN 占位回复 #" + (++dryRunSeq) + " @ " + Date.now() + "，非真实 DSH 输出]";
     sse({ delta: reply });
