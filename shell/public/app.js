@@ -2,7 +2,19 @@ const $ = s => document.querySelector(s);
 const chat = $("#chat"), ta = $("#ta"), send = $("#send"), stopBtn = $("#stop"), cm = $("#cm");
 const convListEl = $("#convList"), newBtn = $("#newConv");
 let dashLoaded = false;
-const state = { list: [], activeId: null, loadedId: null, busy: false };
+const state = { list: [], activeId: null, loadedId: null, busy: false, unread: {} };
+
+/**
+ * 某条对话的结果回来了，但界面已经不在它上面 —— 只能在列表里做「有新回复」标记，
+ * 绝不把内容渲染进用户正在看的另一个对话（那会整屏覆盖掉对方的内容）。
+ */
+function markUnread(id) {
+  if (!id || id === state.activeId) return;
+  state.unread[id] = true;
+  renderList();
+}
+/** 界面当前显示的还是不是这条对话（切到别的对话 / 别的页面都不算）。 */
+function isViewing(id) { return !!id && state.activeId === id; }
 
 /* ---- 时间格式化 ---- */
 function fmtTime(ts) {
@@ -240,6 +252,13 @@ function renderList() {
     const sub = document.createElement("div"); sub.className = "conv-sub";
     sub.textContent = (c.preview || "（空对话）") + " · " + fmtShort(c.updated_at);
     item.appendChild(title); item.appendChild(sub);
+    // 这条对话在后台跑完了，但用户当时正在看别的对话 —— 挂个圆点提示「有新回复」
+    if (c.id !== state.activeId && state.unread[c.id]) {
+      const dot = document.createElement("span");
+      dot.className = "conv-dot";
+      dot.title = "有新回复";
+      item.appendChild(dot);
+    }
 
     const menu = document.createElement("button"); menu.className = "conv-menu"; menu.textContent = "⋯";
     menu.title = "更多操作";
@@ -320,6 +339,7 @@ async function refreshList() {
 async function openConversation(id, opts) {
   const force = !!(opts && opts.force);
   state.activeId = id;
+  delete state.unread[id];   // 点进来了，未读标记就没用了
   // 不管这条对话之前是不是已激活，都必须切回对话视图：
   // 否则「开 A → 切到别的页 → 再点 A」时 activeId 还是 A，旧代码会整个跳过 openConversation，
   // 结果停在原来的页面，右侧看起来就像内容没同步。
@@ -416,6 +436,10 @@ function setBusy(b) {
 
 async function runChat(payload) {
   if (state.busy) return;
+  // 这条请求是替哪个对话发的 —— 结果回来时必须跟「界面现在显示的是谁」比对。
+  // 用户在 A 生成期间切到 B：A 的回复只做列表未读标记，绝不渲染进 B（会整屏覆盖 B 的内容）。
+  const targetId = payload.conversationId || state.activeId;
+  const viewing = () => isViewing(targetId);
   setBusy(true);
   const t = thinking();
   const t0 = Date.now();
@@ -442,8 +466,9 @@ async function runChat(payload) {
           const line = frame.split("\n").find((l) => l.indexOf("data: ") === 0);
           if (!line) continue;
           let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
-          if (obj.delta) { acc += obj.delta; streamInto(t, acc); }
-          if (obj.step) {
+          // 打字机和工具步骤只画在「用户当前正在看的那条对话」上
+          if (obj.delta && viewing()) { acc += obj.delta; streamInto(t, acc); }
+          if (obj.step && viewing()) {
             const live = t.querySelector(".steps-live");
             if (live) {
               const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
@@ -455,6 +480,8 @@ async function runChat(payload) {
           if (obj.done) {
             gotDone = true;
             clearInterval(tick); t.remove();
+            // 界面已经不在目标对话上了：只标未读 + 刷列表，一个字都不写进当前视图
+            if (!viewing()) { markUnread(targetId); await refreshList(); return; }
             if (obj.stopped) { renderChat(obj.messages); showStoppedBar(); cm.textContent = "已停止"; }
             else if (obj.ok) { renderChat(obj.messages); cm.textContent = "第 " + obj.turns + " 轮 · 常驻 agent 会话续接"; }
             else { if (Array.isArray(obj.messages)) renderChat(obj.messages); else bubbleSys("执行失败：" + (obj.error || "")); cm.textContent = ""; }
@@ -463,11 +490,18 @@ async function runChat(payload) {
         }
       }
       // 保险：流异常结束却没收到 done
-      if (!gotDone) { clearInterval(tick); t.remove(); if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() }); }
+      if (!gotDone) {
+        clearInterval(tick); t.remove();
+        if (!viewing()) { markUnread(targetId); await refreshList(); return; }
+        if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+        await refreshList();
+      }
     } else {
       // 非流式（预检错误 / needKey / busy 等 JSON）
       const j = await r.json().catch(() => null);
       clearInterval(tick); t.remove();
+      // 界面已切走：结果也好、报错也好，都只标未读，不往别的对话里插气泡
+      if (!viewing()) { markUnread(targetId); await refreshList(); return; }
       if (!r.ok && r.status === 409 && j && j.needKey) {
         needKeyBubble(); cm.textContent = "";
       } else if (!r.ok && r.status === 409 && j && j.busy) {
@@ -486,7 +520,9 @@ async function runChat(payload) {
       await refreshList();
     }
   } catch (x) {
-    clearInterval(tick); t.remove(); bubbleSys("请求出错：" + x.message); cm.textContent = "";
+    clearInterval(tick); t.remove();
+    if (!viewing()) { await refreshList(); return; }
+    bubbleSys("请求出错：" + x.message); cm.textContent = "";
   } finally {
     setBusy(false);
   }
@@ -997,18 +1033,18 @@ async function resumePendingUse() {
   if (st && st.connected) gotoChatWithQuestion(q);
 }
 
-// 跳回对话并把示例问题预填进输入框（不自动发送，用户确认后再发）
-function gotoChatWithQuestion(q) {
-  const fill = () => {
-    switchView("chat");
-    if (q) ta.value = q;
-    ta.focus();
-    ta.style.height = "auto";
-    ta.style.height = Math.min(ta.scrollHeight, 170) + "px";
-  };
-  if (state.activeId) fill();
-  else if (state.list && state.list.length) openConversation(state.list[0].id).then(fill, fill);
-  else newConversation().then(fill, fill);
+// 跳到一个**新开的**对话并把示例问题预填进输入框（不自动发送，用户确认后再发）
+// 以前只要 state.activeId 非空就复用当前对话，结果技能「去使用」几乎永远不会真的开新对话，
+// 问题被默默塞进一个可能完全无关的旧对话里。现在总是新开：
+// newConversation 内部会先复用一条「一条消息都没发过」的空对话，不会堆出一串空记录。
+async function gotoChatWithQuestion(q) {
+  const id = await newConversation();
+  if (!id) { bubbleSys("无法新建对话，请稍后重试"); return; }
+  switchView("chat");
+  if (q) ta.value = q;
+  ta.focus();
+  ta.style.height = "auto";
+  ta.style.height = Math.min(ta.scrollHeight, 170) + "px";
 }
 
 /* 连接区块：
