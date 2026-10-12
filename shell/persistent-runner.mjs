@@ -195,14 +195,31 @@ function apply(ctx) {
               // M1 探针：注册一个与业务线无关的 demo 工具，验证「对话 → 真实 tool/call → tool/result」链路
               agentCtx.tools.register(defineTool({
                 name: "get_current_time",
-                description: "返回当前精确时间（ISO 8601 字符串）。当用户询问「现在几点 / 当前时间」时使用此工具。",
+                description: "返回当前精确时间、本地日期和星期几。当用户询问「现在几点 / 今天日期 / 今天星期几 / 当前时间」时使用此工具。",
                 parameters: {},
                 output: {
-                  schema: { type: "object", properties: { now: { type: "string" } }, additionalProperties: false },
-                  render: (_args, value) => [{ type: "text", text: String(value.now) }],
+                  schema: {
+                    type: "object",
+                    properties: {
+                      now: { type: "string", description: "ISO 8601 UTC 时间" },
+                      localDate: { type: "string", description: "本地日期 YYYY-MM-DD" },
+                      weekday: { type: "string", description: "本地星期几（如 星期六）" },
+                    },
+                    additionalProperties: false,
+                  },
+                  render: (_args, value) => {
+                    const parts = [value.localDate, value.weekday, value.now].filter((v) => v);
+                    return [{ type: "text", text: parts.join(" ") }];
+                  },
                 },
                 async execute() {
-                  return { now: new Date().toISOString() };
+                  // 服务端直接算好「本地日期 + 星期几」返回，避免模型拿 UTC 时间戳自行心算星期
+                  // 导致时区/星期换算错误（此前「今天星期几」答错的根因）。
+                  const d = new Date();
+                  const WEEKDAYS = ["星期日", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"];
+                  const pad = (n) => String(n).padStart(2, "0");
+                  const localDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+                  return { now: d.toISOString(), localDate, weekday: WEEKDAYS[d.getDay()] };
                 },
               }));
 

@@ -514,6 +514,44 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   padding:13px 16px;font-size:13px;color:#7a5b12;
 }
 
+/* ---------- 技能详情（卡片 → 详情 → 去使用 / 连接引导） ---------- */
+.card.clickable{cursor:pointer}
+.card.clickable:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.skill-detail{max-width:1000px;margin:14px auto 0}
+.sd-card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:20px}
+.sd-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sd-head h3{margin:0;font-size:16px;font-weight:600}
+.sd-back{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 12px;
+  font-size:12.5px;color:var(--text-2);cursor:pointer}
+.sd-back:hover{border-color:var(--brand);color:var(--brand)}
+.sd-desc{margin:10px 0 0;font-size:13px;line-height:1.75;color:var(--text-2)}
+.sd-connector{margin-top:16px;background:var(--bg-soft);border:1px solid var(--line);
+  border-radius:10px;padding:14px 16px}
+.sd-conn-line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.sd-badge{font-size:11.5px;padding:2px 9px;border-radius:999px;background:#e8f7ee;color:var(--ok)}
+.sd-conn-tip{font-size:12.5px;color:var(--text-2);margin:0}
+.sd-conn-sub{font-size:11.5px;color:var(--text-3);margin:6px 0 0}
+.sd-conn-kv{display:flex;flex-wrap:wrap;gap:6px 18px;margin-top:10px;font-size:12.5px}
+.sd-conn-k{color:var(--sub)}
+.sd-conn-v{font-family:ui-monospace,Consolas,monospace;color:var(--text-1)}
+.sd-conn-btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:12px}
+.sd-conn-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px}
+.sd-prop{flex:1 1 240px;min-width:200px;padding:8px 12px;border:1px solid var(--line);
+  border-radius:8px;font-size:13px;background:#fff;color:var(--text-1)}
+.sd-prop:focus{outline:none;border-color:var(--brand)}
+.sd-btn{padding:8px 14px;border:1px solid var(--line);background:#fff;border-radius:8px;
+  font-size:13px;color:var(--text-1);cursor:pointer}
+.sd-btn:hover{border-color:var(--brand)}
+.sd-btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.sd-btn.danger{background:#fff;border-color:var(--bad);color:var(--bad)}
+.sd-btn.danger:hover{background:var(--bad);color:#fff}
+.sd-btn[disabled]{opacity:.55;cursor:default}
+.sd-err{margin-top:8px;font-size:12.5px;color:var(--bad)}
+.sd-actions{margin-top:16px;display:flex;gap:10px}
+.sd-use{padding:9px 20px;border:0;border-radius:8px;background:var(--brand);color:#fff;
+  font-size:13.5px;cursor:pointer}
+.sd-use:hover{background:#000}
+
 /* ---------- 搜索 ---------- */
 .search-wrap{position:relative;flex:0 1 320px;min-width:180px}
 .search-wrap input{
@@ -588,13 +626,6 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   cursor:pointer;font-size:14px;line-height:1;
 }
 .bubimg{display:block;max-width:220px;max-height:180px;border-radius:9px;margin-bottom:6px}
-/* 聊天气泡内返回的媒体（图片/视频）：限制最大宽度，避免撑破气泡；区别于用户上传缩略图 .bubimg */
-.bubmedia{display:block;max-width:min(420px,92%);height:auto;border-radius:10px;margin:4px 0;background:#000}
-.bubvideo{background:#000}
-/* 媒体加载失败兜底：替换破图标/空白，文案含类型与失败 URL，便于排查 */
-.bubmedia-fallback{display:block;max-width:min(420px,92%);box-sizing:border-box;padding:10px 12px;margin:4px 0;border:1px dashed var(--line,#d8d8d8);border-radius:10px;background:#fafafa;color:var(--sub,#888);font-size:13px;line-height:1.5;word-break:break-all}
-.bubmedia-fallback-msg{display:block;font-weight:600;color:var(--text-1,#555)}
-.bubmedia-fallback-url{display:block;margin-top:4px;font-size:12px;color:var(--sub,#aaa);word-break:break-all}
 .bubtext{display:block;white-space:pre-wrap;word-break:break-word}
 
 /* ---------- 记忆 ---------- */

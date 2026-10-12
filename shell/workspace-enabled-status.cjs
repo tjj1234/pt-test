@@ -56,6 +56,36 @@ function queryBusinessWorkspace({ internalKey, dashPort, tenantId, host = "127.0
 }
 
 /**
+ * 内部调用业务线只读接口 GET /api/business/ga-connector/status，返回 { statusCode, body }。
+ * 与 queryBusinessWorkspace 同一套 HMAC 鉴权 + HTTP 直连模式，不 import 业务线模块、不读业务库。
+ */
+function queryGaConnectorStatus({ internalKey, dashPort, tenantId, host = "127.0.0.1", timeoutMs = 10000 }) {
+  return new Promise((resolve, reject) => {
+    const path = "/api/business/ga-connector/status";
+    const token = computeAnalyticsToken(internalKey, tenantId);
+    const req = http.request({
+      host,
+      port: dashPort,
+      path,
+      method: "GET",
+      headers: {
+        host: host + ":" + dashPort,
+        authorization: "Bearer " + token,
+        accept: "application/json",
+      },
+    }, (res) => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", (c) => { data += c; });
+      res.on("end", () => resolve({ statusCode: res.statusCode, body: data }));
+    });
+    req.on("error", (err) => reject(err));
+    req.setTimeout(timeoutMs, () => req.destroy(Object.assign(new Error("ga connector status query timeout"), { code: "TIMEOUT" })));
+    req.end();
+  });
+}
+
+/**
  * 把业务线返回体归一化为可扩展的「业务线启用状态」。
  * 输入：{ ok, workspace: { workspaceId, firstConnectedAt, updatedAt } }（或 JSON 字符串）
  * 输出：
@@ -86,4 +116,4 @@ function normalizeEnabledStatus(raw) {
   };
 }
 
-module.exports = { computeAnalyticsToken, queryBusinessWorkspace, normalizeEnabledStatus };
+module.exports = { computeAnalyticsToken, queryBusinessWorkspace, normalizeEnabledStatus, queryGaConnectorStatus };

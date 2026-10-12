@@ -8,23 +8,24 @@ llm-pi-ai:
       apiKeyEnv: POWERTOKENS_API_KEY
       api: openai-completions
       baseURL: https://api.powertokens.ai/v1
-      # 多模态(图片)输入:声明网关下所有手写模型默认接受 text+image,
-      # 否则 pi-ai 会把未声明能力的模型按纯文本处理,图片附件不会发送。
-      # 仅当消息真正附带图片时才会按 image 处理;纯文本对话不受影响。
-      # 若个别模型实际不接受图片,请求会在该模型上被网关拒绝(可换模型或去掉此键)。
-      defaultInput: [ text, image ]
+      # 多模态能力核实结论（2026-10-10，已核对 PT 网关 /v1/models 的 supported_endpoint_types 与官方文档）：
+      # 当前手写对话模型里没有任何一个原生支持图片输入——
+      #   · deepseek-v4-pro / deepseek-v3-2-251201：纯文本（DeepSeek 官方视觉模型是
+      #     deepseek-flash / 已下线的 deepseek-v4-flash-vision-exp，均不在本网关）
+      #   · glm-4.5-air / glm-4.7(-flash) / glm-5 / glm-5-turbo / glm-5.1 / glm-5.2：纯文本
+      #     （智谱视觉模型 glm-5v-turbo / glm-5.3-flash / glm-5.3-flashx 均不在本网关）
+      # 因此如实声明 [ text ]，不再用 provider 级 defaultInput:[text,image] 一刀切假设所有模型能收图。
+      # 图片生成/编辑不依赖对话模型视觉，统一走 media.route 工具 + 文本 imageNote。
+      defaultInput: [ text ]
+      # 仅保留真正支持多轮对话的文本大模型（依据 /v1/models 的 supported_endpoint_types 含
+      # anthropic/openai-response 判定为对话模型）。图片/视频/音频/TTS/生成类模型
+      # （seedream/seedance/kling/wan/hailuo/speech/happyhorse/viduq/mimo/qwen-image 等）
+      # 不在此列，它们只由 media.route 内部程序化选用。
       models:
         - id: MiniMax-M3
           name: MiniMax M3
-        - id: audio1.0
         - id: deepseek-v3-2-251201
-        - id: deepseek-v4-flash
         - id: deepseek-v4-pro
-        - id: dola-seedream-5-0-pro-260628
-        - id: dreamina-seedance-2-0-260128
-        - id: dreamina-seedance-2-0-fast-260128
-        - id: dreamina-seedance-2-0-mini-260615
-        - id: dreamina-seedance-2-5-260628
         - id: glm-4.5-air
         - id: glm-4.7
         - id: glm-4.7-flash
@@ -32,31 +33,12 @@ llm-pi-ai:
         - id: glm-5-turbo
         - id: glm-5.1
         - id: glm-5.2
-        - id: happyhorse-1.1-i2v
-        - id: happyhorse-1.1-r2v
-        - id: happyhorse-1.1-t2v
-        - id: image-01
-        - id: kling-image-o1
-        - id: kling-v2
-        - id: kling-v2-1-master
-        - id: kling-v2-5-turbo
-        - id: kling-v2-new
-        - id: kling-v3
-        - id: kling-v3-omni
-        - id: kling-video-o1
-        - id: mimo-v2.5
-        - id: mimo-v2.5-pro
-        - id: MiniMax-Hailuo-02
-        - id: MiniMax-Hailuo-2.3
-        - id: MiniMax-Hailuo-2.3-Fast
         - id: MiniMax-M2.5
         - id: MiniMax-M2.5-highspeed
         - id: MiniMax-M2.7
         - id: MiniMax-M2.7-highspeed
-        - id: qwen-image-2.0-pro
         - id: qwen3-coder-plus
         - id: qwen3-max
-        - id: qwen3-tts-instruct-flash
         - id: qwen3.5-flash
         - id: qwen3.6-plus
         - id: seed-1-6-250915
@@ -65,29 +47,6 @@ llm-pi-ai:
         - id: seed-2-0-lite-260228
         - id: seed-2-0-mini-260215
         - id: seed-2-0-pro-260328
-        - id: seedance-1-0-pro-250528
-        - id: seedance-1-0-pro-fast-251015
-        - id: seedance-1-5-pro-251215
-        - id: seedream-4-0-250828
-        - id: seedream-4-5-251128
-        - id: seedream-5-0-260128
-        - id: speech-02-hd
-        - id: speech-02-turbo
-        - id: speech-2.6-hd
-        - id: speech-2.6-turbo
-        - id: speech-2.8-hd
-        - id: speech-2.8-turbo
-        - id: viduq2
-        - id: viduq3
-        - id: viduq3-pro
-        - id: viduq3-pro-fast
-        - id: viduq3-turbo
-        - id: wan2.1-kf2v-plus
-        - id: wan2.2-kf2v-flash
-        - id: wan2.7-i2v
-        - id: wan2.7-image-pro
-        - id: wan2.7-r2v
-        - id: wan2.7-t2v
 agent-default-model:
   provider: powertokens
   model: deepseek-v4-pro
