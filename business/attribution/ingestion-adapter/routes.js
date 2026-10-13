@@ -101,6 +101,16 @@ function registerIngestionAdapterRoutes(app, opts = {}) {
     return { ok: true, stats: adapter.getQualityStats(ctx.workspaceId) };
   });
 
+  // 只读报告端点：复用业务层纯函数 buildTrackingQualityReport，基于真实 adapter 统计
+  // 生成埋点质量报告。基座 shell / DSH 跨进程通过内部 HMAC 调用此端点，避免各自重复评分逻辑。
+  app.get("/api/business/attribution/ingestion/tracking-quality-report", async (request, reply) => {
+    const ctx = await authContext(request, reply);
+    if (reply.sent) return;
+    const { buildTrackingQualityReport } = require("../skills/tracking-quality-audit");
+    const stats = adapter.getQualityStats(ctx.workspaceId);
+    return { ok: true, report: buildTrackingQualityReport(stats, ctx.workspaceId) };
+  });
+
   return { adapter };
 }
 

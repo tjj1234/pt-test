@@ -104,6 +104,40 @@ function attributionQuality(args, tenantId) {
   });
 }
 
+// tracking_quality_audit 真实 executor：GET /api/business/attribution/ingestion/tracking-quality-report
+// （带 HMAC Authorization），返回 report（outputType=report）。
+function trackingQualityAudit(tenantId) {
+  const internalKey = process.env.PT_DASH_INTERNAL_KEY || "";
+  const dashPort = Number(process.env.DASH_PORT || 0);
+  return new Promise((resolve, reject) => {
+    const path = "/api/business/attribution/ingestion/tracking-quality-report";
+    const req = http.request({
+      host: "127.0.0.1",
+      port: dashPort,
+      path,
+      method: "GET",
+      headers: { authorization: "Bearer " + computeAnalyticsToken(internalKey, tenantId), accept: "application/json" },
+    }, (res) => {
+      let data = ""; res.setEncoding("utf8");
+      res.on("data", (c) => { data += c; });
+      res.on("end", () => {
+        try {
+          const body = JSON.parse(data);
+          if (res.statusCode !== 200 || !body || !body.report) {
+            const detail = body && body.error && (body.error.message || body.error.code);
+            reject(new Error("tracking_quality_audit 查询失败：" + (detail || ("HTTP " + res.statusCode))));
+            return;
+          }
+          resolve(body.report);
+        } catch (e) { reject(new Error("tracking_quality_audit 返回非 JSON")); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(20000, () => req.destroy(new Error("tracking_quality_audit 超时")));
+    req.end();
+  });
+}
+
 /**
  * persistent-runner —— 常驻 agent 驱动插件（替代 headless 一次性 runner）。
  * 挂载在 dsh-base 上（无 headless），通过 stdin/stdout 走 JSON-lines 协议：
@@ -384,6 +418,29 @@ function apply(ctx) {
                 async execute(args) {
                   if (!currentTenantId) throw new Error("attribution.quality 需要 tenantId");
                   const report = await attributionQuality(args || {}, currentTenantId);
+                  lastReport = report && typeof report === "object" ? report : null;
+                  return report;
+                },
+              }));
+
+              // tracking_quality_audit：埋点质量 AI 分析，outputType=report，结果透传前端抽屉。
+              agentCtx.tools.register(defineTool({
+                name: "tracking_quality_audit",
+                description: "只读审计当前工作区的真实事件适配统计，按 Token 业务模板（saas_token_marketplace）返回埋点质量评分、问题列表与整改建议；无数据不评高分。当用户询问埋点质量、事件适配质量、事件 ID / 时间戳兜底情况时使用此工具。对应业务 skill「tracking_quality_audit」。",
+                parameters: {
+                  template: { type: "string", enum: ["saas_token_marketplace"], description: "业务模板，本期仅支持 saas_token_marketplace" },
+                },
+                output: {
+                  schema: { type: "object", additionalProperties: true },
+                  render: (_args, value) => {
+                    const title = value && value.title ? value.title : "埋点质量 AI 分析";
+                    const score = value && value.scoreBar && value.scoreBar.value != null ? "；评分 " + value.scoreBar.value : "";
+                    return [{ type: "text", text: title + score }];
+                  },
+                },
+                async execute(args) {
+                  if (!currentTenantId) throw new Error("tracking_quality_audit 需要 tenantId");
+                  const report = await trackingQualityAudit(currentTenantId);
                   lastReport = report && typeof report === "object" ? report : null;
                   return report;
                 },
