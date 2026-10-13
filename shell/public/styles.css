@@ -382,6 +382,21 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 }
 .doc-chip .doc-del:hover,.attach-chip .attach-del:hover{color:#a31b1b}
 
+/* 上传中的媒体胶囊：底下挂一条进度条 + 百分比 + 剩余时间。
+   几十 MB 的文件要传好几秒，没有这个只能盯着空白等。 */
+.media-chip.uploading{flex-wrap:wrap;background:#fff;border-color:var(--line)}
+.media-chip .mc-prog{
+  flex:0 0 100%;height:3px;border-radius:2px;background:#ededed;overflow:hidden;
+}
+.media-chip .mc-prog-fill{
+  height:100%;width:0;background:#1a1a1a;border-radius:2px;
+  transition:width .2s linear;
+}
+.media-chip .mc-prog-txt{
+  flex:0 0 100%;font-size:11px;line-height:1.4;color:var(--text-3);
+  font-variant-numeric:tabular-nums;   /* 数字等宽，跳百分比时不抖 */
+}
+
 /* 输入区提示条：上传失败原因 / 成功回执，比 alert 清楚也不打断输入 */
 .composer-notice{
   max-width:780px;margin:8px auto 0;display:flex;align-items:flex-start;gap:6px;
@@ -687,6 +702,38 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 .bubimg{display:block;max-width:220px;max-height:180px;border-radius:9px;margin-bottom:6px}
 /* 气泡里的音频播放器：<audio> 默认宽度不跟气泡走，这里拉成块级并给个上限 */
 .bubmedia.bubaudio{display:block;width:100%;max-width:360px;margin-bottom:6px}
+
+/* ---- 气泡里的媒体播放器统一装个框 ----
+ * 之前 .bubmedia 一条规则都没有，浏览器原生控件直接裸奔在气泡里：
+ * 没圆角、没底色、尺寸也不受控（宽视频会把气泡撑变形）。 */
+.bubmedia{display:block;max-width:100%;margin:0 0 6px}
+.bubmedia.bubvideo{
+  width:100%;max-width:420px;
+  aspect-ratio:16/9;              /* 没拿到 metadata 之前也保持 16:9，避免加载时高度抖 */
+  border-radius:10px;background:#000;object-fit:contain;overflow:hidden;
+}
+.bubmedia.bubaudio{max-width:360px;height:36px}
+
+/* 已附加媒体的预览：视频首帧缩略图 / 音频波形 / 时长 */
+.media-chip .mc-thumb{
+  position:relative;width:44px;height:26px;flex-shrink:0;
+  border-radius:4px;overflow:hidden;background:#1a1a1a;
+}
+.media-chip .mc-thumb img{display:block;width:100%;height:100%;object-fit:cover}
+.media-chip .mc-dur{
+  position:absolute;right:2px;bottom:2px;padding:0 3px;border-radius:3px;
+  background:rgba(0,0,0,.72);color:#fff;font-size:10px;line-height:14px;
+  font-variant-numeric:tabular-nums;
+}
+.media-chip .mc-wave{
+  display:flex;align-items:flex-end;gap:1px;width:56px;height:20px;flex-shrink:0;
+}
+.media-chip .mc-wave i{
+  display:block;flex:1;min-width:1px;background:#b8b8b8;border-radius:1px;
+}
+.media-chip .mc-durtext{
+  font-size:11px;color:var(--text-3);font-variant-numeric:tabular-nums;flex-shrink:0;
+}
 .bubtext{display:block;white-space:pre-wrap;word-break:break-word}
 
 /* ---------- 记忆 ---------- */
