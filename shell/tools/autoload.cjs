@@ -117,6 +117,25 @@ function buildAttributionQualityExecutor({ internalKey, dashPort }) {
   return attribution.quality.buildAttributionQualityExecutor({ internalKey, dashPort });
 }
 
+/** tracking_quality_audit 真实 executor：调只读报告端点（真实 adapter 统计 + 业务层纯函数评分）。 */
+function buildTrackingQualityAuditExecutor({ internalKey, dashPort }) {
+  return async function trackingQualityAuditExecutor(args, context) {
+    const tenantId = context && context.tenantId;
+    if (!tenantId) throw new Error("tracking_quality_audit 需要 tenantId");
+    const resp = await internalGet({
+      internalKey,
+      dashPort,
+      tenantId,
+      path: "/api/business/attribution/ingestion/tracking-quality-report",
+    });
+    const payload = unwrapResponse(resp, "tracking_quality_audit");
+    if (!payload || !payload.report || typeof payload.report !== "object") {
+      throw Object.assign(new Error("tracking_quality_audit 返回缺少 report"), { code: "BAD_RESPONSE" });
+    }
+    return payload.report;
+  };
+}
+
 /** 按 "." 路径读取对象上的公开导出（如 "registry.attributionToolDefinition"）。 */
 function resolvePath(obj, pathStr) {
   return String(pathStr).split(".").reduce((o, k) => (o == null ? o : o[k]), obj);
@@ -151,6 +170,11 @@ const PROVIDERS = [
     modulePath: "../../business/attribution/index.js",
     definitionGetter: "quality.attributionQualityToolDefinition",
     buildExecutor: buildAttributionQualityExecutor,
+  },
+  {
+    modulePath: "../../business/attribution/index.js",
+    definitionGetter: "registry.trackingQualityAuditToolDefinition",
+    buildExecutor: buildTrackingQualityAuditExecutor,
   },
 ];
 

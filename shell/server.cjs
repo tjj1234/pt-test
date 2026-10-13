@@ -964,16 +964,18 @@ async function handle(req, res) {
     // 技能清单 = 已注册的业务工具（与「业务流库」/api/tools 同一数据源 toolsRegistry）。
     // 不再读从未被写入过的 runtime/workspace/.dsh/skills/ 目录。
     const context = { userId: me.user.id, tenantId: me.tenant.id, workspaceId: workspaceIdFor(me) };
-    const SKILL_TITLES = { "attribution.query": "归因查询", "media.route": "媒体生成", "ga.query": "GA 数据查询" };
+    const SKILL_TITLES = { "attribution.query": "归因查询", "media.route": "媒体生成", "ga.query": "GA 数据查询", "tracking_quality_audit": "埋点质量分析" };
     const SKILL_QUESTIONS = {
       "attribution.query": "最近7天各渠道素材表现如何？",
       "media.route": "帮我生成一张产品宣传图：画面是一杯咖啡放在木桌上，暖色灯光，简约高级风格。",
       "ga.query": "这周我的GA网站访问量多少？",
+      "tracking_quality_audit": "帮我审计一下当前工作区的埋点质量，看看事件ID和时间戳兜底情况。",
     };
     const SKILL_DESCRIPTIONS = {
       "attribution.query": "查询广告归因漏斗与素材投放表现，回答转化、渠道、素材效果等问题。",
       "media.route": "根据文字描述或参考图生成图片/视频，支持文生图、图生图、文生视频、图生视频。",
       "ga.query": "授权你自己的 Google Analytics 账户后，可以直接在对话里问真实网站数据。",
+      "tracking_quality_audit": "只读审计当前工作区的真实事件适配统计，按 Token 业务模板返回埋点质量评分、问题列表与整改建议。",
     };
     const REQUIRES_CONNECTOR = { "ga.query": true };
 
