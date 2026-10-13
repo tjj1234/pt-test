@@ -148,6 +148,8 @@ const db = {
   progressEvents: [],   // 收到的每条 progress 回调
   progressSteps: 4,     // 桩分几拍把进度报完
   xhrFails: false,      // 让 XHR 直接抛 error，模拟断网
+  holdUpload: false,    // 报完进度先不下发 load，等测试显式放行
+  uploadGates: [],      // 被 hold 住的「下发 load」回调（releaseUploads 排空）
 };
 function res(obj, code) {
   return {
@@ -204,6 +206,15 @@ class XhrStub {
       const total = self._body.length || 1;
       const steps = db.progressSteps || 4;
       let i = 0;
+      // 「给响应」单独拎成一个回调：真实浏览器也是报完进度才给响应。
+      // 拆开之后测试就能选：让它自然跑完，还是先卡在「上传中」把中间态断言完再放行
+      // —— 断言不再需要拿固定 sleep 去和 setTimeout(0) 赛跑。
+      const finish = () => {
+        if (self._aborted) return;
+        self.status = status;
+        self.responseText = JSON.stringify(reply);
+        self._fire(self._l, "load", {});
+      };
       const tickProg = () => {
         if (self._aborted) return;
         i++;
@@ -211,10 +222,9 @@ class XhrStub {
         self._fire(self._ul, "progress", { lengthComputable: true, loaded, total });
         db.progressEvents.push({ loaded, total });
         if (i < steps) { setTimeout(tickProg, 0); return; }
-        // 传完了才给响应（真实浏览器也是这样）
-        self.status = status;
-        self.responseText = JSON.stringify(reply);
-        self._fire(self._l, "load", {});
+        // 传完了才给响应
+        if (db.holdUpload) db.uploadGates.push(finish);
+        else finish();
       };
       tickProg();
     }, 0);
@@ -284,6 +294,7 @@ function resetComposer() {
   const el = ctx.document.querySelector("#composerNotice");
   el.hidden = true; el.querySelector(".cn-text").textContent = "";
   db.mediaReply = null; db.xhrFails = false;
+  db.uploadGates.length = 0;   // 上一用例卡住的闸门别带进下一用例
 }
 /** 等到预览补完（首帧 / 波形 / 时长都是上传完才异步去取的，靠 _previewDone 收工标记）。 */
 async function waitPreview(maxTicks = 200) {
@@ -312,6 +323,25 @@ async function waitUploads(minNew = 1, maxTicks = 200) {
     if (db.mediaUploads.length - base >= minNew && idle) return true;
   }
   return false;
+}
+/** 等到「上传中」这个中间态已经稳稳停住、可以放心断言了。
+ *  判据三条同时成立：占位已出现（uploading===true）、进度至少报过一次、
+ *  且响应已经被闸门卡住（说明进度报完了，只差下发 load 这最后一步）。
+ *  中间态转瞬即逝，靠 sleep 去和桩里 setTimeout(fn,0) 的进度回调赛跑，
+ *  机器快一点慢一点结果就翻；改成等闸门入队，状态就不会再自己往前走，断言无竞态。 */
+async function waitUploading(maxTicks = 200) {
+  const held = () => db.holdUpload === false || db.uploadGates.length >= 1;
+  for (let i = 0; i < maxTicks; i++) {
+    await tick();
+    const up = run("(function(){var m=pendingMedia[0];return !m?'none':(m.uploading===true?'1':'0');})()");
+    if (up === "1" && db.progressEvents.length >= 1 && held()) return true;
+  }
+  return false;
+}
+/** 放行所有被 hold 住的上传（让它们下发 load 走完最后一步）。 */
+function releaseUploads() {
+  const q = db.uploadGates.splice(0);
+  q.forEach((fn) => fn());
 }
 const mkFile = (name, size, type) => ({ name, size: size == null ? 100 : size, type: type || "" });
 
@@ -644,6 +674,13 @@ console.log("\n[8] 前后端白名单一致（后端改动未落盘时跳过）"
 
 console.log("\n[9] 上传进度：大文件不再干等");
 {
+  // 这一节断言的是「上传中」这个中间态。中间态转瞬即逝，
+  // 早先的写法是 sleep 30ms 去和桩里 setTimeout(fn,0) 的进度回调赛跑 ——
+  // 机器快一点慢一点结果就翻（同一份测试换台机器就能稳定复现 9 条失败）。
+  // 现在改成：桩报完进度先不下发 load（db.holdUpload），中间态稳稳停住，
+  // 断言完由测试自己 releaseUploads() 放行。全程不再依赖墙上时间。
+  db.holdUpload = true;
+
   // 9a 上传走的是 XHR（fetch 拿不到 upload.onprogress）
   db.xhrCount = 0; db.progressEvents.length = 0;
   resetComposer();
@@ -651,11 +688,14 @@ console.log("\n[9] 上传进度：大文件不再干等");
   const p = run("uploadMediaFile(__F)");
 
   // 请求发出后立刻就该有「上传中」的占位，用户知道东西接住了
-  await tick();
+  const sawUploading = await waitUploading();
+  ok("「上传中」这个中间态能被稳定观察到（不靠固定 sleep 赌时序）", sawUploading === true);
   const during = run("pendingMedia.length + '|' + (pendingMedia[0] ? String(pendingMedia[0].uploading) : 'none')");
   ok("上传期间先出现「上传中」占位", during === "1|true", during);
   ok("占位这条还没有 url（不能发出去）", run("!pendingMedia[0].url") === true);
+  ok("还没拿到响应前不会被标记成已完成", run("pendingMedia[0].uploading") === true);
 
+  releaseUploads();
   const okUpload = await p;
   ok("大文件上传成功", okUpload === true);
   ok("上传走的是 XHR 而不是 fetch", db.xhrCount === 1, "xhrCount=" + db.xhrCount);
@@ -676,42 +716,50 @@ console.log("\n[9] 上传进度：大文件不再干等");
   resetComposer();
   ctx.__F = mkFile("预告.mp4", 24 * 1024 * 1024, "video/mp4");
   const p2 = run("uploadMediaFile(__F)");
-  await tick();
+  await waitUploading();
   ok("大文件先给出预计耗时", /大约需要/.test(noticeText()), noticeText());
   ok("预告里写清了文件大小", /24\.0 MB/.test(noticeText()), noticeText());
   ok("预告里提醒别关页面", /保持页面打开/.test(noticeText()), noticeText());
+  ok("预告是开工前就给的，不是传完才补的", run("pendingMedia[0].uploading") === true);
+  releaseUploads();
   await p2;
 
-  // 小文件不啰嗦
+  // 小文件不啰嗦（这条要等它自然跑完，所以临时放开闸门）
+  db.holdUpload = false;
   resetComposer();
   ctx.__F = mkFile("小.mp3", 1024, "audio/mpeg");
   await run("uploadMediaFile(__F)");
   ok("小文件不做耗时预告", !/大约需要/.test(noticeText()), noticeText());
+  db.holdUpload = true;
 
   // 9d 上传中不能发送：传一半的 url 是空的，发出去等于附件丢了
   resetComposer();
   ctx.__F = mkFile("half.mp4", 20 * 1024 * 1024, "video/mp4");
   const p3 = run("uploadMediaFile(__F)");
-  await tick();
+  await waitUploading();
   ok("确实处于上传中", run("mediaUploading()") === true);
   run("state.busy = false; state.activeId = 'c1'; var __cap = null; runChat = function(p){ __cap = p; };");
   await run("ask('传一半就发')");
   ok("上传中发送被拦下", run("__cap") === null, JSON.stringify(run("__cap")));
   ok("拦下时说明了原因", /正在上传/.test(noticeText()), noticeText());
+  releaseUploads();
   await p3;
 
   // 9e 上传中点 × = 取消（abort），不留一个永远转圈的胶囊
   resetComposer();
   ctx.__F = mkFile("cancel.mp4", 20 * 1024 * 1024, "video/mp4");
   const p4 = run("uploadMediaFile(__F)");
-  await tick();
+  await waitUploading();
   ok("取消前确有 1 条在传", run("pendingMedia.length") === 1 && run("pendingMedia[0].uploading") === true);
   run("removePendingMedia(pendingMedia[0])");
-  await p4;
+  releaseUploads();   // 被取消的那条 finish 会因 _aborted 空转，这里只是把闸门排空
   ok("取消后不再留在列表里", run("pendingMedia.length") === 0, "len=" + run("pendingMedia.length"));
-  ok("取消后返回 false（不是当成成功）", (await p4) === false || run("pendingMedia.length") === 0);
+  const p4r = await p4;
+  ok("取消后返回 false（不是当成成功）", p4r === false, String(p4r));
+  ok("取消后没有悬挂的上传闸门", db.uploadGates.length === 0, "gates=" + db.uploadGates.length);
 
-  // 9f 上传失败要把占位撤掉，不能留个转圈的胶囊骗人
+  // 9f 上传失败要把占位撤掉，不能留个转圈的胶囊骗人（要等它自然跑完，放开闸门）
+  db.holdUpload = false;
   resetComposer();
   db.mediaReply = () => ({ ok: false, error: "上传空间已满（配额 100MB）" });
   ctx.__F = mkFile("fail.mp4", 20 * 1024 * 1024, "video/mp4");
