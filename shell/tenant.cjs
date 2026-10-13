@@ -230,6 +230,7 @@ async function runDshForUser(userId, question, opts = {}) {
     imageNote: opts.imageNote,
     docNote: opts.docNote,
     mediaNote: opts.mediaNote,
+    gaNote: opts.gaNote,
     context: opts.context,
     history: opts.history,
     question,

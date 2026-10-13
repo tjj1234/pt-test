@@ -199,10 +199,31 @@ function createDshRuntime(opts = {}) {
       }
       case "step": {
         const w = proc.waiters.get(frame.sessionId);
-        if (w) {
-          const step = { name: frame.name, args: frame.args, result: frame.result, isError: frame.isError };
+        if (!w) break;
+        if (frame.phase === "call") {
+          // 工具调用开始：先记到待合并区（按 callId），并把「开始」步下发给前端展示过程。
+          if (frame.callId != null) {
+            if (!w.pendingSteps) w.pendingSteps = new Map();
+            w.pendingSteps.set(frame.callId, { name: frame.name, args: frame.args });
+          }
+          if (typeof w.onStep === "function") { try { w.onStep({ name: frame.name, args: frame.args }); } catch (e) {} }
+        } else {
+          // 工具调用结束：与开始帧合并成一条 step（带真实耗时），供 tool_calls 日志补记；
+          // 同时把「结束」步下发给前端展示结果 / 错误。
+          let pending = null;
+          if (frame.callId != null && w.pendingSteps) {
+            pending = w.pendingSteps.get(frame.callId);
+            w.pendingSteps.delete(frame.callId);
+          }
+          const step = {
+            name: frame.name || (pending && pending.name) || "tool",
+            args: pending ? pending.args : frame.args,
+            result: frame.result,
+            isError: frame.isError,
+            durationMs: frame.durationMs,
+          };
           if (Array.isArray(w.steps)) w.steps.push(step);
-          if (typeof w.onStep === "function") { try { w.onStep(step); } catch (e) {} }
+          if (typeof w.onStep === "function") { try { w.onStep({ name: step.name, result: step.result, isError: step.isError }); } catch (e) {} }
         }
         break;
       }
@@ -343,6 +364,7 @@ function createDshRuntime(opts = {}) {
         imageNote: spec.imageNote,
         docNote: spec.docNote,
         mediaNote: spec.mediaNote,
+        gaNote: spec.gaNote,
         history: !warm ? spec.history : undefined,
         question: spec.question,
       });

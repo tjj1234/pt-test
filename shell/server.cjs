@@ -551,6 +551,13 @@ async function handleChat(req, res, me, body) {
       "请不要假装已经查看或听懂它们，也不要虚构其中内容；如果用户的问题依赖这些附件，请如实说明你无法解析其内容。";
   }
 
+  // GA 查询错误码的固定说明：防止 AI 拿到原始错误码后现场编造不存在的入口、或把两种含义
+  // 完全不同的错误（租户未授权 vs 平台级配置缺失）混为一谈。GA4 绑定真实入口在「技能」页。
+  const gaNote =
+    "当 ga_query（业务工具 ga.query）返回错误码时，请严格按下述固定说明回复，不要自行推测或编造入口：\n" +
+    "- 错误码 GA_AUTHORIZATION_REQUIRED：表示当前租户尚未授权连接 GA4 property。请引导用户前往「技能」页完成 GA4 property 的绑定/授权（入口在「技能」页，不在「数据集成」）。\n" +
+    "- 错误码 GA_NOT_CONFIGURED：表示平台侧 GA4 连接配置缺失（如 GA_CLIENT_ID / GA_CLIENT_SECRET / GA_REDIRECT_URI / GA_TOKEN_ENCRYPTION_KEY 等环境变量未配置），属于系统级配置问题，不是用户自己能解决的。请如实说明这是系统侧配置缺失，建议用户联系管理员处理；不要引导用户去点击「GA4 授权」（点了也会失败）。";
+
   // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
   res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
@@ -572,6 +579,11 @@ async function handleChat(req, res, me, body) {
   try { capabilities = await toolsRegistry.listToolsForWorkspace(permCtx.workspaceId, permCtx); } catch (e) { capabilities = []; }
   const constraints = loadBusinessConstraints({ log });
 
+  // 视频生成（文生视频/图生视频）业务线内部轮询预算为 1 小时（business/media/powertokens.cjs），
+  // 外层 DSH 任务超时需给足余量，否则会被默认 3 分钟提前掐断；图片/文字维持原来的短超时。
+  const VIDEO_TASK_TIMEOUT_MS = 65 * 60 * 1000; // 65 分钟
+  const taskTimeoutMs = (taskType === "text2video" || taskType === "image2video") ? VIDEO_TASK_TIMEOUT_MS : undefined;
+
   const r = await tenantMod.runDshForUser(uid, question, {
     tenantId: me.tenant.id,
     conversationId,
@@ -580,12 +592,14 @@ async function handleChat(req, res, me, body) {
     imageNote,
     docNote,
     mediaNote,
+    gaNote,
     context,
     capabilities,
     constraints,
     decryptApiKey: keys.decryptApiKey,
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
+    timeoutMs: taskTimeoutMs,
     onSpawn: (job) => { runningJobs.set(uid, job); },
     onDelta: (delta) => { sse({ delta }); },
     onStep: (step) => { sse({ step }); },
@@ -630,8 +644,8 @@ async function handleChat(req, res, me, body) {
         });
         await toolCalls.finish(id, {
           outputSummary: step.result != null ? String(step.result) : "",
-          durationMs: 0,
-          tokenCount: 0,
+          durationMs: step.durationMs != null ? Number(step.durationMs) : null,
+          tokenCount: null,
           status: step.isError === true ? "failed" : "completed",
         });
       }
