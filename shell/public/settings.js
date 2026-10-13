@@ -229,7 +229,20 @@
       try {
         const r = await fetch("/api/auth-accounts", { credentials: "same-origin" });
         if (r.status === 401) { location.replace("/login"); return; }
+        // 后端出错（5xx）和「返回了但 ok:false」都必须说清楚。
+        // 直接落进「暂无已授权账户」会骗人：后端挂了，运营看到的是「你还没授权」，
+        // 于是跑去重复授权——实际是一条都没少。
+        if (!r.ok) {
+          acctEl.status.textContent = "读取授权账户失败（HTTP " + r.status + "）";
+          acctEl.list.innerHTML = "";   // 不残留上一版数据，免得看着像还生效
+          return;
+        }
         const j = await r.json().catch(() => null);
+        if (!j || j.ok === false) {
+          acctEl.status.textContent = "读取授权账户失败：" + ((j && j.error) || "返回格式异常");
+          acctEl.list.innerHTML = "";
+          return;
+        }
         renderAccounts(Array.isArray(j) ? j : (j && j.accounts) || []);
       } catch (x) {
         acctEl.status.textContent = "读取授权账户失败：" + x.message;
@@ -266,6 +279,13 @@
         const r = await fetch("/api/auth-accounts/" + encodeURIComponent(id),
           { method: "DELETE", credentials: "same-origin" });
         if (r.status === 401) { location.replace("/login"); return; }
+        // 解除失败必须说出来：确认框已经关了、列表也会原样回来，
+        // 一声不吭的话用户会以为已经解除了（也可能以为卡了反复点）。
+        if (!r.ok) {
+          const j = await r.json().catch(() => null);
+          acctEl.status.textContent = "解除失败：" + ((j && j.error) || ("HTTP " + r.status));
+          return;
+        }
         await loadAuthAccounts();
       } catch (x) {
         acctEl.status.textContent = "解除失败：" + x.message;

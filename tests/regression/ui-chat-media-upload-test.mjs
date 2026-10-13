@@ -83,6 +83,30 @@ function makeEl(tag) {
     get() { return _html; },
     set(v) { _html = String(v); if (_html === "") el.children.length = 0; },
   });
+
+  // 媒体元素：src 一设就异步抛 metadata / data / seeked，让「读时长」「截首帧」这类逻辑能真跑
+  if (tag === "video" || tag === "audio") {
+    el.duration = 42;          // 固定 42 秒，好断言 fmtClock(42) === "0:42"
+    el.currentTime = 0;
+    el.crossOrigin = "";
+    Object.defineProperty(el, "src", {
+      configurable: true,
+      get() { return this._src || ""; },
+      set(v) {
+        this._src = v;
+        setTimeout(() => {
+          el.dispatch("loadedmetadata", {});
+          el.dispatch("loadeddata", {});
+          if (tag === "video") setTimeout(() => el.dispatch("seeked", {}), 0);
+        }, 0);
+      },
+    });
+  }
+  // canvas：截帧要用，这里给个能跑通的假实现
+  if (tag === "canvas") {
+    el.getContext = () => ({ drawImage() {} });
+    el.toDataURL = () => "data:image/jpeg;base64,POSTERSTUB";
+  }
   return el;
 }
 
@@ -120,31 +144,89 @@ const db = {
   seq: 0, mediaUploads: [], lastChatBody: null,
   /** 外部覆盖后端返回：null = 走默认成功；给对象 = 原样返回；给函数 = 按调用次数返回 */
   mediaReply: null,
+  xhrCount: 0,          // XHR 被 new 了几次（上传必须走 XHR，fetch 拿不到进度）
+  progressEvents: [],   // 收到的每条 progress 回调
+  progressSteps: 4,     // 桩分几拍把进度报完
+  xhrFails: false,      // 让 XHR 直接抛 error，模拟断网
 };
 function res(obj, code) {
   return {
     ok: (code || 200) < 400, status: code || 200,
     headers: { get: () => "application/json" },
     json: async () => obj, text: async () => JSON.stringify(obj),
+    arrayBuffer: async () => new ArrayBuffer(64),   // 音频波形要先 fetch 再解码
   };
 }
+/** 内存版 /api/upload-media —— fetch 和 XHR 两条路共用同一份后端行为，
+ *  这样测出来的差异只可能来自前端代码，不会是桩不一致造成的假阳性。 */
+function handleMediaUpload(rawBody) {
+  const b = JSON.parse(rawBody || "{}");
+  db.mediaUploads.push(b);
+  if (typeof db.mediaReply === "function") return db.mediaReply(db.mediaUploads.length);
+  if (db.mediaReply) return db.mediaReply;
+  const ext = (String(b.name || "").split(".").pop() || "mp4").toLowerCase();
+  db.seq++;
+  return {
+    ok: true,
+    url: "/uploads/" + TENANT + "/media" + db.seq + "." + ext,
+    type: b.kind === "audio" ? "audio" : "video",
+    size: 4096,
+  };
+}
+
+/* ---- XMLHttpRequest 桩 ----
+ * 上传进度只有 XHR 拿得到（fetch 没这能力），所以上传路径改走 XHR，
+ * 这里就按真实 XHR 的事件模型来模拟：先分几次报 progress，跑完再 load。 */
+class XhrStub {
+  constructor() {
+    const self = this;
+    this.status = 0; this.responseText = ""; this.withCredentials = false;
+    this.readyState = 0; this._body = ""; this._aborted = false;
+    this._l = {}; this._ul = {};
+    this.upload = { addEventListener(t, fn) { (self._ul[t] = self._ul[t] || []).push(fn); } };
+    db.xhrCount++;
+  }
+  open(m, u) { this.method = m; this.url = String(u); }
+  setRequestHeader() {}
+  addEventListener(t, fn) { (this._l[t] = this._l[t] || []).push(fn); }
+  _fire(map, t, ev) { (map[t] || []).slice().forEach((fn) => fn(ev || {})); }
+  abort() { this._aborted = true; this._fire(this._l, "abort", {}); }
+  send(body) {
+    const self = this;
+    this._body = String(body == null ? "" : body);
+    setTimeout(() => {
+      if (self._aborted) return;
+      // 模拟网络异常：现在上传走 XHR，要断网得让 XHR 自己抛 error（换 fetch 已经不管用了）
+      if (db.xhrFails) { self._fire(self._l, "error", {}); return; }
+      const reply = handleMediaUpload(self._body);
+      const status = (reply && reply.__status) || 200;
+      // 分几拍上报进度，模拟真实网络的 progress 事件
+      const total = self._body.length || 1;
+      const steps = db.progressSteps || 4;
+      let i = 0;
+      const tickProg = () => {
+        if (self._aborted) return;
+        i++;
+        const loaded = Math.round((total * i) / steps);
+        self._fire(self._ul, "progress", { lengthComputable: true, loaded, total });
+        db.progressEvents.push({ loaded, total });
+        if (i < steps) { setTimeout(tickProg, 0); return; }
+        // 传完了才给响应（真实浏览器也是这样）
+        self.status = status;
+        self.responseText = JSON.stringify(reply);
+        self._fire(self._l, "load", {});
+      };
+      tickProg();
+    }, 0);
+  }
+}
+
 async function fakeFetch(url, opts) {
   const method = (opts && opts.method) || "GET";
   const u = String(url);
 
   if (u === "/api/upload-media" && method === "POST") {
-    const b = JSON.parse((opts && opts.body) || "{}");
-    db.mediaUploads.push(b);
-    if (typeof db.mediaReply === "function") return res(db.mediaReply(db.mediaUploads.length));
-    if (db.mediaReply) return res(db.mediaReply);
-    const ext = (String(b.name || "").split(".").pop() || "mp4").toLowerCase();
-    db.seq++;
-    return res({
-      ok: true,
-      url: "/uploads/" + TENANT + "/media" + db.seq + "." + ext,
-      type: b.kind === "audio" ? "audio" : "video",
-      size: 4096,
-    });
+    return res(handleMediaUpload((opts && opts.body) || "{}"));
   }
   if (u === "/api/chat" && method === "POST") {
     db.lastChatBody = JSON.parse((opts && opts.body) || "{}");
@@ -160,13 +242,27 @@ async function fakeFetch(url, opts) {
 }
 
 /* ---------------- 把 chat-media.js + app.js 真跑起来 ---------------- */
-const win = { ICONS: {}, initIcons() {}, innerWidth: 1200, addEventListener() {} };
+/* 假 AudioContext：给一段确定性的采样（前半正弦、后半静音），
+   这样波形算出来是「前高后平」，能验证归一化而不是随便一条线。 */
+class AudioContextStub {
+  decodeAudioData(_buf, onOk) {
+    const data = new Float32Array(4000);
+    for (let i = 0; i < 2000; i++) data[i] = Math.sin(i / 10) * 0.8;
+    setTimeout(() => onOk({ getChannelData: () => data, length: 4000 }), 0);
+  }
+  close() {}
+}
+const win = {
+  ICONS: {}, initIcons() {}, innerWidth: 1200, addEventListener() {},
+  AudioContext: AudioContextStub,
+};
 const ctx = vm.createContext({
   console, document, localStorage,
   window: win,
   location: { search: "", href: "http://local/" },
   navigator: {},
   fetch: fakeFetch,
+  XMLHttpRequest: XhrStub,
   alert: () => {}, confirm: () => false, prompt: () => null,
   FileReader,
   Event: EventStub,
@@ -187,7 +283,35 @@ function resetComposer() {
   run("pendingMedia = []; renderMediaList(); pendingImage = null;");
   const el = ctx.document.querySelector("#composerNotice");
   el.hidden = true; el.querySelector(".cn-text").textContent = "";
-  db.mediaReply = null;
+  db.mediaReply = null; db.xhrFails = false;
+}
+/** 等到预览补完（首帧 / 波形 / 时长都是上传完才异步去取的，靠 _previewDone 收工标记）。 */
+async function waitPreview(maxTicks = 200) {
+  for (let i = 0; i < maxTicks; i++) {
+    await tick();
+    if (run("(function(){ var m = pendingMedia[0]; return !m ? true : (m._previewDone === true); })()") === true) return true;
+  }
+  return false;
+}
+/** 胶囊里挂了哪些 class 的节点。
+ *  注意：桩的 appendChild 不会写进 innerHTML，所以只能查 children，不能拿 innerHTML 做正则。 */
+function chipClasses(idx = 0) {
+  const chip = ctx.document.querySelector("#mediaList").children[idx];
+  if (!chip) return [];
+  return (chip.children || []).map((k) => String(k.className || ""));
+}
+
+/** 等到「新增了 minNew 次上传请求，且没有正在传的项」。
+ *  上传是「读文件 → 分几拍报进度 → 收响应」的异步链，固定 sleep 不靠谱；
+ *  只等 uploading 归零也不行 —— 请求还没发出去时它本来就是 0。 */
+async function waitUploads(minNew = 1, maxTicks = 200) {
+  const base = db.mediaUploads.length;
+  for (let i = 0; i < maxTicks; i++) {
+    await tick();
+    const idle = run("pendingMedia.filter(function(m){return m.uploading;}).length") === 0;
+    if (db.mediaUploads.length - base >= minNew && idle) return true;
+  }
+  return false;
 }
 const mkFile = (name, size, type) => ({ name, size: size == null ? 100 : size, type: type || "" });
 
@@ -264,15 +388,16 @@ console.log("\n[3] 合法音视频：上传 → pendingMedia → 胶囊");
   const mi = ctx.document.querySelector("#mediaInput");
   mi.files = [mkFile("a.mp4", 10, "video/mp4"), mkFile("b.mp3", 10, "audio/mpeg")];
   run("(function(){ document.querySelector('#mediaInput').dispatch('change', {}); })()");
-  await tick();
-  ok("点「音视频」按钮多选能上传", run("pendingMedia.length") === 2, "len=" + run("pendingMedia.length"));
+  await waitUploads(2);
+  ok("点「音视频」按钮多选能上传", run("pendingMedia.length") === 2,
+    "len=" + run("pendingMedia.length") + " uploads=" + db.mediaUploads.length);
   ok("选完清空 input.value（同一文件可再选一次）", mi.value === "");
 
   // 拖拽入口
   resetComposer();
   ctx.__DROP_EV = { preventDefault() {}, dataTransfer: { files: [mkFile("drag.mov", 10, "video/quicktime")] } };
   run("(function(){ document.querySelector('#emptyInput').dispatch('drop', __DROP_EV); })()");
-  await tick();
+  await waitUploads(1);
   ok("拖 .mov 进聊天框能上传（复用同一套 drop 逻辑）", run("pendingMedia.length") === 1, "len=" + run("pendingMedia.length"));
   ok("拖进来的按 MIME 判成 video", run("pendingMedia[0].type") === "video", run("pendingMedia[0].type"));
 }
@@ -344,15 +469,14 @@ console.log("\n[5] 非法文件：都要被拒绝且说清原因");
   ok("后端原因原样提示出来", /上传空间已满/.test(noticeText()), noticeText());
   ok("后端拒绝后不进 pendingMedia", run("pendingMedia.length") === 0);
 
-  // 5f 网络异常
+  // 5f 网络异常：上传走 XHR，所以断网要让 XHR 抛 error（换掉 fetch 已经不管用了）
   resetComposer();
-  db.mediaReply = null;
-  const realFetch = ctx.fetch;
-  ctx.fetch = async () => { throw new Error("网络错误"); };
+  db.xhrFails = true;
   ctx.__F = mkFile("n.mp4", 100, "video/mp4");
   ok("网络异常时返回 false", (await run("uploadMediaFile(__F)")) === false);
   ok("网络异常提示清楚", /上传失败/.test(noticeText()), noticeText());
-  ctx.fetch = realFetch;
+  ok("网络异常后不留转圈胶囊", run("pendingMedia.length") === 0, "len=" + run("pendingMedia.length"));
+  db.xhrFails = false;
 }
 
 console.log("\n[6] 发送：media 随消息提交，气泡里立刻有播放器");
@@ -516,6 +640,162 @@ console.log("\n[8] 前后端白名单一致（后端改动未落盘时跳过）"
       ok("后端 /api/chat 直接按对象取 url（与前端 media 形状一致）", !stringified);
     }
   }
+}
+
+console.log("\n[9] 上传进度：大文件不再干等");
+{
+  // 9a 上传走的是 XHR（fetch 拿不到 upload.onprogress）
+  db.xhrCount = 0; db.progressEvents.length = 0;
+  resetComposer();
+  ctx.__F = mkFile("big.mp4", 32 * 1024 * 1024, "video/mp4");
+  const p = run("uploadMediaFile(__F)");
+
+  // 请求发出后立刻就该有「上传中」的占位，用户知道东西接住了
+  await tick();
+  const during = run("pendingMedia.length + '|' + (pendingMedia[0] ? String(pendingMedia[0].uploading) : 'none')");
+  ok("上传期间先出现「上传中」占位", during === "1|true", during);
+  ok("占位这条还没有 url（不能发出去）", run("!pendingMedia[0].url") === true);
+
+  const okUpload = await p;
+  ok("大文件上传成功", okUpload === true);
+  ok("上传走的是 XHR 而不是 fetch", db.xhrCount === 1, "xhrCount=" + db.xhrCount);
+  ok("收到了多条进度回调", db.progressEvents.length >= 2, String(db.progressEvents.length));
+  ok("进度是递增的且最后一拍到 100%",
+    db.progressEvents.every((e, i) => i === 0 || e.loaded >= db.progressEvents[i - 1].loaded)
+    && db.progressEvents[db.progressEvents.length - 1].loaded === db.progressEvents[db.progressEvents.length - 1].total,
+    JSON.stringify(db.progressEvents.map((e) => e.loaded)));
+
+  // 9b 传完占位变正常
+  ok("传完后 uploading 落回 false", run("pendingMedia[0].uploading") === false);
+  ok("传完后才有 url", /^\/uploads\//.test(String(run("pendingMedia[0].url"))), String(run("pendingMedia[0].url")));
+  ok("传完后胶囊不再显示进度条", !/mc-prog/.test(String(ctx.document.querySelector("#mediaList").innerHTML))
+    || run("pendingMedia.filter(function(m){return m.uploading;}).length") === 0);
+
+  // 9c 大文件预告：选完先说大概要多久
+  db.progressEvents.length = 0;
+  resetComposer();
+  ctx.__F = mkFile("预告.mp4", 24 * 1024 * 1024, "video/mp4");
+  const p2 = run("uploadMediaFile(__F)");
+  await tick();
+  ok("大文件先给出预计耗时", /大约需要/.test(noticeText()), noticeText());
+  ok("预告里写清了文件大小", /24\.0 MB/.test(noticeText()), noticeText());
+  ok("预告里提醒别关页面", /保持页面打开/.test(noticeText()), noticeText());
+  await p2;
+
+  // 小文件不啰嗦
+  resetComposer();
+  ctx.__F = mkFile("小.mp3", 1024, "audio/mpeg");
+  await run("uploadMediaFile(__F)");
+  ok("小文件不做耗时预告", !/大约需要/.test(noticeText()), noticeText());
+
+  // 9d 上传中不能发送：传一半的 url 是空的，发出去等于附件丢了
+  resetComposer();
+  ctx.__F = mkFile("half.mp4", 20 * 1024 * 1024, "video/mp4");
+  const p3 = run("uploadMediaFile(__F)");
+  await tick();
+  ok("确实处于上传中", run("mediaUploading()") === true);
+  run("state.busy = false; state.activeId = 'c1'; var __cap = null; runChat = function(p){ __cap = p; };");
+  await run("ask('传一半就发')");
+  ok("上传中发送被拦下", run("__cap") === null, JSON.stringify(run("__cap")));
+  ok("拦下时说明了原因", /正在上传/.test(noticeText()), noticeText());
+  await p3;
+
+  // 9e 上传中点 × = 取消（abort），不留一个永远转圈的胶囊
+  resetComposer();
+  ctx.__F = mkFile("cancel.mp4", 20 * 1024 * 1024, "video/mp4");
+  const p4 = run("uploadMediaFile(__F)");
+  await tick();
+  ok("取消前确有 1 条在传", run("pendingMedia.length") === 1 && run("pendingMedia[0].uploading") === true);
+  run("removePendingMedia(pendingMedia[0])");
+  await p4;
+  ok("取消后不再留在列表里", run("pendingMedia.length") === 0, "len=" + run("pendingMedia.length"));
+  ok("取消后返回 false（不是当成成功）", (await p4) === false || run("pendingMedia.length") === 0);
+
+  // 9f 上传失败要把占位撤掉，不能留个转圈的胶囊骗人
+  resetComposer();
+  db.mediaReply = () => ({ ok: false, error: "上传空间已满（配额 100MB）" });
+  ctx.__F = mkFile("fail.mp4", 20 * 1024 * 1024, "video/mp4");
+  ok("上传失败返回 false", (await run("uploadMediaFile(__F)")) === false);
+  ok("失败后占位被撤掉（不留转圈胶囊）", run("pendingMedia.length") === 0, "len=" + run("pendingMedia.length"));
+  ok("失败原因说清楚了", /上传空间已满/.test(noticeText()), noticeText());
+  db.mediaReply = null;
+}
+
+console.log("\n[10] 预览：视频首帧 / 音频波形 / 时长");
+{
+  // 10a 视频：截首帧 + 时长
+  resetComposer();
+  ctx.__F = mkFile("poster.mp4", 2048, "video/mp4");
+  await run("uploadMediaFile(__F)");
+  await waitPreview();
+  ok("视频读到了时长", run("pendingMedia[0].duration") === 42, String(run("pendingMedia[0].duration")));
+  ok("视频截到了首帧", run("pendingMedia[0].poster") === "data:image/jpeg;base64,POSTERSTUB",
+    String(run("pendingMedia[0].poster")).slice(0, 40));
+  const vCls = chipClasses(0);
+  ok("胶囊里出现了缩略图节点", vCls.indexOf("mc-thumb") >= 0, JSON.stringify(vCls));
+  ok("缩略图上带时长角标 0:42",
+    vCls.indexOf("mc-thumb") >= 0
+    && (ctx.document.querySelector("#mediaList").children[0].children.find((k) => k.className === "mc-thumb").children
+      .some((k) => k.className === "mc-dur" && k.textContent === "0:42")),
+    JSON.stringify(vCls));
+
+  // 10b 封面要带进气泡，不然发出去先黑一块
+  run("state.busy = false; state.activeId = 'c1'; var __cap = null; runChat = function(p){ __cap = p; };");
+  run("(function(){ var c = document.querySelector('#chat'); c.children.length = 0; })()");
+  await run("ask('看看这段')");
+  ok("发给后端的 media 仍是严格 { type, url }",
+    Object.keys(run("__cap").media[0]).sort().join(",") === "type,url", JSON.stringify(run("__cap").media[0]));
+  const vNode = run("(function(){ var c = document.querySelector('#chat');"
+    + " var last = c.children[c.children.length-1]; return last ? last.children[1].children[0].children[0] : null; })()");
+  ok("气泡里的 <video> 带上了 poster", !!vNode && vNode.poster === "data:image/jpeg;base64,POSTERSTUB",
+    vNode && String(vNode.poster));
+
+  // 10c 音频：波形 + 时长
+  resetComposer();
+  ctx.__F = mkFile("wave.mp3", 2048, "audio/mpeg");
+  await run("uploadMediaFile(__F)");
+  await waitPreview();
+  ok("音频读到了时长", run("pendingMedia[0].duration") === 42, String(run("pendingMedia[0].duration")));
+  ok("音频算出了波形（40 根柱子）",
+    Array.isArray(run("pendingMedia[0].peaks")) && run("pendingMedia[0].peaks.length") === 40,
+    String(run("pendingMedia[0].peaks && pendingMedia[0].peaks.length")));
+  ok("波形做过归一化（峰值到 1，小声的音频不会是一条平线）",
+    run("Math.max.apply(null, pendingMedia[0].peaks)") === 1,
+    String(run("Math.max.apply(null, pendingMedia[0].peaks)")));
+  const aCls = chipClasses(0);
+  ok("胶囊里出现了波形节点", aCls.indexOf("mc-wave") >= 0, JSON.stringify(aCls));
+  ok("波形画了 40 根柱子",
+    (ctx.document.querySelector("#mediaList").children[0].children.find((k) => k.className === "mc-wave").children || []).length === 40,
+    String((ctx.document.querySelector("#mediaList").children[0].children.find((k) => k.className === "mc-wave").children || []).length));
+
+  // 10d 大音频不算波形（解码几十 MB 太慢），直接调函数验证阈值
+  ok("超过 20MB 的音频直接跳过波形计算",
+    (await run("computeAudioWaveform('/uploads/t1/x.mp3', 25 * 1024 * 1024)")) === null);
+  ok("小音频照常算波形", Array.isArray(await run("computeAudioWaveform('/uploads/t1/x.mp3', 1024)")));
+
+  resetComposer();
+  ctx.__F = mkFile("huge.mp3", 2048, "audio/mpeg");
+  await run("uploadMediaFile(__F)");
+  await waitPreview();
+  ok("音频没算出波形时也不报错", run("pendingMedia.length") === 1 && run("pendingMedia[0].duration") === 42);
+
+  // 10e 预览是「尽力而为」：拿不到不能把已附加的媒体弄坏
+  resetComposer();
+  ctx.__F = mkFile("nodur.mp4", 2048, "video/mp4");
+  const savedDuration = db.breakDuration;
+  db.breakDuration = true;
+  await run("uploadMediaFile(__F)");
+  await waitPreview();
+  ok("拿不到时长时媒体仍然附加成功", run("pendingMedia.length") === 1, "len=" + run("pendingMedia.length"));
+  ok("拿不到时长时 url 照常有效", /^\/uploads\//.test(String(run("pendingMedia[0].url"))));
+  db.breakDuration = savedDuration;
+
+  // 10f fmtClock 的格式
+  ok("fmtClock(5) = 0:05", run("fmtClock(5)") === "0:05", run("fmtClock(5)"));
+  ok("fmtClock(83) = 1:23", run("fmtClock(83)") === "1:23", run("fmtClock(83)"));
+  ok("fmtClock(0) = 0:00", run("fmtClock(0)") === "0:00", run("fmtClock(0)"));
+  ok("fmtDuration(8) = 8 秒", run("fmtDuration(8)") === "8 秒", run("fmtDuration(8)"));
+  ok("fmtDuration(80) = 1 分 20 秒", run("fmtDuration(80)") === "1 分 20 秒", run("fmtDuration(80)"));
 }
 
 console.log("\n结果：" + pass + " 通过，" + failures.length + " 失败");

@@ -613,6 +613,11 @@ async function ask(msg) {
     alert("「" + genCfg.label + "」需要一张参考图，请先点输入框左下角的 + 上传图片。");
     return;
   }
+  // 还有媒体在传就别发：传一半的项 url 是空的，发出去等于附件丢了还不自知
+  if (mediaUploading()) {
+    composerNotice("还有文件正在上传，请等传完再发送", "err");
+    return;
+  }
   if (!state.activeId) {
     const id = await newConversation();
     if (!id) return;
@@ -627,7 +632,15 @@ async function ask(msg) {
   if (pendingDocs.length) payload.documents = pendingDocs.map(d => d.url);
   // 音视频：提交 [{ type:"video"|"audio", url }]，气泡里由 chat-media.js 渲成播放器。
   // 只传 url 不传文件本体 —— 落盘和租户隔离都在基座 /api/upload-media 那边做完了。
-  if (pendingMedia.length) payload.media = pendingMedia.map(m => ({ type: m.type, url: m.url }));
+  // 只挑传完的（有 url 且 uploading 为 false）：正在传的那条 url 还是空的。
+  const readyMedia = pendingMedia.filter(m => m && m.url && !m.uploading);
+  let optimisticMedia = null;
+  if (readyMedia.length) {
+    // 发给后端：严格 { type, url } 两个字段
+    payload.media = readyMedia.map(m => ({ type: m.type, url: m.url }));
+    // 乐观渲染那份额外带封面（视频首帧），气泡里不至于先黑一块再出画面
+    optimisticMedia = readyMedia.map(m => ({ type: m.type, url: m.url, poster: m.poster || undefined }));
+  }
   // 素材生成类型：text2image / image2image / text2video / image2video。
   // 选「自动」时不传，交给 Agent 自己判断，免得普通问答被带偏成素材生成。
   if (genCfg.taskType) payload.taskType = genCfg.taskType;
@@ -635,7 +648,8 @@ async function ask(msg) {
   // media 也要带进乐观渲染，否则发出去要等服务器往返回来才看到播放器，像没发成功。
   renderMessage({
     role: "user", text: msg, ts: Date.now(),
-    image: pendingImage || undefined, documents: payload.documents, media: payload.media,
+    image: pendingImage || undefined, documents: payload.documents,
+    media: optimisticMedia || payload.media,
   });
   chat.scrollTop = chat.scrollHeight;
   clearPendingImage();
@@ -1039,29 +1053,251 @@ function mediaKindOf(f) {
 
 function mediaKindLabel(kind) { return kind === "audio" ? "音频" : "视频"; }
 
-/** 已附加音视频的胶囊列表（可逐个移除）。 */
+/* ---- 上传耗时的说法 ---- */
+/** 秒数说成人话：8 秒 / 1 分 20 秒 / 3 分钟。 */
+function fmtDuration(sec) {
+  sec = Math.max(0, Math.round(Number(sec) || 0));
+  if (sec < 60) return sec + " 秒";
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return s ? (m + " 分 " + s + " 秒") : (m + " 分钟");
+}
+
+/* 大文件预告用的保守估算（3MB/s）。真实速度要等传起来才知道，
+ * 所以这里只负责「传之前先给个心理预期」，传起来后进度条上会按实测速度刷新。 */
+const MEDIA_ESTIMATE_BPS = 3 * 1024 * 1024;
+const MEDIA_NOTICE_ABOVE = 8 * 1024 * 1024;   // 超过 8MB 才预告，小文件不至于啰嗦
+
+/** 带上传进度的 JSON POST。
+ *  用 XHR 而不是 fetch —— fetch 到现在都没有上传进度回调，几十 MB 的文件
+ *  传起来用户只能盯着空白干等。onStart 把 xhr 交出去，好让「取消」能 abort。 */
+function postJsonWithProgress(url, body, onProgress, onStart) {
+  return new Promise((resolve, reject) => {
+    let xhr;
+    try { xhr = new XMLHttpRequest(); }
+    catch (e) { reject(new Error("当前浏览器不支持上传")); return; }
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.withCredentials = true;
+    if (xhr.upload && onProgress) {
+      xhr.upload.addEventListener("progress", (e) => {
+        if (e && e.lengthComputable) onProgress(e.loaded, e.total);
+      });
+    }
+    xhr.addEventListener("load", () => {
+      let j = null;
+      try { j = JSON.parse(xhr.responseText); } catch (e) { j = null; }
+      resolve({ status: xhr.status, ok: xhr.status >= 200 && xhr.status < 300, json: j });
+    });
+    xhr.addEventListener("error", () => reject(new Error("网络错误")));
+    xhr.addEventListener("timeout", () => reject(new Error("上传超时")));
+    xhr.addEventListener("abort", () => reject(new Error("已取消上传")));
+    if (onStart) onStart(xhr);
+    xhr.send(JSON.stringify(body));
+  });
+}
+
+/* ---- 预览信息：视频首帧 / 音频波形 / 时长 ----
+ * 三件事都要解码媒体文件，慢且可能失败（编码不支持、跨域、浏览器不给解）。
+ * 所以统一做成「尽力而为」：拿不到就当没这个功能，绝不影响媒体已经附加成功这件事。 */
+
+/** 秒 → 1:23 / 0:05。 */
+function fmtClock(sec) {
+  sec = Math.max(0, Math.round(Number(sec) || 0));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return m + ":" + String(s).padStart(2, "0");
+}
+
+/** 读时长（秒）。拿不到返回 0。 */
+function readMediaDuration(url, kind) {
+  return new Promise((resolve) => {
+    try {
+      const el = document.createElement(kind === "audio" ? "audio" : "video");
+      let settled = false;
+      const done = (v) => { if (!settled) { settled = true; resolve(v || 0); } };
+      el.preload = "metadata";
+      el.addEventListener("loadedmetadata", () => done(el.duration));
+      el.addEventListener("error", () => done(0));
+      setTimeout(() => done(0), 8000);   // 兜底：别让一个坏文件把预览永久挂住
+      el.src = url;
+    } catch (e) { resolve(0); }
+  });
+}
+
+/** 截视频首帧当封面：跳到第 1 秒（或时长中点，视频更短时）画到 canvas 上导出 dataURL。 */
+function captureVideoPoster(url) {
+  return new Promise((resolve) => {
+    try {
+      const v = document.createElement("video");
+      let settled = false;
+      const done = (u) => { if (!settled) { settled = true; resolve(u || null); } };
+      v.preload = "metadata"; v.muted = true;
+      try { v.crossOrigin = "anonymous"; } catch (e) { /* 跨域就放弃截图，canvas 会被污染 */ }
+      v.addEventListener("loadeddata", () => {
+        try { v.currentTime = Math.min(1, (v.duration || 2) / 2); } catch (e) { done(null); }
+      });
+      v.addEventListener("seeked", () => {
+        try {
+          const c = document.createElement("canvas");
+          c.width = 160; c.height = 90;
+          c.getContext("2d").drawImage(v, 0, 0, c.width, c.height);
+          done(c.toDataURL("image/jpeg", 0.7));
+        } catch (e) { done(null); }
+      });
+      v.addEventListener("error", () => done(null));
+      setTimeout(() => done(null), 8000);
+      v.src = url;
+    } catch (e) { resolve(null); }
+  });
+}
+
+/** 音频波形：解码后取 40 个区间的峰值（0~1），画成静态柱状图。
+ *  大文件解码慢，所以只对 ≤20MB 的算，超了就只显示时长。 */
+const WAVE_MAX_BYTES = 20 * 1024 * 1024;
+const WAVE_BARS = 40;
+function computeAudioWaveform(url, size) {
+  return new Promise((resolve) => {
+    const AC = (window.AudioContext || window.webkitAudioContext);
+    if (!AC || (size && size > WAVE_MAX_BYTES)) return resolve(null);
+    fetch(url, { credentials: "same-origin" })
+      .then((r) => r.arrayBuffer())
+      .then((buf) => new Promise((ok2, no2) => {
+        const ac = new AC();
+        ac.decodeAudioData(buf, ok2, no2);
+      }))
+      .then((ab) => {
+        try {
+          const ch = ab.getChannelData(0);
+          const step = Math.max(1, Math.floor(ch.length / WAVE_BARS));
+          const peaks = [];
+          let max = 0;
+          for (let i = 0; i < WAVE_BARS; i++) {
+            let p = 0;
+            for (let j = 0; j < step; j++) {
+              const v = Math.abs(ch[i * step + j] || 0);
+              if (v > p) p = v;
+            }
+            peaks.push(p); if (p > max) max = p;
+          }
+          // 归一化，不然小声的音频画出来是一条平线
+          resolve(max > 0 ? peaks.map((p) => p / max) : null);
+          try { if (ac && ac.close) ac.close(); } catch (e) {}
+        } catch (e) { resolve(null); }
+      })
+      .catch(() => resolve(null));
+  });
+}
+
+/** 传完之后补预览。异步且不重要，所以每一步都先确认这条还在列表里（用户可能已经点了 ×）。 */
+async function enrichMediaPreview(item) {
+  const alive = () => pendingMedia.indexOf(item) >= 0;
+  if (!alive() || !item.url) return;
+  const dur = await readMediaDuration(item.url, item.type);
+  if (!alive()) return;
+  if (dur > 0) item.duration = dur;
+  if (item.type === "video") item.poster = await captureVideoPoster(item.url);
+  else if (item.type === "audio") item.peaks = await computeAudioWaveform(item.url, item.size);
+  if (!alive()) return;
+  item._previewDone = true;   // 收工标记：外面靠它判断预览补完了
+  renderMediaList();   // 补完再刷一次，把缩略图 / 波形 / 时长显示出来
+}
+
+/** 刷新某一条的进度。onprogress 是高频回调，这里只改 fill 宽度和文案，不重绘整个列表。 */
+function updateMediaProgress(item, loaded, total) {
+  if (!item) return;
+  item.loaded = loaded || 0;
+  item.total = total || 0;
+  const pct = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+  if (item._fill) item._fill.style.width = pct + "%";
+  if (!item._txt) return;
+  let s = pct + "%";
+  // 头 1 秒拿到的速度没有参考价值（还在建连接），别瞎猜剩余时间
+  const elapsed = (Date.now() - (item.startedAt || Date.now())) / 1000;
+  if (elapsed > 1 && loaded > 0 && total) {
+    const bps = loaded / elapsed;
+    const remain = Math.max(0, (total - loaded) / Math.max(bps, 1));
+    if (remain > 0.5) s += " · 还剩约 " + fmtDuration(remain);
+  }
+  item._txt.textContent = s;
+}
+
+/** 移除一条待发媒体；还在传就顺便 abort，不留一个永远转圈的胶囊。 */
+function removePendingMedia(item) {
+  const i = pendingMedia.indexOf(item);
+  if (i < 0) return;
+  if (item && item.xhr) { try { item.xhr.abort(); } catch (e) { /* 已经传完了 */ } }
+  pendingMedia.splice(i, 1);
+  renderMediaList();
+}
+
+/** 已附加音视频的胶囊列表（可逐个移除；上传中的显示进度条）。 */
 function renderMediaList() {
   if (!mediaListEl) return;
   mediaListEl.hidden = !pendingMedia.length;
   mediaListEl.innerHTML = "";
-  pendingMedia.forEach((m, i) => {
+  pendingMedia.forEach((m) => {
     const chip = document.createElement("div");
-    chip.className = "attach-chip media-chip";
+    chip.className = "attach-chip media-chip" + (m.uploading ? " uploading" : "");
     chip.innerHTML = '<span class="ico" data-ico="' + (m.type === "audio" ? "music" : "play") + '"></span>';
     const nm = document.createElement("span");
     nm.className = "attach-name"; nm.textContent = m.name || "媒体文件"; nm.title = m.name || "";
     const sz = document.createElement("span");
     sz.className = "attach-size"; sz.textContent = fmtSize(m.size);
+    chip.appendChild(nm); chip.appendChild(sz);
+
+    if (m.uploading) {
+      const bar = document.createElement("div"); bar.className = "mc-prog";
+      const fill = document.createElement("div"); fill.className = "mc-prog-fill";
+      bar.appendChild(fill);
+      const txt = document.createElement("span"); txt.className = "mc-prog-txt";
+      txt.textContent = "准备上传…";
+      chip.appendChild(bar); chip.appendChild(txt);
+      m._fill = fill; m._txt = txt;   // 存引用，onprogress 直接改这两个节点
+    }
+
+    // 传完之后补的预览：视频显示首帧缩略图，音频显示波形（都带时长）
+    if (!m.uploading) {
+      if (m.type === "video" && m.poster) {
+        const th = document.createElement("div"); th.className = "mc-thumb";
+        const im = document.createElement("img"); im.src = m.poster; im.alt = "";
+        th.appendChild(im);
+        if (m.duration) {
+          const d = document.createElement("span"); d.className = "mc-dur";
+          d.textContent = fmtClock(m.duration); th.appendChild(d);
+        }
+        chip.appendChild(th);
+      } else if (m.type === "audio" && m.peaks && m.peaks.length) {
+        const w = document.createElement("div"); w.className = "mc-wave";
+        for (const p of m.peaks) {
+          const bar = document.createElement("i");
+          bar.style.height = Math.max(2, Math.round(p * 20)) + "px";
+          w.appendChild(bar);
+        }
+        chip.appendChild(w);
+      }
+      // 视频没截到帧、音频没算出波形时，时长也要单独显示出来
+      if (m.duration && !(m.type === "video" && m.poster)) {
+        const dt = document.createElement("span");
+        dt.className = "mc-durtext"; dt.textContent = fmtClock(m.duration);
+        chip.appendChild(dt);
+      }
+    }
+
     const del = document.createElement("button");
     del.type = "button"; del.className = "attach-del";
-    del.title = "移除这个" + mediaKindLabel(m.type); del.textContent = "×";
-    del.addEventListener("click", () => { pendingMedia.splice(i, 1); renderMediaList(); });
-    chip.appendChild(nm); chip.appendChild(sz); chip.appendChild(del);
+    del.title = m.uploading ? "取消上传" : ("移除这个" + mediaKindLabel(m.type));
+    del.textContent = "×";
+    del.addEventListener("click", () => removePendingMedia(m));
+    chip.appendChild(del);
     mediaListEl.appendChild(chip);
   });
   if (window.initIcons) window.initIcons();
 }
-function clearPendingMedia() { pendingMedia = []; renderMediaList(); if (mediaInput) mediaInput.value = ""; }
+function clearPendingMedia() {
+  for (const m of pendingMedia) { if (m && m.xhr) { try { m.xhr.abort(); } catch (e) {} } }
+  pendingMedia = []; renderMediaList(); if (mediaInput) mediaInput.value = "";
+}
+/** 还有东西在传就别发消息 —— 传一半的 url 是空的，发出去会丢附件。 */
+function mediaUploading() { return pendingMedia.some((m) => m && m.uploading); }
 
 /** 上传一个音视频 → 加入 pendingMedia。任何一步失败都给出具体原因。 */
 async function uploadMediaFile(f) {
@@ -1077,27 +1313,48 @@ async function uploadMediaFile(f) {
     composerNotice("媒体太大：单文件上限 50MB，「" + name + "」是 " + fmtSize(f.size), "err");
     return false;
   }
+  // 大文件先给个心理预期：读文件 + 传几十 MB 要一会儿，别让用户以为卡住了
+  if (f.size > MEDIA_NOTICE_ABOVE) {
+    composerNotice("「" + name + "」" + fmtSize(f.size) + "，大约需要 "
+      + fmtDuration(f.size / MEDIA_ESTIMATE_BPS) + "，请保持页面打开", "ok");
+  }
   let b64;
   try { b64 = await readFileAsDataUrl(f); }
   catch (e) { composerNotice("读取失败：" + e.message, "err"); return false; }
+
+  // 先插一条「上传中」的占位：文件读完了还得传好几秒，
+  // 胶囊立刻出现，用户知道东西已经接住了（而不是以为按钮没反应）。
+  const item = {
+    type: kind, url: "", name: name, size: f.size,
+    uploading: true, loaded: 0, total: 0, startedAt: 0, xhr: null, _fill: null, _txt: null,
+  };
+  pendingMedia.push(item);
+  renderMediaList();
+
   try {
-    const r = await fetch("/api/upload-media", {
-      method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: name, data: b64, kind: kind }),
-    });
-    const j = await r.json().catch(() => null);
-    if (j && j.ok && j.url) {
+    const r = await postJsonWithProgress(
+      "/api/upload-media",
+      { name: name, data: b64, kind: kind },
+      (loaded, total) => updateMediaProgress(item, loaded, total),
+      (xhr) => { item.xhr = xhr; item.startedAt = Date.now(); },
+    );
+    const j = r.json;
+    if (r.ok && j && j.ok && j.url) {
       const type = normMediaType(j.type != null ? j.type : j.kind) || kind;
-      pendingMedia.push({ type: type, url: j.url, name: name, size: j.size || f.size });
+      item.type = type; item.url = j.url; item.size = j.size || f.size;
+      item.uploading = false; item.xhr = null; item._fill = null; item._txt = null;
       renderMediaList();
-      composerNotice("已附加" + mediaKindLabel(type) + "「" + name + "」（" + fmtSize(j.size || f.size) + "）", "ok");
+      composerNotice("已附加" + mediaKindLabel(type) + "「" + name + "」（" + fmtSize(item.size) + "）", "ok");
+      // 缩略图 / 波形 / 时长要解码，慢 —— 放在「已附加」回执之后再补，别让它拖慢反馈
+      enrichMediaPreview(item);
       return true;
     }
     // 后端拒绝（类型不支持 / 超限 / 配额满 / 非本租户）都把原因原样说清楚
+    removePendingMedia(item);   // 失败就把占位撤掉，不留一个永远转圈的胶囊
     composerNotice((j && j.error) || ("上传失败（HTTP " + r.status + "）"), "err");
     return false;
   } catch (e) {
+    removePendingMedia(item);
     composerNotice("上传失败：" + (e && e.message ? e.message : "网络错误"), "err");
     return false;
   }

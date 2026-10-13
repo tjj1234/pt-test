@@ -72,6 +72,8 @@
         v.src = url;
         v.controls = true;
         v.preload = "metadata";
+        // 上传时截好的首帧：有的话先显示，别让气泡里先黑一块再出画面
+        if (m.poster) v.poster = m.poster;
         v.setAttribute("playsinline", "");
         if (bub.appendChild) bub.appendChild(v);
       } else if (type === "audio") {
