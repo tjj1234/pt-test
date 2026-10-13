@@ -51,7 +51,7 @@ async function initToolCalls(db) {
           SET output_summary = $2, duration_ms = $3, token_count = $4, status = $5
         WHERE id = $1`,
       [id, strOrNull(entry.outputSummary), entry.durationMs == null ? null : Number(entry.durationMs),
-       entry.tokenCount == null ? 0 : Number(entry.tokenCount), entry.status || "completed"]
+       entry.tokenCount == null ? null : Number(entry.tokenCount), entry.status || "completed"]
     );
   }
 

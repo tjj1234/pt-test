@@ -237,13 +237,13 @@ async function executeTool(toolName, args, context) {
     status = "failed";
     outputSummary = summarize(err && err.message ? err.message : err);
     if (logId != null && toolCallLogger) {
-      try { await toolCallLogger.finish(logId, { outputSummary, durationMs: Date.now() - startedAt, tokenCount: 0, status }); } catch (e) {}
+      try { await toolCallLogger.finish(logId, { outputSummary, durationMs: Date.now() - startedAt, tokenCount: null, status }); } catch (e) {}
     }
     throw err;
   }
 
   if (logId != null && toolCallLogger) {
-    try { await toolCallLogger.finish(logId, { outputSummary, durationMs: Date.now() - startedAt, tokenCount: 0, status }); } catch (e) {}
+    try { await toolCallLogger.finish(logId, { outputSummary, durationMs: Date.now() - startedAt, tokenCount: null, status }); } catch (e) {}
   }
 
   return {

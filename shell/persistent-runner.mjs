@@ -197,6 +197,7 @@ function apply(ctx) {
     const agentMap = new Map();       // sessionId -> { agent }
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
     const stepNames = new Map();      // callId -> 工具名（tool/result 时回填名字）
+    const stepStarted = new Map();    // callId -> { name, args, t0 }（tool/call 起，tool/result 算真实耗时）
     let lastMediaRouteResult = null;  // 本 turn 最近一次 media.route 的结构化结果 { type, url }
     let currentTenantId = "";         // 本 turn 租户上下文（cmd.tenantId 注入，供 ga.query / attribution.query）
     let lastReport = null;            // 本 turn 最近一次 ga.query / attribution.quality 返回的 report（outputType=report，透传前端抽屉）
@@ -215,14 +216,17 @@ function apply(ctx) {
       if (event.type === "tool/call") {
         const d = event.data || {};
         if (d.callId) stepNames.set(d.callId, d.name || "tool");
-        emit({ type: "step", sessionId: sid, name: d.name || "tool", args: truncate(JSON.stringify(d.arguments), 200) });
+        const args = truncate(JSON.stringify(d.arguments), 200);
+        if (d.callId) stepStarted.set(d.callId, { name: d.name || "tool", args, t0: Date.now() });
+        emit({ type: "step", sessionId: sid, callId: d.callId, name: d.name || "tool", args, phase: "call" });
         return;
       }
       if (event.type === "tool/result") {
         const d = event.data || {};
         const msg = d.message || {};
         const callId = msg.source && msg.source.callId;
-        const name = stepNames.get(callId) || "tool";
+        const started = callId ? stepStarted.get(callId) : null;
+        const name = (started && started.name) || stepNames.get(callId) || "tool";
         let text = "";
         let isError = false;
         const blocks = Array.isArray(msg.content) ? msg.content : [];
@@ -231,7 +235,9 @@ function apply(ctx) {
           text = Array.isArray(b.content) ? b.content.map((c) => (c && c.text) || "").join("") : String(b.content == null ? "" : b.content);
           if (b.isError === true) isError = true;
         }
-        emit({ type: "step", sessionId: sid, name, result: truncate(text, 400), isError });
+        const durationMs = started ? (Date.now() - started.t0) : null;
+        emit({ type: "step", sessionId: sid, callId, name, args: started ? started.args : undefined, result: truncate(text, 400), isError, durationMs, phase: "result" });
+        if (callId) stepStarted.delete(callId);
         return;
       }
     });
