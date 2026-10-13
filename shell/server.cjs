@@ -113,6 +113,13 @@ const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv"]);
 // ---- 视频/音频上传（mp4/webm/mov/mp3/wav/m4a；单文件上限默认 50MB，PT_MEDIA_UPLOAD_MB 覆盖）----
 const MEDIA_UPLOAD_MAX_BYTES = Number(process.env.PT_MEDIA_UPLOAD_MB || 50) * 1024 * 1024;
 
+// ---- /uploads 静态服务 Content-Type 映射：图片 + 音视频（非 Chrome 浏览器播放视频/音频依赖正确 MIME）----
+const UPLOAD_MIME = {
+  ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+  ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+  ".mp3": "audio/mpeg", ".wav": "audio/wav", ".m4a": "audio/mp4",
+};
+
 let auth = null;                 // 身份库句柄
 let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
@@ -737,6 +744,55 @@ function serveFile(res, f) {
   res.end(fs.readFileSync(f));
 }
 
+/** /uploads 流式响应：支持 Range（Accept-Ranges + 206 分段），用 createReadStream 避免整文件读入内存阻塞。
+ *  视频/音频播放与拖进度条依赖 Range；不信任客户端 Range，越界回 416。 */
+function serveUploadedFile(req, res, f, contentType) {
+  let st;
+  try { st = fs.statSync(f); } catch (e) {
+    res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" });
+    return res.end("<h2>404</h2>");
+  }
+  const size = st.size;
+  const isHead = req.method === "HEAD";
+  res.setHeader("Accept-Ranges", "bytes");
+  res.setHeader("Content-Type", contentType);
+
+  const range = req.headers.range;
+  const m = range && /^bytes=(\d*)-(\d*)$/.exec(String(range).trim());
+  if (m && !(m[1] === "" && m[2] === "")) {
+    let start, end;
+    if (m[1] === "") {
+      // 后缀范围 bytes=-N：取末尾 N 字节
+      const n = parseInt(m[2], 10);
+      start = n > 0 ? Math.max(0, size - n) : 0;
+      end = size - 1;
+    } else {
+      start = parseInt(m[1], 10);
+      end = m[2] === "" ? size - 1 : Math.min(parseInt(m[2], 10), size - 1);
+    }
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || start >= size || start > end) {
+      res.writeHead(416, { "Content-Range": "bytes */" + size });
+      return res.end();
+    }
+    res.writeHead(206, {
+      "Content-Range": "bytes " + start + "-" + end + "/" + size,
+      "Content-Length": end - start + 1,
+      "Accept-Ranges": "bytes",
+      "Cache-Control": "no-store",
+    });
+    if (isHead) return res.end();
+    const s = fs.createReadStream(f, { start, end });
+    s.on("error", (e) => res.destroy(e));
+    return s.pipe(res);
+  }
+
+  res.writeHead(200, { "Content-Length": size, "Accept-Ranges": "bytes", "Cache-Control": "no-store" });
+  if (isHead) return res.end();
+  const s = fs.createReadStream(f);
+  s.on("error", (e) => res.destroy(e));
+  s.pipe(res);
+}
+
 /** P1-1 CSRF：写操作校验 Origin/Referer 与 Host 同源（跨站请求 Origin 必为异源，直接拒绝）。 */
 function csrfOk(req) {
   const host = req.headers.host;
@@ -806,10 +862,8 @@ async function handle(req, res) {
     const meUp = await authed(req);
     if (!meUp || !meUp.tenant || meUp.tenant.id !== tenantId) return json(res, 403, { ok: false, error: "无权访问" });
     const f = path.join(RUNTIME, "_uploads", tenantId, fname);
-    if (!fs.existsSync(f)) { res.writeHead(404, { "Content-Type": "text/html; charset=utf-8" }); return res.end("<h2>404</h2>"); }
-    const ct = ({ ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp" })[path.extname(f).toLowerCase()] || "application/octet-stream";
-    res.writeHead(200, { "Content-Type": ct, "Cache-Control": "no-store" });
-    return res.end(fs.readFileSync(f));
+    const ct = UPLOAD_MIME[path.extname(f).toLowerCase()] || "application/octet-stream";
+    return serveUploadedFile(req, res, f, ct);
   }
   if (p === "/dashboard" || p.indexOf("/dashboard/") === 0) {
     const meDash = await authed(req);
