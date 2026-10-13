@@ -625,14 +625,22 @@ async function ask(msg) {
   // 文本文档：只传后端返回的 url 列表（/uploads/<租户>/<随机名>.<ext>），
   // 正文由服务端读出来注入上下文，URL 本身不下发给模型。
   if (pendingDocs.length) payload.documents = pendingDocs.map(d => d.url);
+  // 音视频：提交 [{ type:"video"|"audio", url }]，气泡里由 chat-media.js 渲成播放器。
+  // 只传 url 不传文件本体 —— 落盘和租户隔离都在基座 /api/upload-media 那边做完了。
+  if (pendingMedia.length) payload.media = pendingMedia.map(m => ({ type: m.type, url: m.url }));
   // 素材生成类型：text2image / image2image / text2video / image2video。
   // 选「自动」时不传，交给 Agent 自己判断，免得普通问答被带偏成素材生成。
   if (genCfg.taskType) payload.taskType = genCfg.taskType;
   // 立即渲染用户消息（乐观更新），AI 回复回来后再用服务器完整列表覆盖
-  renderMessage({ role: "user", text: msg, ts: Date.now(), image: pendingImage || undefined, documents: payload.documents });
+  // media 也要带进乐观渲染，否则发出去要等服务器往返回来才看到播放器，像没发成功。
+  renderMessage({
+    role: "user", text: msg, ts: Date.now(),
+    image: pendingImage || undefined, documents: payload.documents, media: payload.media,
+  });
   chat.scrollTop = chat.scrollHeight;
   clearPendingImage();
   clearPendingDocs();
+  clearPendingMedia();
   await runChat(payload);
 }
 
@@ -817,6 +825,7 @@ if (userEntry && userMenu) {
 const imgInput = $("#imgInput"), imgBtn = $("#imgBtn"), imgPreview = $("#imgPreview"), imgThumb = $("#imgThumb"), imgClear = $("#imgClear");
 const genTypeEl = $("#genType"), genHintEl = $("#genHint"), emptyInputEl = $("#emptyInput");
 const docInput = $("#docInput"), docBtn = $("#docBtn"), docListEl = $("#docList"), composerNoticeEl = $("#composerNotice");
+const mediaInput = $("#mediaInput"), mediaBtn = $("#mediaBtn"), mediaListEl = $("#mediaList");
 let pendingImage = null;
 
 /* 素材生成类型：与 media.route 的 taskType 一一对应。
@@ -990,12 +999,117 @@ async function uploadDocFile(f) {
   }
 }
 
-/** 聊天框收到一个文件 —— 点「+」/「文档」选择、拖进来、Ctrl+V 粘贴，三条路都走这里。 */
+/* ---- 音视频上传（video/* 与 audio/*，单文件 ≤50MB）----
+ * 走基座新增的 POST /api/upload-media，只把返回的 url 存下来，
+ * 发消息时作为 media 数组提交（[{ type:"video"|"audio", url }]），
+ * 气泡里由 chat-media.js 渲成 <video> / <audio> 播放器（那条路 renderMessage 已接好）。
+ *
+ * 请求体：{ name, data, kind } —— 与 /api/upload-doc 同一个形状。kind 是前端按 MIME/扩展名判出来的，
+ *         基座可以忽略它、按文件魔数自己判（server.cjs 的 detectMediaType）；
+ *         气泡里最终用什么标签也以**响应里的 type/kind** 为准，响应没给时才退回前端判的 kind
+ *         （后端现在返回的是 kind 字段，normMediaType 两种都认，也能挡住非 video/audio 的脏值）。
+ * 响应体：{ ok:true, url, size, kind, ext }
+ *
+ * 下面的类型 / 体积校验只是「早点给提示」，后端还会按魔数再判一次，两道都在。
+ * 50MB 上限与后端 MEDIA_UPLOAD_MAX_BYTES（PT_MEDIA_UPLOAD_MB 默认 50）保持一致。 */
+const MEDIA_MAX_BYTES = 50 * 1024 * 1024;
+/** MIME 为空时（.mkv/.mov 这类浏览器经常给不出 MIME）按扩展名兜底。
+ *  与基座 detectMediaType 的魔数白名单**一一对应** —— 后端按内容只认这 6 种，
+ *  前端收窄到同一份，用户传 .mkv/.flac 这类后端不认的格式时能立刻提示，
+ *  不用等传完几十 MB 才被后端退回来。改后端魔数白名单时记得同步这里。 */
+const MEDIA_EXT_KIND = {
+  mp4: "video", webm: "video", mov: "video",     // 视频
+  mp3: "audio", wav: "audio", m4a: "audio",      // 音频
+};
+let pendingMedia = [];   // [{ type:"video"|"audio", url, name, size }]
+
+/** 只认 "video" / "audio" 两个值，其它（含空、大小写混写）一律返回空串由调用方兜底。 */
+function normMediaType(t) {
+  const s = String(t == null ? "" : t).toLowerCase().trim();
+  return (s === "video" || s === "audio") ? s : "";
+}
+
+/** 判文件是视频还是音频：先看 MIME（浏览器给的准），MIME 为空（.mkv/.mov 常见）再看扩展名。 */
+function mediaKindOf(f) {
+  const mime = String((f && f.type) || "").toLowerCase().trim();
+  if (/^video\//.test(mime)) return "video";
+  if (/^audio\//.test(mime)) return "audio";
+  return MEDIA_EXT_KIND[docExtOf(f && f.name)] || "";
+}
+
+function mediaKindLabel(kind) { return kind === "audio" ? "音频" : "视频"; }
+
+/** 已附加音视频的胶囊列表（可逐个移除）。 */
+function renderMediaList() {
+  if (!mediaListEl) return;
+  mediaListEl.hidden = !pendingMedia.length;
+  mediaListEl.innerHTML = "";
+  pendingMedia.forEach((m, i) => {
+    const chip = document.createElement("div");
+    chip.className = "attach-chip media-chip";
+    chip.innerHTML = '<span class="ico" data-ico="' + (m.type === "audio" ? "music" : "play") + '"></span>';
+    const nm = document.createElement("span");
+    nm.className = "attach-name"; nm.textContent = m.name || "媒体文件"; nm.title = m.name || "";
+    const sz = document.createElement("span");
+    sz.className = "attach-size"; sz.textContent = fmtSize(m.size);
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "attach-del";
+    del.title = "移除这个" + mediaKindLabel(m.type); del.textContent = "×";
+    del.addEventListener("click", () => { pendingMedia.splice(i, 1); renderMediaList(); });
+    chip.appendChild(nm); chip.appendChild(sz); chip.appendChild(del);
+    mediaListEl.appendChild(chip);
+  });
+  if (window.initIcons) window.initIcons();
+}
+function clearPendingMedia() { pendingMedia = []; renderMediaList(); if (mediaInput) mediaInput.value = ""; }
+
+/** 上传一个音视频 → 加入 pendingMedia。任何一步失败都给出具体原因。 */
+async function uploadMediaFile(f) {
+  if (!f) return false;
+  const name = f.name || "未命名文件";
+  const kind = mediaKindOf(f);
+  if (!kind) {
+    composerNotice("只支持视频或音频文件，「" + name + "」不是", "err");
+    return false;
+  }
+  if (!f.size) { composerNotice("「" + name + "」是空文件，没有可播放的内容", "err"); return false; }
+  if (f.size > MEDIA_MAX_BYTES) {
+    composerNotice("媒体太大：单文件上限 50MB，「" + name + "」是 " + fmtSize(f.size), "err");
+    return false;
+  }
+  let b64;
+  try { b64 = await readFileAsDataUrl(f); }
+  catch (e) { composerNotice("读取失败：" + e.message, "err"); return false; }
+  try {
+    const r = await fetch("/api/upload-media", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name, data: b64, kind: kind }),
+    });
+    const j = await r.json().catch(() => null);
+    if (j && j.ok && j.url) {
+      const type = normMediaType(j.type != null ? j.type : j.kind) || kind;
+      pendingMedia.push({ type: type, url: j.url, name: name, size: j.size || f.size });
+      renderMediaList();
+      composerNotice("已附加" + mediaKindLabel(type) + "「" + name + "」（" + fmtSize(j.size || f.size) + "）", "ok");
+      return true;
+    }
+    // 后端拒绝（类型不支持 / 超限 / 配额满 / 非本租户）都把原因原样说清楚
+    composerNotice((j && j.error) || ("上传失败（HTTP " + r.status + "）"), "err");
+    return false;
+  } catch (e) {
+    composerNotice("上传失败：" + (e && e.message ? e.message : "网络错误"), "err");
+    return false;
+  }
+}
+
+/** 聊天框收到一个文件 —— 点「+」/「文档」/「音视频」选择、拖进来、Ctrl+V 粘贴，几条路都走这里。 */
 async function handleComposerFile(f) {
   if (!f) return;
   if (isDocFile(f)) { await uploadDocFile(f); return; }          // 文档 → /api/upload-doc
+  if (mediaKindOf(f)) { await uploadMediaFile(f); return; }      // 音视频 → /api/upload-media
   if (!/^image\//.test(f.type || "")) {
-    composerNotice("只支持图片（参考素材）或 .txt / .md / .csv 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
+    composerNotice("只支持图片（参考素材）、音视频，或 .txt / .md / .csv 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
     return;
   }
   if (f.size > 15 * 1024 * 1024) { composerNotice("素材太大（≤15MB）", "err"); return; }
@@ -1005,6 +1119,12 @@ async function handleComposerFile(f) {
 
 if (imgBtn) imgBtn.addEventListener("click", () => imgInput.click());
 if (docBtn) docBtn.addEventListener("click", () => { if (docInput) docInput.click(); });
+if (mediaBtn) mediaBtn.addEventListener("click", () => { if (mediaInput) mediaInput.click(); });
+if (mediaInput) mediaInput.addEventListener("change", async () => {
+  const files = Array.prototype.slice.call(mediaInput.files || []);
+  for (const f of files) await uploadMediaFile(f);
+  mediaInput.value = "";   // 清空，同一个文件可以再选一次
+});
 if (docInput) docInput.addEventListener("change", async () => {
   const files = Array.prototype.slice.call(docInput.files || []);
   for (const f of files) await uploadDocFile(f);

@@ -277,8 +277,12 @@
             <div class="doc-list" id="docList" hidden></div>
             <input type="file" id="imgInput" hidden>
             <input type="file" id="docInput" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" multiple hidden>
+            <input type="file" id="mediaInput" accept="video/*,audio/*" multiple hidden>
             <button class="composer-add-btn" id="imgBtn" type="button" title="添加参考图"><span class="ico" data-ico="plus"></span></button>
             <button class="composer-add-btn doc" id="docBtn" type="button" title="上传文档（.txt / .md / .csv，单文件 ≤5MB）"><span class="ico" data-ico="fileText"></span></button>
+            <button class="composer-add-btn media" id="mediaBtn" type="button" title="上传音视频（mp4 / webm / mov / mp3 / wav / m4a，单文件 ≤50MB），发送后气泡里可直接播放"><span class="ico" data-ico="music"></span></button>
+            <!-- 已附加的音视频（.mp4/.mp3/…）：发送时随 media 数组一起提交，气泡里渲染成播放器 -->
+            <div class="media-list" id="mediaList" hidden></div>
             <textarea id="ta" rows="1" placeholder="输入问题，或用 @引用数据面板内容… (Enter 发送 / Shift+Enter 换行)"></textarea>
             <div class="foot-bar">
               <div class="model-switcher" id="modelSwitcher">

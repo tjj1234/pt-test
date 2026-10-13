@@ -229,6 +229,7 @@ async function runDshForUser(userId, question, opts = {}) {
     memory: opts.memory,
     imageNote: opts.imageNote,
     docNote: opts.docNote,
+    mediaNote: opts.mediaNote,
     context: opts.context,
     history: opts.history,
     question,

@@ -362,24 +362,25 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 /* 素材拖到聊天输入区上方时的高亮（与 .imp-drop.over 同一套观感） */
 .empty-input.over{border-color:#1a1a1a;border-style:dashed;background:#f6f6f6}
 
-/* 文档上传按钮：紧跟在 + 号（参考图）右边 */
+/* 文档上传按钮：紧跟在 + 号（参考图）右边；音视频按钮再往右一格 */
 .composer-add-btn.doc{left:46px}
+.composer-add-btn.media{left:76px}
 
 /* 已附加文档的胶囊列表 */
-.doc-list{display:flex;flex-wrap:wrap;gap:6px;padding:2px 10px 6px 46px}
-.doc-chip{
+.doc-list,.media-list{display:flex;flex-wrap:wrap;gap:6px;padding:2px 10px 6px 46px}
+.doc-chip,.attach-chip{
   display:inline-flex;align-items:center;gap:5px;max-width:280px;
   padding:4px 8px;border:1px solid var(--line);border-radius:8px;
   background:#fafafa;font-size:12px;color:var(--text-2);
 }
-.doc-chip .ico{width:13px;height:13px;color:var(--text-3);flex-shrink:0}
-.doc-chip .doc-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.doc-chip .doc-size{color:var(--text-3);flex-shrink:0}
-.doc-chip .doc-del{
+.doc-chip .ico,.attach-chip .ico{width:13px;height:13px;color:var(--text-3);flex-shrink:0}
+.doc-chip .doc-name,.attach-chip .attach-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-chip .doc-size,.attach-chip .attach-size{color:var(--text-3);flex-shrink:0}
+.doc-chip .doc-del,.attach-chip .attach-del{
   border:0;background:none;padding:0 0 0 2px;cursor:pointer;
   color:var(--bad);font-size:14px;line-height:1;font-family:inherit;
 }
-.doc-chip .doc-del:hover{color:#a31b1b}
+.doc-chip .doc-del:hover,.attach-chip .attach-del:hover{color:#a31b1b}
 
 /* 输入区提示条：上传失败原因 / 成功回执，比 alert 清楚也不打断输入 */
 .composer-notice{
@@ -684,6 +685,8 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   cursor:pointer;font-size:14px;line-height:1;
 }
 .bubimg{display:block;max-width:220px;max-height:180px;border-radius:9px;margin-bottom:6px}
+/* 气泡里的音频播放器：<audio> 默认宽度不跟气泡走，这里拉成块级并给个上限 */
+.bubmedia.bubaudio{display:block;width:100%;max-width:360px;margin-bottom:6px}
 .bubtext{display:block;white-space:pre-wrap;word-break:break-word}
 
 /* ---------- 记忆 ---------- */

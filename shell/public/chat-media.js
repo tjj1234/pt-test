@@ -9,8 +9,9 @@
  *
  * 渲染规则：
  *   - type === "video"        → <video class="bubmedia bubvideo" controls preload="metadata">
+ *   - type === "audio"        → <audio class="bubmedia bubaudio" controls preload="metadata">
  *   - 其余（image 或未知类型）→ <img class="bubmedia" loading="lazy">（未知类型按图片兜底，避免媒体无法展示）
- *   - 加载失败：img/video 绑定 onerror，失败时把破图标/空白替换为兜底文案（.bubmedia-fallback），文案含类型与失败 URL
+ *   - 加载失败：img/video/audio 绑定 onerror，失败时把破图标/空白替换为兜底文案（.bubmedia-fallback），文案含类型与失败 URL
  */
 (function () {
   "use strict";
@@ -26,11 +27,11 @@
     return t ? String(t).toLowerCase() : "";
   }
 
-  /* 加载失败兜底：用一段文案替换破图标 / 空白。kind 决定文案（图片/视频）。 */
+  /* 加载失败兜底：用一段文案替换破图标 / 空白。kind 决定文案（图片/视频/音频）。 */
   function makeFallback(kind, url) {
     const fb = document.createElement("div");
     fb.className = "bubmedia-fallback";
-    const label = kind === "video" ? "视频" : "图片";
+    const label = kind === "video" ? "视频" : (kind === "audio" ? "音频" : "图片");
     const msg = document.createElement("span");
     msg.className = "bubmedia-fallback-msg";
     msg.textContent = label + "加载失败，请检查链接";
@@ -73,6 +74,15 @@
         v.preload = "metadata";
         v.setAttribute("playsinline", "");
         if (bub.appendChild) bub.appendChild(v);
+      } else if (type === "audio") {
+        // 音频：与 video 分支同一套写法，只换成 <audio>（自带浏览器原生播放器，无需 poster/playsinline）
+        const a = document.createElement("audio");
+        a.className = "bubmedia bubaudio";
+        attachErrorFallback(a, "audio", url, bub); // 先绑 onerror 再设 src
+        a.src = url;
+        a.controls = true;
+        a.preload = "metadata";
+        if (bub.appendChild) bub.appendChild(a);
       } else {
         const img = document.createElement("img");
         img.className = "bubmedia";
