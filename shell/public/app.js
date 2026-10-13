@@ -2570,6 +2570,14 @@ function bizUsageSample() {
   const now = Date.now(), days = bizUsageRange === "month" ? [0, 2, 12] : bizUsageRange === "week" ? [0, 2] : [0];
   return { ok: true, calls: days.map((d, i) => ({ id: "demo-" + i, timestamp: new Date(now - d * 86400000).toISOString(), toolName: bizToolSamples[i % 2].name, inputSummary: "最近广告数据", outputSummary: "分析已完成", durationMs: 240 + i * 80, tokenCount: 380 + i * 60, status: "success" })) };
 }
+// 顶部汇总要区分「真的是 0」和「没有数据」：DSH 协议不返回 token 时后端诚实标 null，
+// 当成 0 累加会显示「0 Tokens」，看着像测出来零消耗，实际是压根没测。
+// 全都没数据 → 「Token数据暂缺」；只要有一条有真实数值就正常求和（null 按 0 计入）。
+function bizTokenSummary(calls) {
+  const num = (c) => (c && c.tokenCount != null && Number.isFinite(Number(c.tokenCount)) ? Number(c.tokenCount) : null);
+  if (!calls.some((c) => num(c) !== null)) return "Token数据暂缺";
+  return calls.reduce((n, c) => n + (num(c) || 0), 0) + " Tokens";
+}
 async function bizLoadUsage() {
   const seq = ++bizUsageRequest; $("#usageStatus").textContent = "读取调用记录…";
   $("#usageRanges").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.range === bizUsageRange)));
@@ -2578,7 +2586,7 @@ async function bizLoadUsage() {
     if (seq !== bizUsageRequest) return;
     if (!Array.isArray(result.data.calls)) throw new Error("调用日志接口返回格式不正确");
     const calls = result.data.calls;
-    $("#usageStatus").textContent = (result.mock ? "示例数据 · 日志接口待接入。" : "") + (calls.length ? calls.length + " 次调用 · " + calls.reduce((n, c) => n + (Number(c.tokenCount) || 0), 0) + " Tokens" : "所选时间范围内没有工具调用");
+    $("#usageStatus").textContent = (result.mock ? "示例数据 · 日志接口待接入。" : "") + (calls.length ? calls.length + " 次调用 · " + bizTokenSummary(calls) : "所选时间范围内没有工具调用");
     bizTable($("#usageList"), ["时间", "工具", "输入摘要", "输出摘要", "耗时", "Tokens", "状态"], calls.map(c => [fmtTime(c.timestamp), c.toolName, c.inputSummary, c.outputSummary, c.durationMs == null ? "—" : c.durationMs + " ms", c.tokenCount, ({ success: "成功", completed: "成功", failed: "失败", error: "失败", running: "执行中", started: "执行中", skipped: "未执行", pending: "等待中" })[c.status] || c.status]));
   } catch (e) { if (seq === bizUsageRequest) { $("#usageList").replaceChildren(); $("#usageStatus").textContent = e.message; } }
 }
