@@ -4,7 +4,23 @@ const {connectorFromEnv} = require('../../../business/attribution/ga-connector')
 const {readGaConnectionStatus,deleteGaConnection} = require('../../../business/attribution/ga-connector/store');
 function registerGaConnectorRoutes(app,opts) {
  let connector=opts.gaConnector;
- const getConnector=()=>connector||(connector=connectorFromEnv(opts.pool));
+ let initializationAttempt=0;
+ const processStartedAt=new Date(Date.now()-process.uptime()*1000).toISOString();
+ const getConnector=()=>{
+  if (connector) return connector;
+  initializationAttempt++;
+  const diagnostic={event:'ga_connector_initialization',timestamp:new Date().toISOString(),pid:process.pid,process_started_at:processStartedAt,attempt:initializationAttempt};
+  try {
+   connector=connectorFromEnv(opts.pool);
+   app.log.info({...diagnostic,outcome:'success'},'ga connector initialized');
+   return connector;
+  } catch(e) {
+   // Log the first failure only; retries and successful singleton caching stay unchanged.
+   // Record names, never environment values or exception messages containing secrets.
+   if (initializationAttempt===1) app.log.warn({...diagnostic,outcome:'failure',code:e.code||'GA_INTERNAL_ERROR',missing_env:['GA_CLIENT_ID','GA_CLIENT_SECRET','GA_REDIRECT_URI','GA_TOKEN_ENCRYPTION_KEY'].filter(name=>!process.env[name])},'ga connector initialization failed');
+   throw e;
+  }
+ };
  async function handle(req,reply,fn,needsConnector=true) {
   reply.header('cache-control','no-store').header('referrer-policy','no-referrer');
   try {
