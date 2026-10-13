@@ -22,9 +22,12 @@
     '<div style="position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(15,23,42,.38)"></div>' +
     '<aside style="position:relative;width:400px;max-width:92vw;height:100%;background:#fff;' +
       'display:flex;flex-direction:column;box-shadow:-12px 0 32px rgba(15,23,42,.2)">' +
-      '<div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)">' +
+      '<div style="display:flex;align-items:flex-start;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--line)">' +
         '<h2 style="font-size:16px;margin:0;color:var(--ink)">🔑 我的 PT Key</h2>' +
-        '<button id="kdClose" type="button" style="width:30px;height:30px;border:0;border-radius:8px;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:var(--sub)">×</button>' +
+        '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">' +
+          '<button id="kdClose" type="button" style="width:30px;height:30px;border:0;border-radius:8px;background:transparent;font-size:22px;line-height:1;cursor:pointer;color:var(--sub)">×</button>' +
+          '<span style="font-size:11px;line-height:1.3;color:var(--sub);text-align:right">随时可在<br>账户菜单重开</span>' +
+        '</div>' +
       '</div>' +
       '<div style="flex:1;overflow:auto;padding:18px 20px">' +
         '<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:12px 14px;border:1px dashed var(--line);border-radius:10px;background:#fafbff;font-size:13px">' +
@@ -53,7 +56,7 @@
         '<div style="font-size:12px;color:var(--sub);margin-top:14px;line-height:1.6">你的 PT key 只在你点「保存绑定」时进入浏览器内存并立即 POST 到服务端加密落库，提交后输入框马上清空；明文 key 不会写入本地存储、不会打印到控制台、也不会出现在网址里。服务端也只回显末 4 位。</div>' +
       '</div>' +
       '<div style="padding:14px 20px;border-top:1px solid var(--line)">' +
-        '<button class="btn" id="kdDone" type="button" style="width:100%">完成</button>' +
+        '<button class="btn" id="kdDone" type="button" style="width:100%">稍后再说，先去逛逛</button>' +
       '</div>' +
     '</aside>';
   document.body.appendChild(overlay);

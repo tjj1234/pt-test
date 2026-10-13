@@ -2505,7 +2505,7 @@ async function bizLoadFlows() {
       const run = bizNode("button", "运行", "toolbar-btn"); run.type = "button";
       run.addEventListener("click", async () => {
         run.disabled = true;
-        try { if (!state.activeId && !(await newConversation())) { $("#toolsStatus").textContent = "无法创建对话，请重试"; return; } switchView("chat"); ta.value = "@" + t.name + " "; ta.dispatchEvent(new Event("input", { bubbles: true })); ta.focus(); }
+        try { await gotoChatWithQuestion("@" + t.name + " "); }
         finally { run.disabled = false; }
       }); card.appendChild(run); $("#toolsList").appendChild(card);
     });

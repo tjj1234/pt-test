@@ -4,32 +4,52 @@
 <title>账户与授权 · PowerTokens Agent</title>
 <link rel="stylesheet" href="/assets/styles.css">
 <style>
-  /* 仅本页需要的小样式，全部沿用 styles.css 的 :root 变量，不新造配色 */
-  .key-card{width:460px;max-width:calc(100vw - 32px)}
-  .portal{display:flex;align-items:center;gap:8px;margin:18px 0 0;padding:12px 14px;
-    border:1px dashed var(--line);border-radius:10px;background:#fafbff;font-size:13px}
-  .portal a{font-weight:600;text-decoration:none}
-  .portal .ico{font-size:15px}
-  .status{font-size:13px;color:var(--sub);margin:14px 0 0}
+  /* settings.html 专属布局：明确是「应用内设置页」，不再复用登录页的 .login-wrap/.login-card 视觉 */
+  .settings-topbar{position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:14px;
+    padding:12px 20px;background:#fff;border-bottom:1px solid var(--line)}
+  .settings-back{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border:1px solid var(--line);
+    border-radius:10px;background:#fff;color:var(--brand);font-size:13px;font-weight:600;text-decoration:none;
+    cursor:pointer;font-family:inherit}
+  .settings-back:hover{border-color:var(--brand);background:#f6f8ff}
+  .settings-title{font-size:15px;font-weight:600;color:var(--ink)}
+  .settings-main{max-width:600px;margin:0 auto;padding:22px 16px 48px}
+
+  .settings-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;margin-bottom:18px}
+  .settings-card > section{margin-bottom:18px}
+  .settings-details{margin-bottom:18px;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
+  #pwf{padding:4px 22px 22px}
+
+  /* 输入框 / 标签：原来靠 .login-card 的样式，现在由设置页自己提供，避免依赖登录页 */
+  .settings-main label{display:block;font-size:12px;color:var(--sub);margin:16px 0 6px}
+  .settings-main input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:10px;
+    font-family:inherit;font-size:14px;box-sizing:border-box;background:#fff;color:var(--ink)}
+  .settings-main input:focus{outline:none;border-color:#1a1a1a;box-shadow:0 0 0 3px rgba(26,26,26,.08)}
+
+  /* 折叠的「修改登录密码」区块：默认收起，点了 summary 才展开 */
+  .settings-summary{list-style:none;cursor:pointer;padding:16px 18px;font-size:14px;font-weight:600;
+    color:var(--ink);user-select:none}
+  .settings-summary::-webkit-details-marker{display:none}
+  .settings-summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--sub);transition:transform .15s}
+  details[open] > .settings-summary::before{transform:rotate(90deg)}
+
+  /* 下面这些功能类都在 styles.css 里、与登录页视觉无关，直接沿用，不在本页重造 */
   .keyrow{display:flex;gap:8px}
   .keyrow input{flex:1;font-family:ui-monospace,Consolas,monospace}
   .ghost{flex:0 0 auto;padding:0 14px;border:1px solid var(--line);border-radius:10px;
     background:#fff;color:var(--sub);font-size:13px;cursor:pointer;font-family:inherit}
   .ghost:hover{border-color:var(--brand);color:var(--brand)}
   .ghost.wide{width:100%;margin-top:10px;padding:10px}
+  .portal{display:flex;align-items:center;gap:8px;margin:18px 0 0;padding:12px 14px;
+    border:1px dashed var(--line);border-radius:10px;background:#fafbff;font-size:13px}
+  .portal a{font-weight:600;text-decoration:none}
+  .portal .ico{font-size:15px}
+  .status{font-size:13px;color:var(--sub);margin:14px 0 0}
   .bound{text-align:center;padding:14px 0 4px}
   .badge{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600;
     color:var(--ok);background:#e8f7ee;border-radius:999px;padding:5px 14px}
   .mask{font:600 30px/1.4 ui-monospace,Consolas,monospace;letter-spacing:2px;margin:16px 0 4px;color:var(--ink)}
   .sub{font-size:12px;color:var(--sub);margin-bottom:18px}
 
-  /* 两张卡片（Key 绑定 / 修改登录密码）上下排列：
-     基础 .login-wrap 是 flex 居中容器，默认横排会把两张卡挤在同一行、窄屏时互相压住。
-     这里改成纵向流 + 间距，两张卡各占一行。 */
-  .login-wrap{flex-direction:column;gap:18px;padding:24px 16px}
-
-  /* 广告与数据源授权（非 GA）：沿用 U-M-B「先 mock 再换血」模式重补回来。
-     GA4 的连接/解除/更换 Property 已挪去技能页，这里只管 SS-GTM / Meta / MCP 之类。 */
   .acct-list{display:flex;flex-direction:column;gap:10px;margin:12px 0 4px}
   .acct-item{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:#fff}
   .acct-main{flex:1;min-width:0}
@@ -38,13 +58,12 @@
   .acct-updated{font-size:11.5px;color:var(--sub);margin-top:6px;opacity:.85}
   .acct-side{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex:0 0 auto}
   .acct-badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;border-radius:999px;padding:4px 12px}
-  .acct-badge.ok{color:#0f7a3d;background:#e8f7ee}      /* 有效：绿 */
-  .acct-badge.warn{color:#9a6b00;background:#fff4d6}     /* 即将过期：琥珀 */
-  .acct-badge.danger{color:#b42318;background:#fde7e4}  /* 需重验：红 */
+  .acct-badge.ok{color:#0f7a3d;background:#e8f7ee}
+  .acct-badge.warn{color:#9a6b00;background:#fff4d6}
+  .acct-badge.danger{color:#b42318;background:#fde7e4}
   .acct-revoke{border:1px solid var(--line);background:#fff;color:var(--bad);border-radius:7px;
     padding:5px 12px;font-size:12px;cursor:pointer;font-family:inherit}
   .acct-revoke:hover{background:#fdeaea}
-  /* 解除确认弹框（含解除影响提醒） */
   .modal-mask{display:none;position:fixed;inset:0;background:rgba(17,20,26,.45);
     align-items:center;justify-content:center;padding:16px;z-index:60}
   .modal-card{width:420px;max-width:100%;background:#fff;border-radius:14px;padding:20px;
@@ -52,24 +71,26 @@
   .modal-card h3{margin:0 0 10px;font-size:15px}
   .modal-card p{margin:0;white-space:pre-line;font-size:13px;color:var(--sub)}
   .modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
-  .modal-actions .btn{padding:9px 16px}
+  .modal-actions .btn{padding:9px 16px;margin-top:0}
   .btn.danger{background:#b42318;color:#fff;border:0;border-radius:10px;
     padding:9px 16px;font-weight:600;font-family:inherit;font-size:13px;cursor:pointer}
   .btn.danger:hover{filter:brightness(.94)}
+  .settings-foot{margin-top:8px;font-size:13px;color:var(--sub);text-align:center}
+  .settings-foot a{color:var(--brand);text-decoration:none}
   @media (max-width:480px){
-    .login-wrap{padding:16px}
-    .login-card{width:100%;flex-shrink:0}
+    .settings-main{padding:16px 12px 40px}
+    .settings-card{padding:18px 16px 16px}
+    #pwf{padding:4px 16px 18px}
   }
 </style>
 </head>
 <body>
-<div class="login-wrap">
-  <form class="login-card key-card" id="f" autocomplete="off">
-    <div class="brand">
-      <div class="logo">P</div>
-      <div><h1>PowerTokens Agent</h1><p>账户与授权</p></div>
-    </div>
-
+<header class="settings-topbar">
+  <a class="settings-back" href="/">← 返回工作区</a>
+  <span class="settings-title">账户与授权</span>
+</header>
+<main class="settings-main">
+  <form class="settings-card" id="f" autocomplete="off">
     <section aria-labelledby="accountHeading"><h2 id="accountHeading">当前账户</h2>
       <p class="status" id="accountIdentity" role="status">读取账户信息…</p>
     </section>
@@ -110,25 +131,23 @@
 
     <div class="err" id="e"></div>
     <div class="hint">你的 PT key 只在你点「保存绑定」时进入浏览器内存并立即 POST 到服务端加密落库，提交后输入框马上清空；明文 key 不会写入本地存储、不会打印到控制台、也不会出现在网址里。服务端也只回显末 4 位。</div>
-    <!-- GA 授权已挪到「技能」页面：技能详情里完成连接 / 解除连接 / 更换 Property -->
-    <p><a href="/">返回工作区</a></p>
+    <p class="settings-foot"><a href="/">返回工作区</a></p>
   </form>
 
-  <!-- U3：修改登录密码（与 PT Key 绑定互不干扰，独立区块） -->
-  <form class="login-card" id="pwf" autocomplete="off" style="display:none">
-    <div class="brand">
-      <div class="logo">P</div>
-      <div><h1>PowerTokens Agent</h1><p>修改登录密码 · 账户安全</p></div>
-    </div>
-    <label for="cp">当前密码</label><input id="cp" type="password" autocomplete="current-password">
-    <label for="np">新密码</label><input id="np" type="password" autocomplete="new-password" placeholder="至少 8 位">
-    <div class="pw-meter" id="pwMeter2" hidden><div class="pw-bar"><span class="pw-bar-fill" id="pwBar2"></span></div><div class="pw-tip" id="pwTip2"></div></div>
-    <label for="np2">确认新密码</label><input id="np2" type="password" autocomplete="new-password" placeholder="再输一遍">
-    <div class="pw-match" id="pwMatch2" hidden></div>
-    <button class="btn" id="pwSave" type="submit">更新密码</button>
-    <div class="err" id="pwe"></div>
-  </form>
-</div>
+  <!-- U3：修改登录密码（与 PT Key 绑定互不干扰，独立区块；默认折叠，点了再展开） -->
+  <details class="settings-details" id="pwWrap">
+    <summary class="settings-summary">修改登录密码</summary>
+    <form id="pwf" autocomplete="off">
+      <label for="cp">当前密码</label><input id="cp" type="password" autocomplete="current-password">
+      <label for="np">新密码</label><input id="np" type="password" autocomplete="new-password" placeholder="至少 8 位">
+      <div class="pw-meter" id="pwMeter2" hidden><div class="pw-bar"><span class="pw-bar-fill" id="pwBar2"></span></div><div class="pw-tip" id="pwTip2"></div></div>
+      <label for="np2">确认新密码</label><input id="np2" type="password" autocomplete="new-password" placeholder="再输一遍">
+      <div class="pw-match" id="pwMatch2" hidden></div>
+      <button class="btn" id="pwSave" type="submit">更新密码</button>
+      <div class="err" id="pwe"></div>
+    </form>
+  </details>
+</main>
 <!-- M7：解除授权前的「解除影响提醒」弹框 -->
 <div class="modal-mask" id="revokeModal" role="dialog" aria-modal="true" aria-labelledby="revokeTitle">
   <div class="modal-card">
