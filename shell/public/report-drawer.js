@@ -56,6 +56,25 @@
       ".rpt-suggestion{display:flex;align-items:flex-start;gap:8px;font-size:13px;color:var(--text-1);line-height:1.55;}",
       ".rpt-suggestion>span:last-child{flex:1;}",
       ".rpt-muted{font-size:13px;color:var(--sub);padding:10px 0;}",
+      /* ---- 以下为 tracking-quality-report.v1 新增区块（评分状态/分项/覆盖/局限/来源/解读） ---- */
+      ".rpt-score-label{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}",
+      ".rpt-status{display:inline-block;padding:1px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid currentColor;white-space:nowrap;line-height:1.6;}",
+      ".rpt-method{margin-top:10px;padding:9px 11px;background:#fafafa;border:1px solid var(--line);border-radius:10px;font-size:11.5px;color:var(--sub);line-height:1.65;word-break:break-word;}",
+      ".rpt-comp{margin-top:12px;overflow-x:auto;}",
+      ".rpt-comp-table{width:100%;border-collapse:collapse;font-size:12px;}",
+      ".rpt-comp-table th,.rpt-comp-table td{border-bottom:1px solid var(--line);padding:6px 8px;text-align:left;white-space:nowrap;}",
+      ".rpt-comp-table th{color:var(--sub);font-weight:600;}",
+      ".rpt-comp-table td:first-child{white-space:normal;color:var(--text-1);}",
+      ".rpt-comp-table tbody tr:last-child td{border-bottom:none;}",
+      ".rpt-note{padding:11px 13px;border-radius:12px;font-size:12.5px;line-height:1.65;}",
+      ".rpt-note-warn{background:#fffbeb;border:1px dashed #d97706;}",
+      ".rpt-note-info{background:#f6f8fb;border:1px dashed #94a3b8;}",
+      ".rpt-note-title{font-weight:600;color:var(--text-1);margin-bottom:4px;}",
+      ".rpt-note-text{color:var(--sub);word-break:break-word;}",
+      ".rpt-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}",
+      ".rpt-chip{padding:2px 8px;border-radius:999px;background:#f4f4f5;color:var(--sub);font-size:11px;font-family:ui-monospace,Consolas,monospace;}",
+      ".rpt-limits{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:12.5px;color:var(--sub);line-height:1.65;}",
+      ".rpt-verify{margin-top:4px;font-size:11.5px;color:var(--sub);line-height:1.55;}",
       "@media (max-width:520px){.rpt-kv-row{grid-template-columns:1fr;gap:2px;}}",
     ].join("\n");
     const style = document.createElement("style");
@@ -101,7 +120,10 @@
   function close() { overlay.style.display = "none"; }
 
   function openSample() {
-    const sample = window.ReportRender && window.ReportRender.sampleReport;
+    const R = window.ReportRender;
+    // 优先用埋点质量报告样本（真实契约 tracking-quality-report.v1），
+    // 退回通用 sampleReport 只是为了兼容老版本渲染器。
+    const sample = R && (R.sampleTrackingQualityReport || R.sampleReport);
     open(sample || { title: "示例报告", meta: "（无样本数据）" });
   }
 
@@ -112,9 +134,11 @@
   closeBtn.addEventListener("click", close);
   overlay.firstElementChild.addEventListener("click", close); // 遮罩
 
-  /* ---- 演示接线：首页「埋点质量 AI 分析」chip 当前为「即将上线」占位，
+  /* ---- 演示接线：首页「埋点质量 AI 分析」chip 当前为「预览」占位。
    *      在基座「业务工具通用加载入口」就绪前，先让它点击打开样本预览抽屉，
-   *      便于在界面中看到完整 report 抽屉内容。基座就绪后用真实 Skill 输出替换即可。 ---- */
+   *      便于在界面中看到完整 report 抽屉内容。基座就绪后自动走 app.js 里
+   *      `if (m.report) openReportDrawer(m.report)` 那条真实链路，本处接线即可摘掉。
+   *      样本已换成 tracking-quality-report.v1 真实契约形状（不再是旧的 report.v1 假数据）。 ---- */
   const chip = document.getElementById("skill2Chip");
   if (chip) {
     chip.classList.remove("soon");
