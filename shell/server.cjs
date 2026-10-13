@@ -43,6 +43,7 @@ const toolsRegistry = require("./tools/registry.cjs");
 const { loadBusinessTools, loadBusinessConstraints } = require("./tools/autoload.cjs");
 const { queryBusinessWorkspace, normalizeEnabledStatus, queryGaConnectorStatus } = require("./workspace-enabled-status.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
+const { isMultipart, parseMultipart } = require("./multipart.cjs");
 
 // ---- 路径：全部相对 repo 根，可用环境变量覆盖 ----
 const SHELL = __dirname;
@@ -141,6 +142,24 @@ function readBody(req, limit) {
     req.on("data", (c) => { n += c.length; if (n > limit) { req.destroy(); return; } chunks.push(c); });
     req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
   });
+}
+
+// 读取原始二进制 body（multipart 上传用），超限返回 null 并断开连接
+function readBodyBuffer(req, limit) {
+  limit = limit || (1 << 20);
+  return new Promise((resolve) => {
+    let n = 0; const chunks = [];
+    req.on("data", (c) => { n += c.length; if (n > limit) { req.destroy(); chunks.length = 0; resolve(null); return; } chunks.push(c); });
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", () => resolve(null));
+  });
+}
+
+// 读取并解析 multipart/form-data 上传
+async function readMultipartUpload(req, limit) {
+  const buf = await readBodyBuffer(req, limit);
+  if (!buf) return null;
+  return parseMultipart(buf, req.headers["content-type"]);
 }
 function cookie(req, name) {
   const m = (req.headers.cookie || "").match(new RegExp("(?:^|;\\s*)" + name + "=([^;]*)"));
@@ -1206,17 +1225,25 @@ async function handle(req, res) {
     return json(res, 200, { ok: true, model: r.model });
   }
 
-  // ---- ⑨ 上传图片（base64 JSON；P1-2：按租户目录隔离 + 高熵随机名 + 魔数校验 + 磁盘配额）----
+  // ---- ⑨ 上传图片（multipart/form-data，兼容 base64 JSON；按租户目录隔离 + 高熵随机名 + 魔数校验 + 磁盘配额）----
   if (p === "/api/upload" && req.method === "POST") {
-    let body = {};
-    try { body = JSON.parse((await readBody(req, 20 << 20)) || "{}"); } catch (e) {}
-    const b64 = String(body.image || body.data || "").trim();
-    if (!b64) return json(res, 400, { ok: false, error: "缺少图片数据" });
-    const m = b64.match(/^data:image\/(\w+);base64,(.+)$/);
-    let ext = "png", data = b64;
-    if (m) { ext = m[1] === "jpeg" ? "jpg" : m[1]; data = m[2]; }
-    let buf;
-    try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "图片数据无效" }); }
+    let buf = null;
+    if (isMultipart(req)) {
+      const mp = await readMultipartUpload(req, (20 << 20) + (1 << 20));
+      if (!mp) return json(res, 400, { ok: false, error: "无法解析上传表单" });
+      const file = mp.files["image"] || mp.files["file"] || mp.files["data"];
+      if (!file || !file.data.length) return json(res, 400, { ok: false, error: "缺少图片数据" });
+      buf = file.data;
+    } else {
+      let body = {};
+      try { body = JSON.parse((await readBody(req, 20 << 20)) || "{}"); } catch (e) {}
+      const b64 = String(body.image || body.data || "").trim();
+      if (!b64) return json(res, 400, { ok: false, error: "缺少图片数据" });
+      const m = b64.match(/^data:image\/(\w+);base64,(.+)$/);
+      let data = b64;
+      if (m) { data = m[2]; }
+      try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "图片数据无效" }); }
+    }
     if (!buf.length || buf.length > 20 * 1024 * 1024) return json(res, 400, { ok: false, error: "图片太大或无效" });
     // P1-2：按文件魔数校验真实图片类型（拒绝伪装成图片的非图片内容）
     const magicOk = (() => {
@@ -1227,7 +1254,7 @@ async function handle(req, res) {
       return null;
     })();
     if (!magicOk) return json(res, 400, { ok: false, error: "不是有效的图片文件" });
-    ext = magicOk;
+    const ext = magicOk;
     const dir = path.join(RUNTIME, "_uploads", me.tenant.id);
     fs.mkdirSync(dir, { recursive: true });
     // P1-2：租户磁盘配额（默认 100MB，可用 PT_UPLOAD_QUOTA_MB 覆盖）
@@ -1241,22 +1268,32 @@ async function handle(req, res) {
     return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs });
   }
 
-  // ---- 文档上传（纯文本 v1：只收 .txt/.md/.csv，按内容判纯文本；5MB 上限；复用租户隔离落盘）----
+  // ---- 文档上传（multipart/form-data，兼容 base64 JSON；纯文本 v1：只收 .txt/.md/.csv，按内容判纯文本；5MB 上限；复用租户隔离落盘）----
   if (p === "/api/upload-doc" && req.method === "POST") {
-    let body = {};
-    try { body = JSON.parse((await readBody(req, 16 << 20)) || "{}"); } catch (e) {}
+    let buf = null;
+    let rawName = "";
+    if (isMultipart(req)) {
+      const mp = await readMultipartUpload(req, DOC_UPLOAD_MAX_BYTES + (1 << 20));
+      if (!mp) return json(res, 400, { ok: false, error: "无法解析上传表单" });
+      const file = mp.files["file"] || mp.files["data"] || mp.files["doc"];
+      if (!file || !file.data.length) return json(res, 400, { ok: false, error: "缺少文档数据" });
+      buf = file.data;
+      rawName = file.filename || mp.fields["name"] || mp.fields["filename"] || "";
+    } else {
+      let body = {};
+      try { body = JSON.parse((await readBody(req, 16 << 20)) || "{}"); } catch (e) {}
+      rawName = String(body.name || body.filename || "").trim();
+      const b64 = String(body.data || body.content || "").trim();
+      if (!b64) return json(res, 400, { ok: false, error: "缺少文档数据" });
+      const dm = b64.match(/^data:[^;]*;base64,(.+)$/);
+      const data = dm ? dm[1] : b64;
+      try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "文档数据无效" }); }
+    }
     // 扩展名白名单（先粗筛，最终以内容解码为准）
-    const rawName = String(body.name || body.filename || "").trim();
-    const ext = path.extname(rawName).slice(1).toLowerCase();
+    const ext = path.extname(String(rawName).trim()).slice(1).toLowerCase();
     if (!DOC_EXT_WHITELIST.has(ext)) {
       return json(res, 400, { ok: false, error: "仅支持 .txt / .md / .csv 纯文本文档" });
     }
-    const b64 = String(body.data || body.content || "").trim();
-    if (!b64) return json(res, 400, { ok: false, error: "缺少文档数据" });
-    const dm = b64.match(/^data:[^;]*;base64,(.+)$/);
-    const data = dm ? dm[1] : b64;
-    let buf;
-    try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "文档数据无效" }); }
     if (!buf.length) return json(res, 400, { ok: false, error: "文档数据无效" });
     if (buf.length > DOC_UPLOAD_MAX_BYTES) {
       return json(res, 400, { ok: false, error: "文档过大（单文件上限 " + Math.round(DOC_UPLOAD_MAX_BYTES / 1048576) + "MB）" });
@@ -1277,16 +1314,24 @@ async function handle(req, res) {
     return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs, name, size: buf.length, chars: text.length });
   }
 
-  // ---- 视频/音频上传（base64 JSON；按魔数校验真实类型；单文件上限 PT_MEDIA_UPLOAD_MB）----
+  // ---- 视频/音频上传（multipart/form-data，兼容 base64 JSON；按魔数校验真实类型；单文件上限 PT_MEDIA_UPLOAD_MB）----
   if (p === "/api/upload-media" && req.method === "POST") {
-    let body = {};
-    try { body = JSON.parse((await readBody(req, 80 << 20)) || "{}"); } catch (e) {}
-    const b64 = String(body.data || body.content || "").trim();
-    if (!b64) return json(res, 400, { ok: false, error: "缺少媒体数据" });
-    const dm = b64.match(/^data:[^;]*;base64,(.+)$/);
-    const data = dm ? dm[1] : b64;
-    let buf;
-    try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "媒体数据无效" }); }
+    let buf = null;
+    if (isMultipart(req)) {
+      const mp = await readMultipartUpload(req, MEDIA_UPLOAD_MAX_BYTES + (1 << 20));
+      if (!mp) return json(res, 400, { ok: false, error: "无法解析上传表单" });
+      const file = mp.files["file"] || mp.files["data"] || mp.files["media"];
+      if (!file || !file.data.length) return json(res, 400, { ok: false, error: "缺少媒体数据" });
+      buf = file.data;
+    } else {
+      let body = {};
+      try { body = JSON.parse((await readBody(req, 80 << 20)) || "{}"); } catch (e) {}
+      const b64 = String(body.data || body.content || "").trim();
+      if (!b64) return json(res, 400, { ok: false, error: "缺少媒体数据" });
+      const dm = b64.match(/^data:[^;]*;base64,(.+)$/);
+      const data = dm ? dm[1] : b64;
+      try { buf = Buffer.from(data, "base64"); } catch (e) { return json(res, 400, { ok: false, error: "媒体数据无效" }); }
+    }
     if (!buf.length) return json(res, 400, { ok: false, error: "媒体数据无效" });
     if (buf.length > MEDIA_UPLOAD_MAX_BYTES) {
       return json(res, 400, { ok: false, error: "媒体过大（单文件上限 " + Math.round(MEDIA_UPLOAD_MAX_BYTES / 1048576) + "MB）" });
