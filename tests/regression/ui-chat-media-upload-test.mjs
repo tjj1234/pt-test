@@ -36,6 +36,29 @@ function ok(name, cond, extra) {
   else { failures.push(name + (extra ? "  -> " + extra : "")); console.log("  FAIL " + name + (extra ? "  -> " + extra : "")); }
 }
 
+/* ---------------- 在气泡里找媒体 / 兜底块（兼容 .bubmedia-wrap 包装层） ---------------- */
+// chat-media.js 给每个媒体包了一层 .bubmedia-wrap（里面是 .bubmedia 媒体 + .bubmedia-dl 下载按钮），
+// 所以「气泡里第一个子节点就是 <audio>/<video>」的假设在加下载按钮后失效。
+// 这里用类名递归找，不依赖具体嵌套层级：媒体 className 含 "bubmedia"，包装层是 "bubmedia-wrap"（不匹配）。
+function deepFind(node, pred) {
+  if (!node || !node.children) return null;
+  for (const ch of node.children) {
+    if (pred(ch)) return ch;
+    const d = deepFind(ch, pred);
+    if (d) return d;
+  }
+  return null;
+}
+function findBubmedia(node, tag) {
+  return deepFind(node, (c) => {
+    const cls = String(c.className || "").split(/\s+/);
+    return cls.includes("bubmedia") && (!tag || c.tagName === tag);
+  });
+}
+function findFallback(node) {
+  return deepFind(node, (c) => String(c.className || "") === "bubmedia-fallback");
+}
+
 /* ---------------- 最小 DOM 桩 ---------------- */
 function makeEl(tag) {
   const listeners = Object.create(null);
@@ -531,7 +554,7 @@ console.log("\n[6] 发送：media 随消息提交，气泡里立刻有播放器"
   // 乐观渲染：气泡里真的有 <audio>
   const bub = run("(function(){ var c = document.querySelector('#chat'); var last = c.children[c.children.length-1]; return last ? last.children[1].children[0] : null; })()");
   ok("用户气泡里渲染出了播放器节点", !!bub && bub.children.length > 0, bub ? "children=" + bub.children.length : "no bub");
-  const audioNode = bub && bub.children[0];
+  const audioNode = bub && findBubmedia(bub, "audio");
   ok("是 <audio> 标签", !!audioNode && audioNode.tagName === "audio", audioNode && audioNode.tagName);
   ok("<audio> 带 bubmedia bubaudio 样式类", !!audioNode && audioNode.className === "bubmedia bubaudio", audioNode && audioNode.className);
   ok("<audio> src 是上传后的 URL", !!audioNode && audioNode.src === url, audioNode && audioNode.src);
@@ -547,7 +570,7 @@ console.log("\n[6] 发送：media 随消息提交，气泡里立刻有播放器"
   const vbody = run("__cap");
   ok("视频 media 的 type 是 video", vbody.media[0].type === "video", vbody.media[0].type);
   const vbub = run("(function(){ var c = document.querySelector('#chat'); var last = c.children[c.children.length-1]; return last ? last.children[1].children[0] : null; })()");
-  const videoNode = vbub && vbub.children[0];
+  const videoNode = vbub && findBubmedia(vbub, "video");
   ok("气泡里是 <video> 标签（复用已有分支，没被 audio 顶掉）", !!videoNode && videoNode.tagName === "video", videoNode && videoNode.tagName);
   ok("<video> src 正确", !!videoNode && videoNode.src === vurl, videoNode && videoNode.src);
   ok("<video> 仍是 bubmedia bubvideo", !!videoNode && videoNode.className === "bubmedia bubvideo", videoNode && videoNode.className);
@@ -563,7 +586,7 @@ console.log("\n[7] chat-media.js：audio 分支与既有行为");
   const r = run(`(function(){
     var bub = document.createElement("div");
     window.renderMediaInto(bub, [{ type: "audio", url: "/uploads/a.mp3" }]);
-    var a = bub.children[0];
+    var a = bub.children[0].children[0];
     return { n: bub.children.length, tag: a.tagName, cls: a.className, src: a.src, controls: a.controls, preload: a.preload };
   })()`);
   ok("type=audio 渲染出 <audio>", r.tag === "audio" && r.n === 1, JSON.stringify(r));
@@ -576,7 +599,7 @@ console.log("\n[7] chat-media.js：audio 分支与既有行为");
   const r2 = run(`(function(){
     var bub = document.createElement("div");
     window.renderMediaInto(bub, { kind: "AUDIO", url: "/uploads/b.wav" });
-    return { tag: bub.children[0].tagName };
+    return { tag: bub.children[0].children[0].tagName };
   })()`);
   ok("kind 字段 + 非数组入参也能渲成 <audio>", r2.tag === "audio", r2.tag);
 
@@ -584,7 +607,7 @@ console.log("\n[7] chat-media.js：audio 分支与既有行为");
   const r3 = run(`(function(){
     var bub = document.createElement("div");
     window.renderMediaInto(bub, [{ type: "video", url: "/uploads/c.mp4" }]);
-    var v = bub.children[0];
+    var v = bub.children[0].children[0];
     return { tag: v.tagName, cls: v.className, controls: v.controls };
   })()`);
   ok("video 分支没被改动", r3.tag === "video" && r3.cls === "bubmedia bubvideo" && r3.controls === true, JSON.stringify(r3));
@@ -593,7 +616,7 @@ console.log("\n[7] chat-media.js：audio 分支与既有行为");
   const r4 = run(`(function(){
     var bub = document.createElement("div");
     window.renderMediaInto(bub, [{ type: "image", url: "/uploads/d.png" }, { type: "weird", url: "/uploads/e.bin" }]);
-    return { n: bub.children.length, t0: bub.children[0].tagName, t1: bub.children[1].tagName };
+    return { n: bub.children.length, t0: bub.children[0].children[0].tagName, t1: bub.children[1].children[0].tagName };
   })()`);
   ok("image 与未知类型仍走 <img> 兜底", r4.t0 === "img" && r4.t1 === "img" && r4.n === 2, JSON.stringify(r4));
 
@@ -601,7 +624,7 @@ console.log("\n[7] chat-media.js：audio 分支与既有行为");
   const r5 = run(`(function(){
     var bub = document.createElement("div");
     window.renderMediaInto(bub, [{ type: "audio", url: "/uploads/broken.mp3" }]);
-    bub.children[0].onerror();
+    bub.children[0].children[0].onerror();
     var fb = bub.children[bub.children.length - 1];
     return { cls: fb.className, txt: bub.children.length, msg: (fb.children[0] || {}).textContent, url: (fb.children[1] || {}).textContent };
   })()`);
@@ -613,7 +636,7 @@ console.log("\n[7] chat-media.js：audio 分支与既有行为");
   const r6 = run(`(function(){
     var bub = document.createElement("div");
     window.renderMediaInto(bub, [{ type: "video", url: "/uploads/broken.mp4" }]);
-    bub.children[0].onerror();
+    bub.children[0].children[0].onerror();
     var fb = bub.children[bub.children.length - 1];
     return (fb.children[0] || {}).textContent;
   })()`);
@@ -793,8 +816,9 @@ console.log("\n[10] 预览：视频首帧 / 音频波形 / 时长");
   await run("ask('看看这段')");
   ok("发给后端的 media 仍是严格 { type, url }",
     Object.keys(run("__cap").media[0]).sort().join(",") === "type,url", JSON.stringify(run("__cap").media[0]));
-  const vNode = run("(function(){ var c = document.querySelector('#chat');"
-    + " var last = c.children[c.children.length-1]; return last ? last.children[1].children[0].children[0] : null; })()");
+  const vBub = run("(function(){ var c = document.querySelector('#chat');"
+    + " var last = c.children[c.children.length-1]; return last ? last.children[1].children[0] : null; })()");
+  const vNode = vBub && findBubmedia(vBub, "video");
   ok("气泡里的 <video> 带上了 poster", !!vNode && vNode.poster === "data:image/jpeg;base64,POSTERSTUB",
     vNode && String(vNode.poster));
 
