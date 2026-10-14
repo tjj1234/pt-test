@@ -19,6 +19,11 @@ const crypto = require("node:crypto");
 
 const STYLE_PRESET_ENUM = listStylePresets().map((p) => p.id);
 
+// 生成图片/视频后，结果已通过 media 字段直接显示在对话里（render() 已让轨迹不显示链接）；
+// 但工具原始返回（含 url）仍完整进入模型上下文，模型可能自己复述链接。注入此提示避免重复念 url。
+const MEDIA_NO_LINK_NOTE =
+  "生成的图片/视频已经直接显示在对话里了，回复里不要再重复粘贴链接，用一句话说明生成完成就行。";
+
 // ga.query executor 依赖 { internalKey, dashPort } 与可信 tenantId：
 // 由 dsh-adapter 在 spawn 前注入 DASH_PORT / PT_DASH_INTERNAL_KEY 到进程 env，
 // tenantId 由每条 task 命令携带（见 handleTask）。此处仅构造一次。
@@ -464,7 +469,7 @@ function apply(ctx) {
         lastMediaRouteResult = null;
         lastReport = null;
         agent.followup(createUserMessage({
-          content: [{ type: "text", text: task }],
+          content: [{ type: "text", text: task + "\n\n[系统提示] " + MEDIA_NO_LINK_NOTE }],
           source: { kind: "user" },
         }));
         await agent.whenIdle();
