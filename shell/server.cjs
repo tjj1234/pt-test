@@ -1450,37 +1450,47 @@ process.on("SIGTERM", gracefulShutdown);
  * ========================================================================== */
 let heartbeatTimer = null;
 let heartbeatRunning = false;
-function startHeartbeat(userId, tenantId) {
+function startHeartbeat() {
   if (!HEARTBEAT_ENABLED) {
     console.log("  保活心跳：未开启（PT_HEARTBEAT_ENABLED != 1）");
     return;
   }
-  if (!userId || !tenantId) {
-    console.warn("  保活心跳：未找到默认管理员用户，跳过");
-    return;
-  }
   const tick = async () => {
-    if (heartbeatRunning) return; // 上一跳还没结束就跳过，避免堆积
+    if (heartbeatRunning) return; // 上一轮还没结束就跳过，避免堆积
     heartbeatRunning = true;
     try {
-      const r = await tenantMod.heartbeat(userId, {
-        tenantId,
-        decryptApiKey: keys.decryptApiKey,
-        prompt: HEARTBEAT_PROMPT,
-      });
-      if (r && r.ok) log.info("heartbeat_ok", { tenantId, ms: r.ms, usage: r.usage });
-      else log.info("heartbeat_skip", { tenantId, error: r && r.error });
+      // 每次触发时扫一遍「当前仍存活的常驻进程租户」，只给这些活跃租户各发一次心跳，
+      // 覆盖所有正在被用的员工，同时不浪费在已回收进程、很久没登录的账号上。
+      const targets = tenantMod.activeHeartbeatTargets();
+      if (!targets || !targets.length) {
+        log.info("heartbeat_idle", { reason: "无活跃常驻租户进程" });
+        return;
+      }
+      for (const t of targets) {
+        const tenantId = t.tenantId;
+        const userId = t.userId || tenantId;
+        try {
+          const r = await tenantMod.heartbeat(userId, {
+            tenantId,
+            decryptApiKey: keys.decryptApiKey,
+            prompt: HEARTBEAT_PROMPT,
+          });
+          if (r && r.ok) log.info("heartbeat_ok", { tenantId, ms: r.ms, usage: r.usage });
+          else log.info("heartbeat_skip", { tenantId, error: r && r.error, skipped: r && r.skipped });
+        } catch (e) {
+          log.info("heartbeat_fail", { tenantId, error: e && e.message ? e.message : String(e) });
+        }
+      }
     } catch (e) {
-      log.info("heartbeat_fail", { tenantId, error: e && e.message ? e.message : String(e) });
+      log.info("heartbeat_fail", { error: e && e.message ? e.message : String(e) });
     } finally {
       heartbeatRunning = false;
     }
   };
-  // 先立刻发一跳（服务刚起，正好把连接预热起来），之后按固定间隔。
-  tick();
+  // 不立即发首跳：服务刚起时还没有活跃进程，等有真实对话后再按间隔扫活跃租户。
   heartbeatTimer = setInterval(tick, HEARTBEAT_INTERVAL_MS);
   heartbeatTimer.unref && heartbeatTimer.unref();
-  console.log("  保活心跳：已开启（每 " + Math.round(HEARTBEAT_INTERVAL_MS / 1000) + " 秒一次，prompt=\"" + HEARTBEAT_PROMPT + "\"）");
+  console.log("  保活心跳：已开启（每 " + Math.round(HEARTBEAT_INTERVAL_MS / 1000) + " 秒扫一次活跃租户，prompt=\"" + HEARTBEAT_PROMPT + "\"）");
 }
 
 /* ============================================================================
@@ -1501,7 +1511,6 @@ async function main() {
   
   // B3-fix：为默认管理员创建 workspace
   const defaultAdminTenant = await auth.db.query("SELECT id, tenant_id FROM users WHERE username = $1", [USERNAME]);
-  const defaultAdminUserId = defaultAdminTenant.rows.length > 0 ? defaultAdminTenant.rows[0].id : null;
   if (defaultAdminTenant.rows.length > 0) {
     const { createWorkspace } = require("./workspace/index.cjs");
     await createWorkspace("ws_" + defaultAdminTenant.rows[0].tenant_id, defaultAdminTenant.rows[0].tenant_id);
@@ -1516,10 +1525,8 @@ async function main() {
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
 
-  // 任务A：启动保活心跳（默认管理员租户），防空闲回收导致的首字延迟。
-  if (defaultAdminTenant.rows.length > 0) {
-    startHeartbeat(defaultAdminUserId, defaultAdminTenant.rows[0].tenant_id);
-  }
+  // 任务A：启动保活心跳（扫描「仍存活的常驻进程租户」，逐个发心跳），防空闲回收导致的首字延迟。
+  startHeartbeat();
   
   // B4-fix: 初始化默认角色权限
   const { initializeDefaultRoles, setDb } = require("./permissions/index.cjs");

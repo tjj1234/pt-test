@@ -247,6 +247,16 @@ function closeDshSession(conversationId) {
   if (rt) rt.closeSession(conversationId);
 }
 
+/**
+ * 返回当前仍存活的常驻进程租户列表（即「最近还在用」的租户），供保活心跳遍历。
+ * 每个元素：{ tenantId, userId, lastUsed }。mock runtime 无此能力，返回空数组（mock 无需保活）。
+ */
+function activeHeartbeatTargets() {
+  const rt = _runtime;
+  if (!rt || typeof rt.activeTenants !== "function") return [];
+  return rt.activeTenants();
+}
+
 /** 保活心跳：向默认模型发一个最小成本请求，保持底层模型连接活跃（防空闲回收首字延迟）。 */
 async function heartbeat(userId, opts = {}) {
   const uid = String(userId || "").trim();
@@ -292,6 +302,7 @@ module.exports = {
   ensureTenantWorkspace,
   runDshForUser,
   heartbeat,
+  activeHeartbeatTargets,
   closeDshSession,
   resolveDecryptApiKey,
   findDshEntry,

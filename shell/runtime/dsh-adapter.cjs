@@ -280,6 +280,7 @@ function createDshRuntime(opts = {}) {
     const existing = persistentProcesses.get(key);
     if (existing && existing.child && existing.child.exitCode === null && !existing.child.killed) {
       existing.lastUsed = Date.now();
+      existing.userId = spec.userId; // 记录最近一次使用该进程的 userId，供活跃心跳目标解密 key
       return { proc: existing, fresh: false };
     }
 
@@ -316,6 +317,7 @@ function createDshRuntime(opts = {}) {
 
     const proc = {
       child, outFile, errFile, fdOut, fdErr,
+      userId: spec.userId,               // 该常驻进程属于哪个 userId（1 用户 = 1 租户）
       lastSize: 0, lastUsed: Date.now(),
       waiters: new Map(), lineBuf: "", ready: false,
       pollTimer: null, killedByUser: false, idleTimer: null,
@@ -459,9 +461,11 @@ function createDshRuntime(opts = {}) {
   function pulse(spec) {
     const tenantId = String(spec.tenantId || "").trim();
     return new Promise((resolve) => {
-      const { proc, spawnError } = getOrSpawnProcess(spec);
-      if (spawnError || !proc) {
-        return resolve({ ok: false, error: spawnError || "保活进程启动失败" });
+      // 心跳只针对「已存在且仍存活」的常驻进程，绝不为其冷启动新进程：
+      // 这样才不会把心跳浪费在很久没登录、进程早已被回收的账号上。
+      const proc = persistentProcesses.get(tenantId);
+      if (!proc || !proc.child || proc.child.exitCode !== null || proc.child.killed) {
+        return resolve({ ok: false, skipped: true, error: "非活跃租户，跳过心跳（常驻进程已被回收）" });
       }
       const sessionId = "hb-" + Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex");
       const task = String(spec.prompt || "ping").trim();
@@ -488,6 +492,18 @@ function createDshRuntime(opts = {}) {
         }
       }, spec.timeoutMs || 60000);
     });
+  }
+
+  // 返回当前仍存活的常驻进程租户列表（即「最近还在用」的租户）。
+  // 每个元素带 tenantId + userId（用于解密该租户的 PT key）+ lastUsed。
+  function activeTenants() {
+    const out = [];
+    for (const [tenantId, proc] of persistentProcesses.entries()) {
+      if (proc && proc.child && proc.child.exitCode === null && !proc.child.killed) {
+        out.push({ tenantId, userId: proc.userId || tenantId, lastUsed: proc.lastUsed || null });
+      }
+    }
+    return out;
   }
 
   function abort(sessionKey) {
@@ -527,7 +543,7 @@ function createDshRuntime(opts = {}) {
     }
   }
 
-  return { run, pulse, abort, closeSession, close };
+  return { run, pulse, activeTenants, abort, closeSession, close };
 }
 
 module.exports = {
