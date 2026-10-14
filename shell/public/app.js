@@ -126,9 +126,19 @@ function bubbleSys(text) {
 function thinking() {
   const el = document.createElement("div");
   el.className = "msg a";
-  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 思考中…<span class="elapsed"></span></div><div class="steps-live"></div></div>';
+  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> <span class="think-label">思考中…</span><span class="elapsed"></span></div><div class="steps-live"></div></div>';
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight;
   return el;
+}
+
+/* 首字等待态：基座在请求一开始、还没真正拿到模型回复前，会先多发一帧
+ * {connecting:true} 事件，告知前端「这条请求正在建立底层模型连接」（对应连接池冷启动）。
+ * 把思考气泡里的「思考中…」切到「正在连接模型…」；一旦真正的 delta 开始流式返回，
+ * 现有的 streamInto() 会整体替换掉这个气泡内容，提示自然消失，无需额外计时器或状态管理。
+ * 连接很快时这一帧一闪而过，用户基本感知不到跳动或闪烁。 */
+function showConnecting(t) {
+  const label = t.querySelector(".think-label");
+  if (label) label.textContent = "正在连接模型…";
 }
 
 /* 生成类（图片 / 视频）等待态：把 media_route 工具调用的「开始」步骤（phase=call）
@@ -583,6 +593,7 @@ async function runChat(payload) {
           if (!line) continue;
           let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
           // 打字机和工具步骤只画在「用户当前正在看的那条对话」上
+          if (obj.connecting && viewing()) { showConnecting(t); }
           if (obj.delta && viewing()) { acc += obj.delta; streamInto(t, acc); }
           if (obj.step && viewing()) {
             const live = t.querySelector(".steps-live");
