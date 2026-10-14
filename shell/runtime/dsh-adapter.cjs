@@ -223,7 +223,7 @@ function createDshRuntime(opts = {}) {
             durationMs: frame.durationMs,
           };
           if (Array.isArray(w.steps)) w.steps.push(step);
-          if (typeof w.onStep === "function") { try { w.onStep({ name: step.name, result: step.result, isError: step.isError }); } catch (e) {} }
+          if (typeof w.onStep === "function") { try { w.onStep({ name: step.name, args: step.args, result: step.result, isError: step.isError }); } catch (e) {} }
         }
         break;
       }
