@@ -791,7 +791,11 @@ function renderQuickRow(skills, box, onPick) {
     b.textContent = q;
     if (s && s.id) b.dataset.skillId = String(s.id);
     if (s && s.title) b.title = "技能：" + s.title;
-    b.addEventListener("click", () => (onPick || ask)(q));
+    b.addEventListener("click", () => {
+      // 快捷问题属于别的技能，不该被「生成类型」的参考图校验拦住：先回到默认「自动」再发
+      setGenType(DEFAULT_GEN_TYPE);
+      (onPick || ask)(q);
+    });
     target.appendChild(b);
     n++;
   }
@@ -871,7 +875,11 @@ function setGenType(t) {
 
 if (genTypeEl) {
   genTypeEl.querySelectorAll(".gt-btn").forEach(b => {
-    b.addEventListener("click", () => setGenType(b.dataset.type));
+    b.addEventListener("click", () => {
+      // 再点一次已选中的 tab → 取消选择，回到默认「自动」；否则正常切换
+      if (state.genType === b.dataset.type) setGenType(DEFAULT_GEN_TYPE);
+      else setGenType(b.dataset.type);
+    });
   });
 }
 setGenType(DEFAULT_GEN_TYPE);
@@ -2505,7 +2513,7 @@ async function bizLoadFlows() {
       const run = bizNode("button", "运行", "toolbar-btn"); run.type = "button";
       run.addEventListener("click", async () => {
         run.disabled = true;
-        try { if (!state.activeId && !(await newConversation())) { $("#toolsStatus").textContent = "无法创建对话，请重试"; return; } switchView("chat"); ta.value = "@" + t.name + " "; ta.dispatchEvent(new Event("input", { bubbles: true })); ta.focus(); }
+        try { await gotoChatWithQuestion("@" + t.name + " "); }
         finally { run.disabled = false; }
       }); card.appendChild(run); $("#toolsList").appendChild(card);
     });
