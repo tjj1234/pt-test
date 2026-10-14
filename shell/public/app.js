@@ -136,12 +136,39 @@ function thinking() {
  * 返回 null 表示「不走美化」（其他工具 / media_route 的结果步骤），由调用方走通用渲染。
  * 注：后端 progress 字段在生成期间长期卡在 30%（完成前才跳 100%），不可靠，
  * 这里刻意不接进度条，只给一句「大概要等多久」的预期管理。 */
+/**
+ * media_route 工具调用步骤的友好化。返回三种结果之一：
+ *   { text }      -> 直接作为该步骤展示文案（开始时的等待提示 / 失败时的友好报错）
+ *   { skip:true } -> 完全不展示该行（media_route 成功结束步骤 phase=result：媒体已显示，不再冒一行）
+ *   null          -> 不是 media_route 步骤，调用方走通用渲染（归因查询等其他工具）
+ * 约定：
+ *   - 开始步骤 phase=call -> 按 taskType 给图片/视频不同的等待提示，不暴露 prompt/URL/工具名
+ *   - 失败步骤 isError    -> 区分图片/视频的友好报错，不暴露原始参数
+ *   - 成功结束步骤        -> 不展示（媒体已经在气泡里，无需再冒一行「🔧 media_route」）
+ *   - 后端 progress 字段长期卡 30% 不可靠，这里刻意不做进度条，只做等待预期管理
+ */
 function mediaRouteStepMessage(step) {
-  if (!step || step.name !== "media_route" || step.phase !== "call") return null;
+  if (!step || step.name !== "media_route") return null;
   const tt = step.args && step.args.taskType;
-  if (tt === "text2video" || tt === "image2video")
-    return "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的";
-  return "🎨 正在生成图片…";
+  const isVideo = tt === "text2video" || tt === "image2video";
+  if (step.isError) {
+    return { text: isVideo ? "⚠️ 视频生成失败，可以重新试一次" : "⚠️ 图片生成失败，可以重新试一次" };
+  }
+  if (step.phase === "call") {
+    return { text: isVideo
+      ? "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的"
+      : "🎨 正在生成图片…" };
+  }
+  // phase=result 且成功：媒体已展示，不再冒一行
+  return { skip: true };
+}
+
+/** 把等待秒数格式化成安心易读的文案：60 秒内显示「N 秒」，超过则换算成「X分Y秒」。 */
+function formatElapsed(sec) {
+  if (sec < 60) return "已等待 " + sec + " 秒";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return "已等待 " + m + "分" + s + "秒";
 }
 
 /* 流式：把 thinking 气泡转成逐字增长的回复气泡 */
@@ -532,7 +559,7 @@ async function runChat(payload) {
   setBusy(true);
   const t = thinking();
   const t0 = Date.now();
-  const tick = setInterval(() => { const e = t.querySelector(".elapsed"); if (e) e.textContent = "（已等待 " + Math.round((Date.now() - t0) / 1000) + " 秒）"; }, 1000);
+  const tick = setInterval(() => { const e = t.querySelector(".elapsed"); if (e) e.textContent = "（" + formatElapsed(Math.round((Date.now() - t0) / 1000)) + "）"; }, 1000);
   try {
     const r = await fetch("/api/chat", {
       method: "POST", credentials: "same-origin",
@@ -560,16 +587,22 @@ async function runChat(payload) {
           if (obj.step && viewing()) {
             const live = t.querySelector(".steps-live");
             if (live) {
-              // media_route 的「开始」步骤（phase=call）单独美化：不暴露内部工具名 / 原始参数
-              // （prompt 原文、图片 URL 都不该给用户看）；后端 progress 字段长期卡 30% 不可靠，
-              // 不做进度条，这里只给一句等待预期。其他工具 / media_route 的结果步骤返回 null（走通用渲染）。
-              const mediaMsg = mediaRouteStepMessage(obj.step);
-              const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
-              d.textContent = mediaMsg !== null
-                ? mediaMsg
-                : (obj.step.isError ? "⚠️ " : "🔧 ") + (obj.step.name || "工具") + (obj.step.args ? " " + obj.step.args : "");
-              live.appendChild(d);
-              chat.scrollTop = chat.scrollHeight;
+              // media_route 步骤统一美化：开始给等待提示、失败给友好报错、成功结束不冒多余一行；
+              // 其他工具（归因查询等）返回 null，走下面的通用渲染（不美化、保持原样）。
+              // 后端 progress 字段长期卡 30% 不可靠，不做进度条，只给等待预期。
+              const r = mediaRouteStepMessage(obj.step);
+              if (r !== null && !r.skip) {
+                const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
+                d.textContent = r.text;
+                live.appendChild(d);
+                chat.scrollTop = chat.scrollHeight;
+              } else if (r === null) {
+                const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
+                d.textContent = (obj.step.isError ? "⚠️ " : "🔧 ") + (obj.step.name || "工具") + (obj.step.args ? " " + obj.step.args : "");
+                live.appendChild(d);
+                chat.scrollTop = chat.scrollHeight;
+              }
+              // r.skip（media_route 成功结束步骤）：媒体已展示，什么都不渲染
             }
           }
           if (obj.done) {

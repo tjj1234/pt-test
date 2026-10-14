@@ -1,12 +1,16 @@
 /**
  * 生成类（图片 / 视频）等待态提示 —— 回归测试。
  *
- * 覆盖 app.js 中 media_route 工具调用「开始」步骤（phase=call）的友好提示逻辑：
- *   - text2image / image2image  -> 「🎨 正在生成图片…」
- *   - text2video / image2video  -> 「🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的」
- *   - 其他工具（如归因查询 attribution_query / ga_query）的「开始」步骤 -> 返回 null，走通用渲染（不美化）
- *   - media_route 的「结果」步骤（phase=result）-> 返回 null（不把"正在生成"重复显示在结果上）
+ * 覆盖 app.js 中 media_route 工具调用步骤（开始 / 结束 / 失败）的友好化处理：
+ *   - text2image / image2image  -> { text: "🎨 正在生成图片…" }
+ *   - text2video / image2video  -> { text: "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的" }
+ *   - 失败步骤 isError          -> { text: "⚠️ 图片生成失败，可以重新试一次" } / "⚠️ 视频生成失败，可以重新试一次"
+ *   - 成功结束步骤 phase=result -> { skip: true }（渲染块据此不冒那行多余的「🔧 media_route」）
+ *   - 其他工具（归因查询 attribution_query / ga_query）-> null（走通用渲染，不美化）
  *   - 友好文案绝不暴露原始参数：断言返回值里不含 prompt 原文、不含图片 URL、不含内部工具名 media_route
+ *
+ * 渲染块的三路分支（r.text / r.skip / 通用）由 app.js 直接实现，本测试通过 helper 的返回值契约锚定：
+ *   r !== null && !r.skip -> 渲染 r.text；r === null -> 通用渲染；r.skip -> 不渲染（成功结束抑制）。
  *
  * 用「最小 DOM 桩 + vm」把真实的 shell/public/app.js 跑起来，直接调用顶层函数 mediaRouteStepMessage。
  * 后端 progress 字段长期卡 30% 不可靠，本测试同时锚定「不做进度条」这一约定（只返回固定文案）。
@@ -108,36 +112,51 @@ const IMG = "🎨 正在生成图片…";
 const VID = "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的";
 
 console.log("[1] media_route · text2image -> 图片友好提示");
-ok("text2image 返回『正在生成图片』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2image',prompt:'一只猫',inputImageUrl:'http://x/a.png'}})") === IMG);
+ok("text2image 返回『正在生成图片』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2image',prompt:'一只猫',inputImageUrl:'http://x/a.png'}}).text") === IMG);
 
 console.log("\n[2] media_route · image2image -> 图片友好提示");
-ok("image2image 返回『正在生成图片』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'image2image',prompt:'改成油画',inputImageUrl:'http://x/a.png'}})") === IMG);
+ok("image2image 返回『正在生成图片』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'image2image',prompt:'改成油画',inputImageUrl:'http://x/a.png'}}).text") === IMG);
 
 console.log("\n[3] media_route · text2video -> 视频友好提示（含预计时长）");
-ok("text2video 返回『正在生成视频中，预计十几分钟…』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2video',prompt:'海浪拍打礁石'}})") === VID);
+ok("text2video 返回『正在生成视频中，预计十几分钟…』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2video',prompt:'海浪拍打礁石'}}).text") === VID);
 
 console.log("\n[4] media_route · image2video -> 视频友好提示");
-ok("image2video 返回『正在生成视频中，预计十几分钟…』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'image2video',prompt:'让这张图动起来',inputImageUrl:'http://x/a.png'}})") === VID);
+ok("image2video 返回『正在生成视频中，预计十几分钟…』", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'image2video',prompt:'让这张图动起来',inputImageUrl:'http://x/a.png'}}).text") === VID);
 
 console.log("\n[5] 非 media_route 工具（归因查询等）-> 返回 null（走通用渲染，不被美化）");
 ok("attribution_query 返回 null", run("mediaRouteStepMessage({name:'attribution_query',phase:'call',args:{query:'上周 ROI'}})") === null);
 ok("ga_query 返回 null", run("mediaRouteStepMessage({name:'ga_query',phase:'call',args:{}})" ) === null);
 
-console.log("\n[6] media_route 的『结果』步骤（phase=result）-> 返回 null（不在结果上重复显示『正在生成』）");
-ok("media_route/result 返回 null", run("mediaRouteStepMessage({name:'media_route',phase:'result',args:{taskType:'text2video'},result:'/uploads/v.mp4'})") === null);
+console.log("\n[6] media_route 的『成功结束』步骤（phase=result，非错误）-> 返回 { skip:true }（渲染块据此不冒多余一行）");
+ok("media_route/result 返回 { skip:true }", run("mediaRouteStepMessage({name:'media_route',phase:'result',args:{taskType:'text2video'},result:'/uploads/v.mp4'}).skip") === true);
 
 console.log("\n[7] media_route/phase=call 但缺 taskType -> 默认落到图片提示（不暴露原始参数）");
-ok("缺 taskType 默认图片提示", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{}})") === IMG);
+ok("缺 taskType 默认图片提示", run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{}}).text") === IMG);
 
 console.log("\n[8] 友好文案绝不暴露内部信息（prompt 原文 / 图片 URL / 工具名）");
-const vidMsg = run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2video',prompt:'SECRET_PROMPT_XYZ',inputImageUrl:'https://secret.host/img.png'}})");
+const vidMsg = run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2video',prompt:'SECRET_PROMPT_XYZ',inputImageUrl:'https://secret.host/img.png'}}).text");
 ok("视频文案不含 prompt 原文", !vidMsg.includes("SECRET_PROMPT_XYZ"), vidMsg);
 ok("视频文案不含图片 URL", !vidMsg.includes("secret.host") && !vidMsg.includes("https://"), vidMsg);
 ok("视频文案不含内部工具名 media_route", !vidMsg.toLowerCase().includes("media_route"), vidMsg);
-const imgMsg = run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2image',prompt:'SECRET_PROMPT_ABC',inputImageUrl:'https://secret.host/i.png'}})");
+const imgMsg = run("mediaRouteStepMessage({name:'media_route',phase:'call',args:{taskType:'text2image',prompt:'SECRET_PROMPT_ABC',inputImageUrl:'https://secret.host/i.png'}}).text");
 ok("图片文案不含 prompt 原文", !imgMsg.includes("SECRET_PROMPT_ABC"), imgMsg);
 ok("图片文案不含图片 URL", !imgMsg.includes("secret.host"), imgMsg);
 ok("图片文案不含内部工具名 media_route", !imgMsg.toLowerCase().includes("media_route"), imgMsg);
+
+console.log("\n[9] media_route · 失败（图片类）-> 图片友好报错");
+ok("text2image 失败 -> 『图片生成失败，可以重新试一次』", run("mediaRouteStepMessage({name:'media_route',phase:'result',isError:true,args:{taskType:'text2image'}}).text") === "⚠️ 图片生成失败，可以重新试一次");
+ok("image2image 失败 -> 『图片生成失败，可以重新试一次』", run("mediaRouteStepMessage({name:'media_route',phase:'result',isError:true,args:{taskType:'image2image'}}).text") === "⚠️ 图片生成失败，可以重新试一次");
+
+console.log("\n[10] media_route · 失败（视频类）-> 视频友好报错");
+ok("text2video 失败 -> 『视频生成失败，可以重新试一次』", run("mediaRouteStepMessage({name:'media_route',phase:'result',isError:true,args:{taskType:'text2video'}}).text") === "⚠️ 视频生成失败，可以重新试一次");
+ok("image2video 失败 -> 『视频生成失败，可以重新试一次』", run("mediaRouteStepMessage({name:'media_route',phase:'result',isError:true,args:{taskType:'image2video'}}).text") === "⚠️ 视频生成失败，可以重新试一次");
+
+console.log("\n[11] 失败文案绝不暴露内部信息（prompt 原文 / 图片 URL / 工具名）");
+const errMsg = run("mediaRouteStepMessage({name:'media_route',phase:'result',isError:true,args:{taskType:'text2video',prompt:'SECRET_PROMPT_ERR',inputImageUrl:'https://secret.host/e.png'}}).text");
+ok("失败文案不含 prompt 原文", !errMsg.includes("SECRET_PROMPT_ERR"), errMsg);
+ok("失败文案不含图片 URL", !errMsg.includes("secret.host"), errMsg);
+ok("失败文案不含内部工具名 media_route", !errMsg.toLowerCase().includes("media_route"), errMsg);
+ok("失败文案明确是『视频生成失败』", errMsg.includes("视频生成失败"), errMsg);
 
 if (failures.length) {
   console.log("\n以下断言失败：");
