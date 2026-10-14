@@ -452,6 +452,44 @@ function createDshRuntime(opts = {}) {
     });
   }
 
+  // 保活心跳：走与真实对话完全相同的 DSH 进程 + runner task 路径，向默认模型发一个
+  // 最小成本请求，目的仅是让底层 newapi 网关与上游模型的连接保持活跃，避免空闲回收后
+  // 首字要重新走 TCP/TLS 握手（实测可达 35 秒）。不注册业务 waiter、不经过 shell 的
+  // runningJobs 锁；每次用全新 sessionId，用完即 close，避免 agentMap 内存堆积与上下文增长。
+  function pulse(spec) {
+    const tenantId = String(spec.tenantId || "").trim();
+    return new Promise((resolve) => {
+      const { proc, spawnError } = getOrSpawnProcess(spec);
+      if (spawnError || !proc) {
+        return resolve({ ok: false, error: spawnError || "保活进程启动失败" });
+      }
+      const sessionId = "hb-" + Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex");
+      const task = String(spec.prompt || "ping").trim();
+      const t0 = Date.now();
+      let settled = false;
+      const finish = (r) => {
+        if (settled) return;
+        settled = true;
+        writeJson(proc, { type: "close", sessionId }); // 用完即弃，防内存堆积 / 上下文增长
+        resolve(r);
+      };
+      const waiter = {
+        onDelta: () => {},
+        onStep: () => {},
+        steps: [],
+        resolve: (frame) => finish({ ok: frame.ok !== false, ms: frame.ms || (Date.now() - t0), error: frame.error || null, usage: frame.usage || null }),
+      };
+      proc.waiters.set(sessionId, waiter);
+      writeJson(proc, { type: "task", sessionId, task, model: spec.model, tenantId });
+      setTimeout(() => {
+        if (proc.waiters.has(sessionId)) {
+          proc.waiters.delete(sessionId);
+          finish({ ok: false, error: "保活请求超时" });
+        }
+      }, spec.timeoutMs || 60000);
+    });
+  }
+
   function abort(sessionKey) {
     // 按 sessionKey 优雅取消当前轮（P1-4：agent.cancel）
     const sid = String(sessionKey || "").trim();
@@ -489,7 +527,7 @@ function createDshRuntime(opts = {}) {
     }
   }
 
-  return { run, abort, closeSession, close };
+  return { run, pulse, abort, closeSession, close };
 }
 
 module.exports = {

@@ -247,6 +247,41 @@ function closeDshSession(conversationId) {
   if (rt) rt.closeSession(conversationId);
 }
 
+/** 保活心跳：向默认模型发一个最小成本请求，保持底层模型连接活跃（防空闲回收首字延迟）。 */
+async function heartbeat(userId, opts = {}) {
+  const uid = String(userId || "").trim();
+  const tenantId = String(opts.tenantId || uid || "").trim();
+  if (!uid || !tenantId) return { ok: false, code: "NO_USER", error: "心跳缺 userId/tenantId" };
+  const { workspace } = initTenantWorkspace(tenantId, opts);
+
+  let decrypt = opts.decryptApiKey;
+  if (typeof decrypt !== "function") {
+    decrypt = await resolveDecryptApiKey(opts);
+  }
+  if (!decrypt) return { ok: false, code: NO_KEY_SOURCE_CODE, error: "心跳缺 key 解密来源", workspace, tenantId };
+
+  let apiKey = null;
+  try { apiKey = await decrypt(uid); } catch (e) {
+    return { ok: false, code: "DECRYPT_FAILED", error: "心跳读不到 PT key：" + (e && e.message ? e.message : e), workspace, tenantId };
+  }
+  if (!apiKey || !String(apiKey).trim()) {
+    return { ok: false, code: NO_API_KEY_CODE, error: "心跳缺 PT key（BYOK）", workspace, tenantId };
+  }
+
+  const runtime = createRuntime();
+  if (typeof runtime.pulse !== "function") {
+    return { ok: false, code: "NO_PULSE", error: "当前 runtime 不支持保活（mock 模式无需保活）", workspace, tenantId };
+  }
+  return runtime.pulse({
+    tenantId,
+    model: opts.model || defaultModel(),
+    apiKey,
+    workspace,
+    prompt: opts.prompt || "ping",
+    timeoutMs: opts.timeoutMs || 60000,
+  });
+}
+
 module.exports = {
   WORKSPACES_ROOT,
   DSH_HOME,
@@ -256,6 +291,7 @@ module.exports = {
   initTenantWorkspace,
   ensureTenantWorkspace,
   runDshForUser,
+  heartbeat,
   closeDshSession,
   resolveDecryptApiKey,
   findDshEntry,
