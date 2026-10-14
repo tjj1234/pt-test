@@ -1505,7 +1505,7 @@ async function main() {
       // P1-3 安全：CSP + 防嗅探 + 防点击劫持（脚本/连接/图片仅同源 + data/blob；媒体域名放行 *.volces.com；禁内联脚本）
       // 注：img/media/connect 必须放行火山 TOS 的 *.volces.com，否则 media.route 生成的图/视频会在页面里被 CSP 拦掉（下载按钮的 fetch 同样依赖 connect-src）。
       res.setHeader("Content-Security-Policy",
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.volces.com; media-src 'self' https://*.volces.com; connect-src 'self' https://*.volces.com; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.volces.com; media-src 'self' https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; connect-src 'self' https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
       res.setHeader("X-Content-Type-Options", "nosniff");
       res.setHeader("X-Frame-Options", "DENY");
 
