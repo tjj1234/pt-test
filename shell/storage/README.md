@@ -26,14 +26,14 @@ db.cjs（PGlite / PostgreSQL，已由 open() 抽象成同一形状）
 
 ### A · conversations 分叉已消除
 
-权威实现唯一 = `conv/conversations-v2.cjs`（含 `setArchived`/`search`）。
+权威实现唯一 = `shell/conversations.cjs`（含 `setArchived`/`search`；`conv/` 目录已清理）。
 - `shell/conversations.cjs` → 转发层指向权威 v2；
-- `conv/conversations.cjs`（v1）→ 转发层指向权威 v2。
+- （已移除）原 `conv/conversations-v2.cjs` 与转发层 `conv/conversations.cjs` 均已并入 `shell/conversations.cjs`。
 - 已验证：两个旧文件 `require` 回来的是**同一个** `initConversations` 函数（不是复制）。
 
 ### B · 迁移入口已统一
 
-- `shell/storage/migrations/001-006` 是唯一权威来源（001–003 原在 `shell/db-migrations/`，004–006 原在 `conv/`）。
+- `shell/storage/migrations/001-006` 是唯一权威来源（001–003 原在 `shell/db-migrations/`，004–006 原在 `conv/`，现 `conv/` 已清空）。
 - 执行语义（沿用 db.cjs 稳定逻辑，未重写执行器）：
   - **谁执行**：`createStorage()` 内部 `initAuth` 调 `dbmod.migrate()`；也可 `await storage.migrate()` 幂等重跑（升级用）。
   - **顺序**：按文件名排序（`schema_migrations` 表记录已应用名，重复启动跳过）。

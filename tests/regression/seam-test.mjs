@@ -32,8 +32,8 @@ console.log("\n【shim 依赖模块解析 + 导出校验】（不真正开库）
 const deps = [
   ["auth.cjs", "../../shell/auth.cjs", "initAuth"],
   ["keys.cjs", "../../shell/keys.cjs", "initKeys"],
-  ["conversations-v2.cjs(权威版)", "../../conv/conversations-v2.cjs", "initConversations"],
-  ["memory.cjs", "../../conv/memory.cjs", "initMemory"],
+  ["conversations.cjs(权威版)", "../../shell/conversations.cjs", "initConversations"],
+  ["memory.cjs", "../../shell/memory.cjs", "initMemory"],
   ["db.cjs", "../../shell/db.cjs", "open"],
 ];
 for (const [label, rel, fn] of deps) {
@@ -45,12 +45,12 @@ for (const [label, rel, fn] of deps) {
   }
 }
 
-console.log("\n【转发层校验】（分叉消除：旧文件必须指向权威 v2 同一实现）");
-const v2init = require("../../conv/conversations-v2.cjs").initConversations;
-try { ok("shell/conversations.cjs 转发到权威 v2", require("../../shell/conversations.cjs").initConversations === v2init); }
-catch (e) { ok("shell/conversations.cjs 转发到权威 v2", false, e.message); }
-try { ok("conv/conversations.cjs 转发到权威 v2", require("../../conv/conversations.cjs").initConversations === v2init); }
-catch (e) { ok("conv/conversations.cjs 转发到权威 v2", false, e.message); }
+console.log("\n【权威收敛校验】（conv/ 已清理：权威实现就在 shell/ 下，不再有转发层）");
+const v2init = require("../../shell/conversations.cjs").initConversations;
+try { ok("shell/conversations.cjs 自带权威实现（initConversations 可用）", typeof v2init === "function"); }
+catch (e) { ok("shell/conversations.cjs 自带权威实现（initConversations 可用）", false, e.message); }
+try { ok("shell/memory.cjs 自带权威实现（initMemory 可用）", typeof require("../../shell/memory.cjs").initMemory === "function"); }
+catch (e) { ok("shell/memory.cjs 自带权威实现（initMemory 可用）", false, e.message); }
 
 console.log("\n【transaction 语义契约】（mock db 模拟 commit/rollback）");
 {

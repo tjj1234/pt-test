@@ -6,7 +6,7 @@
  *
  * Slice 1.5 收口点：
  *   · 统一迁移入口：shell/storage/migrations/（001-006），storage.migrate() 幂等重跑；
- *   · conversations 已收敛到 conv/conversations-v2.cjs（唯一权威，含 setArchived/search）；
+ *   · conversations 权威实现就是 shell/conversations.cjs（含 setArchived/search）；
  *   · 连接所有权：auth.cjs 打开并拥有 db（ownsDb=false），storage 复用同一连接，
  *     close() 统一走 auth.close()，绝不重复关闭。
  *
@@ -26,8 +26,8 @@ const DEFAULT_MIGRATIONS_DIR = path.join(__dirname, "migrations");
 async function createStorage(opts = {}) {
   const { initAuth } = require("../auth.cjs");
   const keysMod = require("../keys.cjs");
-  const convMod = require("../../conv/conversations-v2.cjs"); // 权威多对话仓储
-  const memoryMod = require("../../conv/memory.cjs");
+  const convMod = require("../conversations.cjs");   // 权威多对话仓储（原 conv/conversations-v2.cjs 已并入）
+  const memoryMod = require("../memory.cjs");
 
   const migrationsDir = opts.migrationsDir || DEFAULT_MIGRATIONS_DIR;
 
