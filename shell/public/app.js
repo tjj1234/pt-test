@@ -126,9 +126,73 @@ function bubbleSys(text) {
 function thinking() {
   const el = document.createElement("div");
   el.className = "msg a";
-  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> 思考中…<span class="elapsed"></span></div><div class="steps-live"></div></div>';
+  el.innerHTML = '<div class="av">北</div><div class="box"><div class="bub"><span class="typing"><i></i><i></i><i></i></span> <span class="think-label">思考中…</span><span class="elapsed"></span></div><div class="steps-live"></div></div>';
   chat.appendChild(el); chat.scrollTop = chat.scrollHeight;
   return el;
+}
+
+/* 首字等待态：基座在请求一开始、还没真正拿到模型回复前，会先多发一帧
+ * {connecting:true} 事件，告知前端「这条请求正在建立底层模型连接」（对应连接池冷启动）。
+ * 把思考气泡里的「思考中…」切到「正在连接模型…」；一旦真正的 delta 开始流式返回，
+ * 现有的 streamInto() 会整体替换掉这个气泡内容，提示自然消失，无需额外计时器或状态管理。
+ * 连接很快时这一帧一闪而过，用户基本感知不到跳动或闪烁。 */
+function showConnecting(t) {
+  const label = t.querySelector(".think-label");
+  if (label) label.textContent = "正在连接模型…";
+}
+
+/* 生成类（图片 / 视频）等待态：把 media_route 工具调用的步骤换成友好提示，
+ * 避免把内部工具名和原始参数（prompt 原文、图片 URL）糊在用户面前。
+ * 返回 null 表示「不走美化」（其他工具），由调用方走通用渲染。
+ * 注：后端 progress 字段在生成期间长期卡在 30%（完成前才跳 100%），不可靠，
+ * 这里刻意不接进度条，只给一句「大概要等多久」的预期管理。 */
+/**
+ * media_route 工具调用步骤的友好化。返回三种结果之一：
+ *   { text }      -> 直接作为该步骤展示文案（开始时的等待提示 / 失败时的友好报错）
+ *   { skip:true } -> 完全不展示该行（media_route 成功结束：媒体已显示，不再冒一行）
+ *   null          -> 不是 media_route 步骤，调用方走通用渲染（归因查询等其他工具）
+ *
+ * 怎么区分「开始」和「结束」——只看 isError 这个键存不存在：
+ *   真实下发到前端的 step 里**没有 phase 字段**（phase 只存在于基座进程内部的帧上，前端拿不到；
+ *   以前照着 phase 判断，后端一旦不带它，所有步骤都会掉进「结束」分支、等待提示再也不显示）。
+ *   唯一可靠的标志是：只有「结束」步骤会显式带上 isError 键（哪怕值是 false）。
+ *
+ * 两个真实格式的坑（都是被臆造的假数据掩盖住的，现已修）：
+ *   1. step.args 是 JSON 字符串（基座把工具入参 stringify 后再下发），不是对象 ——
+ *      直接 args.taskType 恒为 undefined，视频提示从来没生效过，必须先解析。
+ *   2. 结束步骤**不带 args**，所以失败时要靠「上一次开始步骤记住的 taskType」
+ *      才能区分是图片失败还是视频失败。
+ */
+let lastMediaTaskType = null;   // 最近一次 media_route 开始步骤的 taskType（结束步骤自己不带 args，靠它区分图文视频）
+function taskTypeOfArgs(args) {
+  let a = args;
+  if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { return null; } }
+  return (a && a.taskType) || null;
+}
+function mediaRouteStepMessage(step) {
+  if (!step || step.name !== "media_route") return null;
+  const isEnd = step.isError !== undefined;
+  const tt = taskTypeOfArgs(step.args);
+  if (tt) lastMediaTaskType = tt;                 // 开始步骤顺手记住类型
+  const eff = isEnd ? lastMediaTaskType : tt;     // 结束步骤没有 args，沿用记住的类型
+  const isVideo = eff === "text2video" || eff === "image2video";
+  if (isEnd) {
+    if (step.isError) {
+      return { text: isVideo ? "⚠️ 视频生成失败，可以重新试一次" : "⚠️ 图片生成失败，可以重新试一次" };
+    }
+    return { skip: true };   // 成功结束：媒体已展示，不再冒一行
+  }
+  return { text: isVideo
+    ? "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的"
+    : "🎨 正在生成图片…" };
+}
+
+/** 把等待秒数格式化成安心易读的文案：60 秒内显示「N 秒」，超过则换算成「X分Y秒」。 */
+function formatElapsed(sec) {
+  if (sec < 60) return "已等待 " + sec + " 秒";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  return "已等待 " + m + "分" + s + "秒";
 }
 
 /* 流式：把 thinking 气泡转成逐字增长的回复气泡 */
@@ -519,7 +583,7 @@ async function runChat(payload) {
   setBusy(true);
   const t = thinking();
   const t0 = Date.now();
-  const tick = setInterval(() => { const e = t.querySelector(".elapsed"); if (e) e.textContent = "（已等待 " + Math.round((Date.now() - t0) / 1000) + " 秒）"; }, 1000);
+  const tick = setInterval(() => { const e = t.querySelector(".elapsed"); if (e) e.textContent = "（" + formatElapsed(Math.round((Date.now() - t0) / 1000)) + "）"; }, 1000);
   try {
     const r = await fetch("/api/chat", {
       method: "POST", credentials: "same-origin",
@@ -543,14 +607,27 @@ async function runChat(payload) {
           if (!line) continue;
           let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
           // 打字机和工具步骤只画在「用户当前正在看的那条对话」上
+          if (obj.connecting && viewing()) { showConnecting(t); }
           if (obj.delta && viewing()) { acc += obj.delta; streamInto(t, acc); }
           if (obj.step && viewing()) {
             const live = t.querySelector(".steps-live");
             if (live) {
-              const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
-              d.textContent = (obj.step.isError ? "⚠️ " : "🔧 ") + (obj.step.name || "工具") + (obj.step.args ? " " + obj.step.args : "");
-              live.appendChild(d);
-              chat.scrollTop = chat.scrollHeight;
+              // media_route 步骤统一美化：开始给等待提示、失败给友好报错、成功结束不冒多余一行；
+              // 其他工具（归因查询等）返回 null，走下面的通用渲染（不美化、保持原样）。
+              // 后端 progress 字段长期卡 30% 不可靠，不做进度条，只给等待预期。
+              const r = mediaRouteStepMessage(obj.step);
+              if (r !== null && !r.skip) {
+                const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
+                d.textContent = r.text;
+                live.appendChild(d);
+                chat.scrollTop = chat.scrollHeight;
+              } else if (r === null) {
+                const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
+                d.textContent = (obj.step.isError ? "⚠️ " : "🔧 ") + (obj.step.name || "工具") + (obj.step.args ? " " + obj.step.args : "");
+                live.appendChild(d);
+                chat.scrollTop = chat.scrollHeight;
+              }
+              // r.skip（media_route 成功结束步骤）：媒体已展示，什么都不渲染
             }
           }
           if (obj.done) {
