@@ -131,6 +131,19 @@ function thinking() {
   return el;
 }
 
+/* 生成类（图片 / 视频）等待态：把 media_route 工具调用的「开始」步骤（phase=call）
+ * 换成友好提示，避免把内部工具名和原始参数（prompt 原文、图片 URL）糊在用户面前。
+ * 返回 null 表示「不走美化」（其他工具 / media_route 的结果步骤），由调用方走通用渲染。
+ * 注：后端 progress 字段在生成期间长期卡在 30%（完成前才跳 100%），不可靠，
+ * 这里刻意不接进度条，只给一句「大概要等多久」的预期管理。 */
+function mediaRouteStepMessage(step) {
+  if (!step || step.name !== "media_route" || step.phase !== "call") return null;
+  const tt = step.args && step.args.taskType;
+  if (tt === "text2video" || tt === "image2video")
+    return "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的";
+  return "🎨 正在生成图片…";
+}
+
 /* 流式：把 thinking 气泡转成逐字增长的回复气泡 */
 function streamInto(el, text) {
   const bub = el.querySelector(".bub");
@@ -547,8 +560,14 @@ async function runChat(payload) {
           if (obj.step && viewing()) {
             const live = t.querySelector(".steps-live");
             if (live) {
+              // media_route 的「开始」步骤（phase=call）单独美化：不暴露内部工具名 / 原始参数
+              // （prompt 原文、图片 URL 都不该给用户看）；后端 progress 字段长期卡 30% 不可靠，
+              // 不做进度条，这里只给一句等待预期。其他工具 / media_route 的结果步骤返回 null（走通用渲染）。
+              const mediaMsg = mediaRouteStepMessage(obj.step);
               const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
-              d.textContent = (obj.step.isError ? "⚠️ " : "🔧 ") + (obj.step.name || "工具") + (obj.step.args ? " " + obj.step.args : "");
+              d.textContent = mediaMsg !== null
+                ? mediaMsg
+                : (obj.step.isError ? "⚠️ " : "🔧 ") + (obj.step.name || "工具") + (obj.step.args ? " " + obj.step.args : "");
               live.appendChild(d);
               chat.scrollTop = chat.scrollHeight;
             }
