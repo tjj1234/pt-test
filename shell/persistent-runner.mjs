@@ -173,6 +173,7 @@ function summarize(events, firstSeq) {
   let started = false;
   let text = "";
   let reason;
+  let usage;
   for (const event of events) {
     if (event.seq < firstSeq) continue;
     if (event.type === "turn/start") { started = true; continue; }
@@ -182,10 +183,11 @@ function summarize(events, firstSeq) {
         .filter((block) => block.type === "text")
         .map((block) => block.text).join("");
       if (joined !== "") text = joined;
+      if (event.data?.usage) usage = event.data.usage;
     }
     if (event.type === "turn/end") reason = event.data?.reason;
   }
-  return { text, reason };
+  return { text, reason, usage };
 }
 
 function apply(ctx) {
@@ -481,6 +483,7 @@ function apply(ctx) {
           text: outcome.text,
           media: lastMediaRouteResult ? [lastMediaRouteResult] : null,
           report: lastReport,
+          usage: outcome.usage ?? null,
           reason: outcome.reason?.kind ?? null,
           reasonDetail: outcome.reason?.error ? { code: outcome.reason.error.code, message: outcome.reason.error.message } : null,
           canceled: !!(outcome.reason && (outcome.reason.kind === "user" || outcome.reason.kind === "parent" || outcome.reason.kind === "hook")),

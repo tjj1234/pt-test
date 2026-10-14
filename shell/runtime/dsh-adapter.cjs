@@ -223,7 +223,7 @@ function createDshRuntime(opts = {}) {
             durationMs: frame.durationMs,
           };
           if (Array.isArray(w.steps)) w.steps.push(step);
-          if (typeof w.onStep === "function") { try { w.onStep({ name: step.name, result: step.result, isError: step.isError }); } catch (e) {} }
+          if (typeof w.onStep === "function") { try { w.onStep({ name: step.name, args: step.args, result: step.result, isError: step.isError }); } catch (e) {} }
         }
         break;
       }
@@ -280,6 +280,7 @@ function createDshRuntime(opts = {}) {
     const existing = persistentProcesses.get(key);
     if (existing && existing.child && existing.child.exitCode === null && !existing.child.killed) {
       existing.lastUsed = Date.now();
+      existing.userId = spec.userId; // 记录最近一次使用该进程的 userId，供活跃心跳目标解密 key
       return { proc: existing, fresh: false };
     }
 
@@ -316,6 +317,7 @@ function createDshRuntime(opts = {}) {
 
     const proc = {
       child, outFile, errFile, fdOut, fdErr,
+      userId: spec.userId,               // 该常驻进程属于哪个 userId（1 用户 = 1 租户）
       lastSize: 0, lastUsed: Date.now(),
       waiters: new Map(), lineBuf: "", ready: false,
       pollTimer: null, killedByUser: false, idleTimer: null,
@@ -452,6 +454,58 @@ function createDshRuntime(opts = {}) {
     });
   }
 
+  // 保活心跳：走与真实对话完全相同的 DSH 进程 + runner task 路径，向默认模型发一个
+  // 最小成本请求，目的仅是让底层 newapi 网关与上游模型的连接保持活跃，避免空闲回收后
+  // 首字要重新走 TCP/TLS 握手（实测可达 35 秒）。不注册业务 waiter、不经过 shell 的
+  // runningJobs 锁；每次用全新 sessionId，用完即 close，避免 agentMap 内存堆积与上下文增长。
+  function pulse(spec) {
+    const tenantId = String(spec.tenantId || "").trim();
+    return new Promise((resolve) => {
+      // 心跳只针对「已存在且仍存活」的常驻进程，绝不为其冷启动新进程：
+      // 这样才不会把心跳浪费在很久没登录、进程早已被回收的账号上。
+      const proc = persistentProcesses.get(tenantId);
+      if (!proc || !proc.child || proc.child.exitCode !== null || proc.child.killed) {
+        return resolve({ ok: false, skipped: true, error: "非活跃租户，跳过心跳（常驻进程已被回收）" });
+      }
+      const sessionId = "hb-" + Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex");
+      const task = String(spec.prompt || "ping").trim();
+      const t0 = Date.now();
+      let settled = false;
+      const finish = (r) => {
+        if (settled) return;
+        settled = true;
+        writeJson(proc, { type: "close", sessionId }); // 用完即弃，防内存堆积 / 上下文增长
+        resolve(r);
+      };
+      const waiter = {
+        onDelta: () => {},
+        onStep: () => {},
+        steps: [],
+        resolve: (frame) => finish({ ok: frame.ok !== false, ms: frame.ms || (Date.now() - t0), error: frame.error || null, usage: frame.usage || null }),
+      };
+      proc.waiters.set(sessionId, waiter);
+      writeJson(proc, { type: "task", sessionId, task, model: spec.model, tenantId });
+      setTimeout(() => {
+        if (proc.waiters.has(sessionId)) {
+          proc.waiters.delete(sessionId);
+          finish({ ok: false, error: "保活请求超时" });
+        }
+      }, spec.timeoutMs || 60000);
+    });
+  }
+
+  // 返回当前仍存活的常驻进程租户列表（即「最近还在用」的租户）。
+  // 每个元素带 tenantId + userId（用于解密该租户的 PT key）+ lastUsed。
+  function activeTenants() {
+    const out = [];
+    for (const [tenantId, proc] of persistentProcesses.entries()) {
+      if (proc && proc.child && proc.child.exitCode === null && !proc.child.killed) {
+        out.push({ tenantId, userId: proc.userId || tenantId, lastUsed: proc.lastUsed || null });
+      }
+    }
+    return out;
+  }
+
   function abort(sessionKey) {
     // 按 sessionKey 优雅取消当前轮（P1-4：agent.cancel）
     const sid = String(sessionKey || "").trim();
@@ -489,7 +543,7 @@ function createDshRuntime(opts = {}) {
     }
   }
 
-  return { run, abort, closeSession, close };
+  return { run, pulse, activeTenants, abort, closeSession, close };
 }
 
 module.exports = {

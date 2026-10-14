@@ -106,6 +106,12 @@ const DRY_RUN_CHAT = process.env.PT_CHAT_DRYRUN === "1";
 const RATE_CHAT_PER_MIN = Number(process.env.PT_RATE_CHAT_PER_MIN || 20);
 const chatLimiter = createRateLimiter({ windowMs: 60000, max: RATE_CHAT_PER_MIN });
 
+// ---- 保活心跳（防空闲回收导致首字延迟）：默认关闭，PT_HEARTBEAT_ENABLED=1 开启 ----
+// 每 5 分钟一次（PT_HEARTBEAT_INTERVAL_MS 覆盖），走真实对话同路径向默认模型发极短 prompt。
+const HEARTBEAT_ENABLED = process.env.PT_HEARTBEAT_ENABLED === "1";
+const HEARTBEAT_INTERVAL_MS = Number(process.env.PT_HEARTBEAT_INTERVAL_MS || (5 * 60 * 1000));
+const HEARTBEAT_PROMPT = process.env.PT_HEARTBEAT_PROMPT || "ping";
+
 // ---- 文档上传（纯文本 v1：.txt/.md/.csv）与上下文注入限制 ----
 const DOC_UPLOAD_MAX_BYTES = Number(process.env.PT_DOC_UPLOAD_MB || 5) * 1024 * 1024;
 const DOC_CONTEXT_MAX_CHARS = Number(process.env.PT_DOC_CONTEXT_CHARS || 100000);
@@ -586,6 +592,10 @@ async function handleChat(req, res, me, body) {
   });
   res.flushHeaders();
   const sse = (obj) => { try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (e) {} };
+
+  // 任务B：请求已受理，先推一帧「正在建立模型连接」，让前端区分「连接中」与「思考中」。
+  // 每次请求都发一次（热连接下会立刻被后续 delta 覆盖，用户几乎无感）。
+  sse({ connecting: true });
 
   // ⑤ 分岔 / 重新生成：重置该对话的 DSH session（丢弃旧轨迹），下一问冷启动、只重放截断后的历史
   if (hasBranch || regenerate) {
@@ -1435,6 +1445,55 @@ process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);
 
 /* ============================================================================
+ * 保活心跳（任务A）：低频最小请求，保持底层模型连接活跃，防空闲回收导致首字延迟。
+ * 走与真实对话完全相同的 DSH 路径，但不经 /api/chat 的 runningJobs 锁。
+ * ========================================================================== */
+let heartbeatTimer = null;
+let heartbeatRunning = false;
+function startHeartbeat() {
+  if (!HEARTBEAT_ENABLED) {
+    console.log("  保活心跳：未开启（PT_HEARTBEAT_ENABLED != 1）");
+    return;
+  }
+  const tick = async () => {
+    if (heartbeatRunning) return; // 上一轮还没结束就跳过，避免堆积
+    heartbeatRunning = true;
+    try {
+      // 每次触发时扫一遍「当前仍存活的常驻进程租户」，只给这些活跃租户各发一次心跳，
+      // 覆盖所有正在被用的员工，同时不浪费在已回收进程、很久没登录的账号上。
+      const targets = tenantMod.activeHeartbeatTargets();
+      if (!targets || !targets.length) {
+        log.info("heartbeat_idle", { reason: "无活跃常驻租户进程" });
+        return;
+      }
+      for (const t of targets) {
+        const tenantId = t.tenantId;
+        const userId = t.userId || tenantId;
+        try {
+          const r = await tenantMod.heartbeat(userId, {
+            tenantId,
+            decryptApiKey: keys.decryptApiKey,
+            prompt: HEARTBEAT_PROMPT,
+          });
+          if (r && r.ok) log.info("heartbeat_ok", { tenantId, ms: r.ms, usage: r.usage });
+          else log.info("heartbeat_skip", { tenantId, error: r && r.error, skipped: r && r.skipped });
+        } catch (e) {
+          log.info("heartbeat_fail", { tenantId, error: e && e.message ? e.message : String(e) });
+        }
+      }
+    } catch (e) {
+      log.info("heartbeat_fail", { error: e && e.message ? e.message : String(e) });
+    } finally {
+      heartbeatRunning = false;
+    }
+  };
+  // 不立即发首跳：服务刚起时还没有活跃进程，等有真实对话后再按间隔扫活跃租户。
+  heartbeatTimer = setInterval(tick, HEARTBEAT_INTERVAL_MS);
+  heartbeatTimer.unref && heartbeatTimer.unref();
+  console.log("  保活心跳：已开启（每 " + Math.round(HEARTBEAT_INTERVAL_MS / 1000) + " 秒扫一次活跃租户，prompt=\"" + HEARTBEAT_PROMPT + "\"）");
+}
+
+/* ============================================================================
  * 启动：① initAuth（迁移 + 种默认管理员）→ ② initKeys（主密钥）→ ③ initConversations → ④ 监听
  * ========================================================================== */
 async function main() {
@@ -1451,7 +1510,7 @@ async function main() {
   });
   
   // B3-fix：为默认管理员创建 workspace
-  const defaultAdminTenant = await auth.db.query("SELECT tenant_id FROM users WHERE username = $1", [USERNAME]);
+  const defaultAdminTenant = await auth.db.query("SELECT id, tenant_id FROM users WHERE username = $1", [USERNAME]);
   if (defaultAdminTenant.rows.length > 0) {
     const { createWorkspace } = require("./workspace/index.cjs");
     await createWorkspace("ws_" + defaultAdminTenant.rows[0].tenant_id, defaultAdminTenant.rows[0].tenant_id);
@@ -1465,6 +1524,9 @@ async function main() {
   conversations = await convMod.initConversations(auth.db);
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
+
+  // 任务A：启动保活心跳（扫描「仍存活的常驻进程租户」，逐个发心跳），防空闲回收导致的首字延迟。
+  startHeartbeat();
   
   // B4-fix: 初始化默认角色权限
   const { initializeDefaultRoles, setDb } = require("./permissions/index.cjs");
