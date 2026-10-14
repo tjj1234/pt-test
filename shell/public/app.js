@@ -141,36 +141,50 @@ function showConnecting(t) {
   if (label) label.textContent = "正在连接模型…";
 }
 
-/* 生成类（图片 / 视频）等待态：把 media_route 工具调用的「开始」步骤（phase=call）
- * 换成友好提示，避免把内部工具名和原始参数（prompt 原文、图片 URL）糊在用户面前。
- * 返回 null 表示「不走美化」（其他工具 / media_route 的结果步骤），由调用方走通用渲染。
+/* 生成类（图片 / 视频）等待态：把 media_route 工具调用的步骤换成友好提示，
+ * 避免把内部工具名和原始参数（prompt 原文、图片 URL）糊在用户面前。
+ * 返回 null 表示「不走美化」（其他工具），由调用方走通用渲染。
  * 注：后端 progress 字段在生成期间长期卡在 30%（完成前才跳 100%），不可靠，
  * 这里刻意不接进度条，只给一句「大概要等多久」的预期管理。 */
 /**
  * media_route 工具调用步骤的友好化。返回三种结果之一：
  *   { text }      -> 直接作为该步骤展示文案（开始时的等待提示 / 失败时的友好报错）
- *   { skip:true } -> 完全不展示该行（media_route 成功结束步骤 phase=result：媒体已显示，不再冒一行）
+ *   { skip:true } -> 完全不展示该行（media_route 成功结束：媒体已显示，不再冒一行）
  *   null          -> 不是 media_route 步骤，调用方走通用渲染（归因查询等其他工具）
- * 约定：
- *   - 开始步骤 phase=call -> 按 taskType 给图片/视频不同的等待提示，不暴露 prompt/URL/工具名
- *   - 失败步骤 isError    -> 区分图片/视频的友好报错，不暴露原始参数
- *   - 成功结束步骤        -> 不展示（媒体已经在气泡里，无需再冒一行「🔧 media_route」）
- *   - 后端 progress 字段长期卡 30% 不可靠，这里刻意不做进度条，只做等待预期管理
+ *
+ * 怎么区分「开始」和「结束」——只看 isError 这个键存不存在：
+ *   真实下发到前端的 step 里**没有 phase 字段**（phase 只存在于基座进程内部的帧上，前端拿不到；
+ *   以前照着 phase 判断，后端一旦不带它，所有步骤都会掉进「结束」分支、等待提示再也不显示）。
+ *   唯一可靠的标志是：只有「结束」步骤会显式带上 isError 键（哪怕值是 false）。
+ *
+ * 两个真实格式的坑（都是被臆造的假数据掩盖住的，现已修）：
+ *   1. step.args 是 JSON 字符串（基座把工具入参 stringify 后再下发），不是对象 ——
+ *      直接 args.taskType 恒为 undefined，视频提示从来没生效过，必须先解析。
+ *   2. 结束步骤**不带 args**，所以失败时要靠「上一次开始步骤记住的 taskType」
+ *      才能区分是图片失败还是视频失败。
  */
+let lastMediaTaskType = null;   // 最近一次 media_route 开始步骤的 taskType（结束步骤自己不带 args，靠它区分图文视频）
+function taskTypeOfArgs(args) {
+  let a = args;
+  if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { return null; } }
+  return (a && a.taskType) || null;
+}
 function mediaRouteStepMessage(step) {
   if (!step || step.name !== "media_route") return null;
-  const tt = step.args && step.args.taskType;
-  const isVideo = tt === "text2video" || tt === "image2video";
-  if (step.isError) {
-    return { text: isVideo ? "⚠️ 视频生成失败，可以重新试一次" : "⚠️ 图片生成失败，可以重新试一次" };
+  const isEnd = step.isError !== undefined;
+  const tt = taskTypeOfArgs(step.args);
+  if (tt) lastMediaTaskType = tt;                 // 开始步骤顺手记住类型
+  const eff = isEnd ? lastMediaTaskType : tt;     // 结束步骤没有 args，沿用记住的类型
+  const isVideo = eff === "text2video" || eff === "image2video";
+  if (isEnd) {
+    if (step.isError) {
+      return { text: isVideo ? "⚠️ 视频生成失败，可以重新试一次" : "⚠️ 图片生成失败，可以重新试一次" };
+    }
+    return { skip: true };   // 成功结束：媒体已展示，不再冒一行
   }
-  if (step.phase === "call") {
-    return { text: isVideo
-      ? "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的"
-      : "🎨 正在生成图片…" };
-  }
-  // phase=result 且成功：媒体已展示，不再冒一行
-  return { skip: true };
+  return { text: isVideo
+    ? "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的"
+    : "🎨 正在生成图片…" };
 }
 
 /** 把等待秒数格式化成安心易读的文案：60 秒内显示「N 秒」，超过则换算成「X分Y秒」。 */
