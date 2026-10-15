@@ -55,5 +55,16 @@
     inp.addEventListener("input", chk);
     if (matchInp) matchInp.addEventListener("input", chk);
   }
+  /** 密码复杂度硬校验（与后端 auth.cjs 的 validatePasswordComplexity 规则一致）：
+   *  最少 8 位，且至少包含一个字母和一个数字。返回 null=通过，否则返回中文错误原因。 */
+  function validatePasswordComplexity(p) {
+    const s = String(p || "");
+    if (s.length < 8) return "密码至少 8 位";
+    if (!/[a-zA-Z]/.test(s)) return "密码需包含至少一个字母";
+    if (!/\d/.test(s)) return "密码需包含至少一个数字";
+    return null;
+  }
+
   window.attachPwStrength = attachPwStrength;
+  window.validatePasswordComplexity = validatePasswordComplexity;
 })();
