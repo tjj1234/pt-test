@@ -333,10 +333,22 @@ function renderChat(messages) {
   });
 }
 
-function showStoppedBar() {
+/* 停止 / 超时中断文案。
+ * 以前「真超时被强制中断」和「用户手动点停止」走同一个 stopped 分支，都显示「已停止」，
+ * 用户分不清是卡死了还是自己停的 —— 现在按服务端下发的 stopReason 区分（timeout / user）。 */
+function stoppedBarText(stopReason) {
+  return stopReason === "timeout"
+    ? "已超时中断（本轮超出时间预算，回答已丢弃）"
+    : "已停止（你的问题已保存，回答已丢弃）";
+}
+function stoppedChipText(stopReason) {
+  return stopReason === "timeout" ? "已超时中断" : "已停止";
+}
+
+function showStoppedBar(stopReason) {
   const bar = document.createElement("div");
   bar.className = "stopped-bar";
-  const label = document.createElement("span"); label.textContent = "已停止（你的问题已保存，回答已丢弃）";
+  const label = document.createElement("span"); label.textContent = stoppedBarText(stopReason);
   const btn = document.createElement("button"); btn.className = "msgbtn"; btn.title = "重新生成";
   btn.innerHTML = '<span class="ico" data-ico="refresh"></span>';
   btn.addEventListener("click", () => regenerate());
@@ -635,7 +647,7 @@ async function runChat(payload) {
             clearInterval(tick); t.remove();
             // 界面已经不在目标对话上了：只标未读 + 刷列表，一个字都不写进当前视图
             if (!viewing()) { markUnread(targetId); await refreshList(); return; }
-            if (obj.stopped) { renderChat(obj.messages); showStoppedBar(); cm.textContent = "已停止"; }
+            if (obj.stopped) { renderChat(obj.messages); showStoppedBar(obj.stopReason); cm.textContent = stoppedChipText(obj.stopReason); }
             else if (obj.ok) { renderChat(obj.messages); cm.textContent = "第 " + obj.turns + " 轮 · 常驻 agent 会话续接"; }
             else { if (Array.isArray(obj.messages)) renderChat(obj.messages); else bubbleSys("执行失败：" + (obj.error || "")); cm.textContent = ""; }
             await refreshList();
@@ -660,7 +672,7 @@ async function runChat(payload) {
       } else if (!r.ok && r.status === 409 && j && j.busy) {
         bubbleSys(j.error || "上一个还在跑，请先停止或等它结束"); cm.textContent = "";
       } else if (j && j.stopped) {
-        renderChat(j.messages); showStoppedBar(); cm.textContent = "已停止";
+        renderChat(j.messages); showStoppedBar(j.stopReason); cm.textContent = stoppedChipText(j.stopReason);
       } else if (j && j.ok) {
         renderChat(j.messages);
         cm.textContent = "第 " + j.turns + " 轮 · 常驻 agent 会话续接";
@@ -2653,27 +2665,92 @@ $("#toolsRetry").addEventListener("click", bizLoadFlows);
 let bizUsageRange = "today", bizUsageRequest = 0;
 function bizUsageSample() {
   const now = Date.now(), days = bizUsageRange === "month" ? [0, 2, 12] : bizUsageRange === "week" ? [0, 2] : [0];
-  return { ok: true, calls: days.map((d, i) => ({ id: "demo-" + i, timestamp: new Date(now - d * 86400000).toISOString(), toolName: bizToolSamples[i % 2].name, inputSummary: "最近广告数据", outputSummary: "分析已完成", durationMs: 240 + i * 80, tokenCount: 380 + i * 60, status: "success" })) };
+  return { ok: true, calls: days.map((d, i) => ({ id: "demo-" + i, timestamp: new Date(now - d * 86400000).toISOString(), toolName: bizToolSamples[i % 2].name, category: "Skill", modelName: null, inputSummary: "最近广告数据", outputSummary: "分析已完成", durationMs: 240 + i * 80, tokenCount: 380 + i * 60, status: "success" })) };
 }
-// 顶部汇总要区分「真的是 0」和「没有数据」：DSH 协议不返回 token 时后端诚实标 null，
-// 当成 0 累加会显示「0 Tokens」，看着像测出来零消耗，实际是压根没测。
-// 全都没数据 → 「Token数据暂缺」；只要有一条有真实数值就正常求和（null 按 0 计入）。
-function bizTokenSummary(calls) {
-  const num = (c) => (c && c.tokenCount != null && Number.isFinite(Number(c.tokenCount)) ? Number(c.tokenCount) : null);
-  if (!calls.some((c) => num(c) !== null)) return "Token数据暂缺";
-  return calls.reduce((n, c) => n + (num(c) || 0), 0) + " Tokens";
+function bizUsageSummarySample() {
+  return { ok: true, summary: {
+    today: { promptTokens: 800, completionTokens: 400, totalTokens: 1200 },
+    month: { promptTokens: 12200, completionTokens: 6200, totalTokens: 18400 },
+    byModel: [
+      { model: "deepseek-chat", calls: 8, promptTokens: 7200, completionTokens: 2000, totalTokens: 9200 },
+      { model: "seedream-5-0-260128", calls: 3, promptTokens: 3000, completionTokens: 3400, totalTokens: 6400 },
+      { model: "wan2.7-i2v", calls: 1, promptTokens: 1200, completionTokens: 1600, totalTokens: 2800 },
+    ],
+  } };
+}
+// 后端 tool_calls 已带 category，这里仅兜底示例数据/旧数据没有分类字段的情况。
+function bizUsageCategory(toolName) {
+  const n = String(toolName || "").toLowerCase();
+  if (["media_route", "media.route", "attribution_query", "attribution.query", "ga_query", "ga.query"].includes(n)) return "Workflow";
+  if (n.startsWith("mcp_") || n.startsWith("mcp.")) return "MCP";
+  return "Skill";
+}
+function bizUsageStatus(status) {
+  return ({ success: "成功", completed: "成功", failed: "失败", error: "失败", interrupted: "中断", running: "执行中", started: "执行中", skipped: "未执行", pending: "等待中" })[status] || status || "—";
+}
+function bizUsageRenderCards(summary) {
+  const host = $("#usageCards");
+  host.replaceChildren();
+  const today = summary && summary.today ? summary.today.totalTokens : 0;
+  const month = summary && summary.month ? summary.month.totalTokens : 0;
+  const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("zh-CN"));
+  [
+    ["今日 Tokens", fmt(today)],
+    ["本月 Tokens", fmt(month)],
+    ["本月费用 (¥)", "待确认单价"],
+  ].forEach(([label, value]) => {
+    const c = bizNode("div", null, "card"); c.style.cssText = "flex:1;min-width:140px;padding:14px 16px";
+    const lab = bizNode("div", label); lab.style.cssText = "font-size:12px;color:#8c8c8c;margin-bottom:6px";
+    const val = bizNode("div", value); val.style.cssText = "font-size:22px;font-weight:600";
+    c.append(lab, val); host.appendChild(c);
+  });
+}
+function bizUsageRenderModels(summary) {
+  const host = $("#usageModels");
+  host.replaceChildren();
+  const byModel = (summary && Array.isArray(summary.byModel) ? summary.byModel : []).filter(m => m && m.model);
+  if (!byModel.length) return;
+  const wrap = bizNode("div", null, "card"); wrap.style.cssText = "padding:14px 16px";
+  const title = bizNode("div", "按模型 Token 分布"); title.style.cssText = "font-size:12px;color:#8c8c8c;margin-bottom:10px";
+  wrap.appendChild(title);
+  const max = Math.max(...byModel.map(m => Number(m.totalTokens) || 0), 1);
+  byModel.forEach(m => {
+    const row = bizNode("div"); row.style.cssText = "display:flex;align-items:center;gap:10px;margin:6px 0";
+    const name = bizNode("div", m.model); name.style.cssText = "flex:0 0 180px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
+    const barWrap = bizNode("div"); barWrap.style.cssText = "flex:1;height:14px;background:var(--line);border-radius:7px;overflow:hidden";
+    const bar = bizNode("div"); bar.style.cssText = "height:100%;width:" + Math.round((Number(m.totalTokens) || 0) / max * 100) + "%;background:var(--accent,#4f7cff);border-radius:7px";
+    barWrap.appendChild(bar);
+    const num = bizNode("div", Number(m.totalTokens || 0).toLocaleString("zh-CN") + " tok"); num.style.cssText = "flex:0 0 110px;font-size:12px;text-align:right";
+    row.append(name, barWrap, num); wrap.appendChild(row);
+  });
+  host.appendChild(wrap);
 }
 async function bizLoadUsage() {
   const seq = ++bizUsageRequest; $("#usageStatus").textContent = "读取调用记录…";
   $("#usageRanges").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.range === bizUsageRange)));
   try {
-    const result = await bizRead("/api/usage/tool-calls?range=" + bizUsageRange, bizUsageSample);
+    const [callRes, sumRes] = await Promise.all([
+      bizRead("/api/usage/tool-calls?range=" + bizUsageRange, bizUsageSample),
+      bizRead("/api/usage/summary?range=" + bizUsageRange, bizUsageSummarySample),
+    ]);
     if (seq !== bizUsageRequest) return;
-    if (!Array.isArray(result.data.calls)) throw new Error("调用日志接口返回格式不正确");
-    const calls = result.data.calls;
-    $("#usageStatus").textContent = (result.mock ? "示例数据 · 日志接口待接入。" : "") + (calls.length ? calls.length + " 次调用 · " + bizTokenSummary(calls) : "所选时间范围内没有工具调用");
-    bizTable($("#usageList"), ["时间", "工具", "输入摘要", "输出摘要", "耗时", "Tokens", "状态"], calls.map(c => [fmtTime(c.timestamp), c.toolName, c.inputSummary, c.outputSummary, c.durationMs == null ? "—" : c.durationMs + " ms", c.tokenCount, ({ success: "成功", completed: "成功", failed: "失败", error: "失败", running: "执行中", started: "执行中", skipped: "未执行", pending: "等待中" })[c.status] || c.status]));
-  } catch (e) { if (seq === bizUsageRequest) { $("#usageList").replaceChildren(); $("#usageStatus").textContent = e.message; } }
+    if (!Array.isArray(callRes.data.calls)) throw new Error("调用日志接口返回格式不正确");
+    const calls = callRes.data.calls;
+    const summary = (sumRes.data && sumRes.data.summary) || null;
+    bizUsageRenderCards(summary);
+    bizUsageRenderModels(summary);
+    $("#usageStatus").textContent = (callRes.mock ? "示例数据 · 日志接口待接入。" : "") + (calls.length ? calls.length + " 次调用" : "所选时间范围内没有工具调用");
+    bizTable($("#usageList"), ["时间", "类型", "工具", "模型", "输入摘要", "输出摘要", "耗时", "状态"], calls.map(c => [
+      fmtTime(c.timestamp),
+      c.category || bizUsageCategory(c.toolName),
+      c.toolName,
+      c.modelName == null ? "—" : c.modelName,
+      c.inputSummary,
+      c.outputSummary,
+      c.durationMs == null ? "—" : c.durationMs + " ms",
+      bizUsageStatus(c.status),
+    ]));
+  } catch (e) { if (seq === bizUsageRequest) { $("#usageList").replaceChildren(); $("#usageCards").replaceChildren(); $("#usageModels").replaceChildren(); $("#usageStatus").textContent = e.message; } }
 }
 $("#usageRanges").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { bizUsageRange = b.dataset.range; bizLoadUsage(); }));
 $("#usageRetry").addEventListener("click", bizLoadUsage);

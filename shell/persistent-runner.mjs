@@ -206,6 +206,7 @@ function apply(ctx) {
     const stepNames = new Map();      // callId -> 工具名（tool/result 时回填名字）
     const stepStarted = new Map();    // callId -> { name, args, t0 }（tool/call 起，tool/result 算真实耗时）
     let lastMediaRouteResult = null;  // 本 turn 最近一次 media.route 的结构化结果 { type, url }
+    let lastMediaRouteModel = null;   // 本 turn 最近一次 media.route 实际使用的生成模型（seedream / wan 等）
     let currentTenantId = "";         // 本 turn 租户上下文（cmd.tenantId 注入，供 ga.query / attribution.query）
     let lastReport = null;            // 本 turn 最近一次 ga.query / attribution.quality 返回的 report（outputType=report，透传前端抽屉）
 
@@ -243,7 +244,8 @@ function apply(ctx) {
           if (b.isError === true) isError = true;
         }
         const durationMs = started ? (Date.now() - started.t0) : null;
-        emit({ type: "step", sessionId: sid, callId, name, args: started ? started.args : undefined, result: truncate(text, 400), isError, durationMs, phase: "result" });
+        const modelName = (name === "media_route" || name === "media.route") ? lastMediaRouteModel : null;
+        emit({ type: "step", sessionId: sid, callId, name, args: started ? started.args : undefined, result: truncate(text, 400), isError, durationMs, modelName, phase: "result" });
         if (callId) stepStarted.delete(callId);
         return;
       }
@@ -351,6 +353,7 @@ function apply(ctx) {
                 async execute(args) {
                   const result = await callMediaRoute({}, args || {});
                   lastMediaRouteResult = result && result.url ? { type: result.kind, url: result.url } : null;
+                  lastMediaRouteModel = result && result.model ? String(result.model) : null;
                   return result;
                 },
               }));
@@ -469,6 +472,7 @@ function apply(ctx) {
         const agent = rec.agent;
         const firstSeq = agent.session.seq;
         lastMediaRouteResult = null;
+        lastMediaRouteModel = null;
         lastReport = null;
         agent.followup(createUserMessage({
           content: [{ type: "text", text: task + "\n\n[系统提示] " + MEDIA_NO_LINK_NOTE }],
