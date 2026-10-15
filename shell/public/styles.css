@@ -1193,3 +1193,8 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   .chat-pane{flex-direction:column}
   .art-pane{width:100%;flex:0 0 45%;border-right:0;border-bottom:1px solid var(--line)}
 }
+
+/* ---------- 模型菜单：不可聊天的生成类模型（B3）---------- */
+.model-menu-item.no-chat .mi-label{color:var(--text-3)}
+.mi-tag{margin-left:auto;flex:0 0 auto;font-size:11px;line-height:1.6;color:var(--warn);
+  border:1px solid var(--warn);border-radius:6px;padding:0 6px;white-space:nowrap}

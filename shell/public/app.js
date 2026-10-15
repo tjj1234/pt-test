@@ -796,6 +796,11 @@ function syncArchBanner() {
 }
 
 async function runChat(payload) {
+  // 守卫：选中了生成类模型（不可聊天）就别发请求了 —— 发过去只会干等到超时
+  if (!currentModelChat()) {
+    composerNotice("「" + currentModelName() + "」不能用于聊天，已拦下这次发送。请切换成 AUTO 或对话模型。", "err");
+    return;
+  }
   if (state.busy) return;
   // 这条请求是替哪个对话发的 —— 结果回来时必须跟「界面现在显示的是谁」比对。
   // 用户在 A 生成期间切到 B：A 的回复只做列表未读标记，绝不渲染进 B（会整屏覆盖 B 的内容）。
@@ -1756,18 +1761,67 @@ if (searchResults) document.addEventListener("click", (e) => {
   if (search && searchResults && !search.contains(e.target) && !searchResults.contains(e.target)) searchResults.hidden = true;
 });
 
+/* ---- ⑩ 模型切换（B3 改造）----
+ * 以前下拉里只有手抄的对话模型白名单，生成类模型（图片/视频/语音）根本看不到；
+ * 现在全量展示，但每个模型带一个 chat 标记 —— 用户选中不能聊的模型时要明确告诉他，
+ * 不能让他选完发消息干等、或者报错了还不知道为什么。
+ */
+/** 模型 id -> { chat, kind }。来自 /api/models，用来判断「这个模型能不能聊天」。 */
+const modelCaps = new Map();
+
+/** 生成类模型的中文标签（只用于提示文案）。 */
+function modelKindLabel(kind) {
+  if (kind === "video") return "视频生成";
+  if (kind === "image") return "图片生成";
+  if (kind === "audio") return "语音生成";
+  return "生成类";
+}
+
+/**
+ * 当前选中的模型能不能聊天。
+ * AUTO 是智能路由（一定能聊）；查不到记录的按「能聊」处理 —— 宁可放行也别误拦。
+ */
+function currentModelChat() {
+  const sel = $("#modelSelect");
+  if (!sel) return true;
+  const id = sel.value;
+  if (!id || id === "AUTO") return true;
+  const c = modelCaps.get(id);
+  return c ? c.chat !== false : true;
+}
+
+/** 当前选中模型的展示名（提示文案用）。 */
+function currentModelName() {
+  const sel = $("#modelSelect");
+  if (!sel) return "";
+  const o = sel.options && sel.options[sel.selectedIndex];
+  return o ? (o.textContent || sel.value || "") : (sel.value || "");
+}
+
 /* ---- ⑩ 模型切换 ---- */
 const modelSelect = $("#modelSelect");
 async function loadModels() {
+  const modelSelect = $("#modelSelect");
   if (!modelSelect) return;
   try {
     const r = await fetch("/api/models", { credentials: "same-origin" });
     const j = await r.json().catch(() => null);
     if (!j || !j.ok || !Array.isArray(j.models)) return;
+    modelCaps.clear();
     modelSelect.innerHTML = "";
+    // AUTO 置顶：不指定模型，由服务端按输入特征路由（B3 默认选项）
+    const autoOpt = document.createElement("option");
+    autoOpt.value = j.auto || "AUTO";
+    autoOpt.textContent = "AUTO · 智能选模型";
+    if ((j.current || "") === (j.auto || "AUTO")) autoOpt.selected = true;
+    modelSelect.appendChild(autoOpt);
     for (const m of j.models) {
+      if (!m || !m.id) continue;
+      modelCaps.set(m.id, { chat: m.chat !== false, kind: m.kind || (m.chat === false ? "other" : "chat") });
       const o = document.createElement("option");
-      o.value = m.id; o.textContent = m.name || m.id;
+      o.value = m.id;
+      // 不可聊的模型在名字上直接标出来，避免用户点进去才发现不能聊
+      o.textContent = (m.name || m.id) + (m.chat === false ? "（" + modelKindLabel(m.kind) + " · 不可聊天）" : "");
       if (m.id === j.current) o.selected = true;
       modelSelect.appendChild(o);
     }
@@ -1806,7 +1860,10 @@ function buildModelMenu() {
     for (const o of filtered) {
       const item = document.createElement("div");
       item.className = "model-menu-item" + (o.selected ? " active" : "");
-      item.innerHTML = '<span class="mi-check">' + (o.selected ? "✓" : "") + '</span><span class="mi-label">' + o.textContent + '</span>';
+      const cap = modelCaps.get(o.value);
+      const noChat = cap && cap.chat === false;
+      item.className = "model-menu-item" + (o.selected ? " active" : "") + (noChat ? " no-chat" : "");
+      item.innerHTML = '<span class="mi-check">' + (o.selected ? "✓" : "") + '</span><span class="mi-label">' + (o.textContent || "") + '</span>' + (noChat ? '<span class="mi-tag">不可聊天</span>' : "");
       item.addEventListener("click", () => {
         modelSelect.value = o.value;
         modelSelect.dispatchEvent(new Event("change"));
@@ -1831,6 +1888,12 @@ if (msBtn) {
   document.addEventListener("click", (e) => { if (!e.target.closest(".model-switcher")) closeModelMenu(); });
 }
 if (modelSelect) modelSelect.addEventListener("change", async () => {
+  // 选中生成类模型（图片/视频/语音）：明确告知「不可用于聊天」，别让用户自己撞墙
+  if (!currentModelChat()) {
+    composerNotice("「" + currentModelName() + "」是生成类模型，不能用于聊天 —— 生成图片/视频请在输入框上方选「生成」类型，或直接切回 AUTO。", "err");
+  } else {
+    composerNotice("", "");
+  }
   syncModelCapsule();
   const model = modelSelect.value;
   if (!model) return;
@@ -3011,3 +3074,11 @@ if ($("#artSwitch")) $("#artSwitch").addEventListener("change", (e) => {
   artIndex = parseInt(e.target.value, 10) || 0;
   renderArtifactPane();
 });
+
+
+/* B3 回归测试用：把模型能力查询函数挂到全局（浏览器里本来就是全局的，这里只是显式化）。 */
+if (typeof globalThis !== "undefined") {
+  globalThis.__modelCaps = modelCaps;
+  globalThis.__currentModelChat = currentModelChat;
+  globalThis.__modelKindLabel = modelKindLabel;
+}

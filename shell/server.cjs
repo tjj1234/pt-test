@@ -27,6 +27,9 @@ const { spawnSync } = require("child_process");
 // ---- 结构化日志（零第三方依赖，按天切割落 logs）----
 const log = require("./logging.cjs");
 
+// ---- 模型目录：每日从 PT /v1/models 自动同步 + AUTO 智能路由（B3）----
+const modelCatalog = require("./model-catalog.cjs");
+
 // ---- 产出文件（PDF/HTML/md）预览：路径校验 + 扫描 + Content-Type ----
 const artifactsMod = require("./runtime/artifacts.cjs");
 
@@ -43,6 +46,34 @@ const memoryMod = require("./memory.cjs");
 const panelSharesMod = require("./panel-share.cjs");
 const toolCallsMod = require("./tool-calls.cjs");
 const toolsRegistry = require("./tools/registry.cjs");
+
+/* ---- 模型目录：进程内缓存 + 每日同步（B3）----
+ * 同步失败不影响对话：拉不到就用上次缓存，缓存也没有就退回 yaml 静态列表。 */
+let _catalogCache = null;
+let _catalogBusy = null;
+function catalogFallback(err) {
+  return {
+    models: tenantMod.readModels().map((m) => ({ id: m.id, name: m.name || m.id, chat: true, kind: "chat" })),
+    syncedAt: 0, auto: modelCatalog.AUTO_ID,
+    ...(err ? { syncError: String(err && err.message ? err.message : err) } : {}),
+  };
+}
+function getModelCatalog(force) {
+  if (!force && _catalogCache) return Promise.resolve(_catalogCache);
+  if (_catalogBusy) return _catalogBusy;
+  _catalogBusy = modelCatalog.getCatalog({
+    apiKey: process.env.PT_MODELS_API_KEY || process.env.POWERTOKENS_API_KEY || "",
+    fallback: tenantMod.readModels(),
+    force: force === true,
+  }).then((c) => { _catalogCache = c; _catalogBusy = null; return c; })
+    .catch((e) => { _catalogBusy = null; return catalogFallback(e); });
+  return _catalogBusy;
+}
+async function ensureModelCatalog() {
+  if (!_catalogCache && !_catalogBusy) { try { await getModelCatalog(false); } catch (e) { /* 兜底已在内部 */ } }
+  return _catalogCache || catalogFallback();
+}
+
 const { loadBusinessTools, loadBusinessConstraints } = require("./tools/autoload.cjs");
 const { queryBusinessWorkspace, normalizeEnabledStatus, queryGaConnectorStatus } = require("./workspace-enabled-status.cjs");
 const { createRateLimiter, clientIp } = require("./ratelimit.cjs");
@@ -415,6 +446,13 @@ async function handleChat(req, res, me, body) {
   let selectedModel = null;
   try { selectedModel = (memory && (await memory.getModel(uid))) || tenantMod.defaultModel(); }
   catch (e) { selectedModel = tenantMod.defaultModel(); }
+  // AUTO（或从未选过模型）：按这条输入的特征路由到合适的对话模型（规则见 model-catalog.cjs）
+  if (!selectedModel || selectedModel === modelCatalog.AUTO_ID) {
+    try {
+      const cat = await ensureModelCatalog();
+      selectedModel = modelCatalog.routeModelFor(msgRaw, cat.models, modelCatalog.pickDefaultModel(cat.models, tenantMod.defaultModel()));
+    } catch (e) { selectedModel = tenantMod.defaultModel(); }
+  }
 
   // ⑨ 发消息附带的图片（URL 或本地路径）落到消息里
   const image = String(body.image || "").trim() || null;
@@ -1281,13 +1319,26 @@ async function handle(req, res) {
   if (p === "/api/models" && req.method === "GET") {
     let current = null;
     try { current = await memory.getModel(me.user.id); } catch (e) {}
-    return json(res, 200, { ok: true, models: tenantMod.readModels(), current: current || tenantMod.defaultModel(), default: tenantMod.defaultModel() });
+    const cat = await ensureModelCatalog();
+    const fallbackModel = modelCatalog.pickDefaultModel(cat.models, tenantMod.defaultModel());
+    // 默认选项改成 AUTO（智能路由）；没选过模型的用户一律落在 AUTO 上
+    return json(res, 200, {
+      ok: true,
+      models: cat.models,
+      current: current || modelCatalog.AUTO_ID,
+      default: modelCatalog.AUTO_ID,
+      auto: modelCatalog.AUTO_ID,
+      fallbackModel,
+      syncedAt: cat.syncedAt || 0,
+      ...(cat.syncError ? { syncError: cat.syncError } : {}),
+    });
   }
   if (p === "/api/models/select" && req.method === "POST") {
     let body = {};
     try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
     const model = String(body.model || "").trim();
-    const valid = tenantMod.readModels().some((m) => m.id === model);
+    const catSel = await ensureModelCatalog();
+    const valid = model === modelCatalog.AUTO_ID || catSel.models.some((m) => m.id === model) || tenantMod.readModels().some((m) => m.id === model);
     if (!valid) return json(res, 400, { ok: false, error: "未知模型" });
     const r = await memory.setModel(me.user.id, model);
     return json(res, 200, { ok: true, model: r.model });
@@ -1682,6 +1733,19 @@ async function main() {
       });
     }).listen(port, LISTEN_HOST, () => {
       log.info("listening", { port, host: LISTEN_HOST, dbDir: DB_DIR, dashboardPort: DASH_PORT, rateChatPerMin: RATE_CHAT_PER_MIN, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
+
+  /* ---- 模型目录：启动后同步一次，之后每 24 小时同步一次（B3）----
+   * 失败不影响服务：拉不到就用缓存 / yaml 静态列表，下次定时再试。 */
+  const syncOnce = (force) => modelCatalog.getCatalog({
+    apiKey: process.env.PT_MODELS_API_KEY || process.env.POWERTOKENS_API_KEY || "",
+    fallback: tenantMod.readModels(),
+    force: force === true,
+  }).then((c) => log.info("model-catalog", {
+    fresh: !!c.fresh, count: c.models.length, syncedAt: c.syncedAt, error: c.syncError || null,
+  })).catch((e) => log.warn("model-catalog", { error: (e && e.message) || String(e) }));
+  setTimeout(() => { syncOnce(false); }, 3000).unref();
+  setInterval(() => { syncOnce(true); }, modelCatalog.SYNC_TTL_MS).unref();
+
       console.log("================================================================");
       console.log("  北极星 · 业务壳（形态 B · 多租户 · 对话窗口化）");
       console.log("================================================================");
