@@ -26,6 +26,29 @@ function setToolCallLogger(logger) {
   toolCallLogger = logger || null;
 }
 
+/** type → 分类标签（Workflow / Skill / MCP）。 */
+function typeToCategory(type) {
+  switch (String(type || "").toLowerCase()) {
+    case "workflow": return "Workflow";
+    case "skill": return "Skill";
+    case "mcp": return "MCP";
+    default: return String(type || "");
+  }
+}
+
+/**
+ * 按工具名解析分类标签，覆盖 DSH runner 侧的蛇形工具名（media_route / ga_query /
+ * attribution_query / attribution_quality / tracking_quality_audit）与 registry 侧
+ * 的点分工具名（media.route / ga.query / attribution.query / attribution.quality）。
+ * 未知名字保守归为 Skill（get_current_time 等一次性探针/工具能力）。
+ */
+function toolCategory(name) {
+  const n = String(name || "").trim().toLowerCase();
+  if (["media_route", "media.route", "attribution_query", "attribution.query", "ga_query", "ga.query"].includes(n)) return "Workflow";
+  if (n.startsWith("mcp_") || n.startsWith("mcp.") || n.startsWith("mcp:")) return "MCP";
+  return "Skill";
+}
+
 /** 生成参数/结果的简短摘要（截断到 500 字符，避免超大对象撑爆日志）。 */
 function summarize(value) {
   if (value == null) return "";
@@ -91,6 +114,7 @@ function registerTool(toolDefinition) {
   tools.set(name, {
     name,
     type,
+    category: typeToCategory(type),
     version,
     description,
     inputSchema,
@@ -148,6 +172,7 @@ async function listToolsForWorkspace(workspaceId, context) {
       availableTools.push({
         name: tool.name,
         type: tool.type,
+        category: tool.category,
         version: tool.version,
         description: tool.description,
         inputSchema: tool.inputSchema,
@@ -213,6 +238,7 @@ async function executeTool(toolName, args, context) {
         userId: ctx.userId,
         toolName,
         inputSummary: summarize(args),
+        category: (tools.get(toolName) && tools.get(toolName).category) || toolCategory(toolName),
       });
       logId = started && started.id;
     } catch (e) {
@@ -264,4 +290,6 @@ module.exports = {
   listToolsForWorkspace,
   validateToolCall,
   executeTool,
+  typeToCategory,
+  toolCategory,
 };

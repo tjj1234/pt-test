@@ -634,20 +634,83 @@ async function handleChat(req, res, me, body) {
     onStep: (step) => { sse({ step }); },
   });
 
+  // A1/A3/A4：把本轮真实用到的工具补写进 tool_calls（含分类 / 模型 / 终态）。
+  // 成功 / 中断 / 失败三态都落库，避免失败或中断的任务在日志里完全消失。
+  const persistSteps = async (steps, defaultStatus) => {
+    if (!toolCalls || DRY_RUN_CHAT) return;
+    try {
+      for (const step of (Array.isArray(steps) ? steps : [])) {
+        if (!step || !step.name) continue;
+        const status = (defaultStatus && defaultStatus !== "completed")
+          ? defaultStatus
+          : (step.isError === true ? "failed" : "completed");
+        const { id } = await toolCalls.start({
+          tenantId: me.tenant.id,
+          workspaceId: "ws_" + me.tenant.id,
+          userId: uid,
+          toolName: String(step.name),
+          inputSummary: step.args != null ? String(step.args) : "",
+          category: toolsRegistry.toolCategory(String(step.name)),
+          modelName: step.modelName != null ? String(step.modelName) : null,
+        });
+        await toolCalls.finish(id, {
+          outputSummary: step.result != null ? String(step.result) : "",
+          durationMs: step.durationMs != null ? Number(step.durationMs) : null,
+          tokenCount: null,
+          status,
+          modelName: step.modelName != null ? String(step.modelName) : null,
+        });
+      }
+    } catch (e) {
+      log.error("tool_calls.log_failed", { error: e && e.message ? e.message : String(e) });
+    }
+  };
+
+  // A2：落主对话轮次真实 token 用量（与 tool_calls 子工具调用分开），供今日/本月/按模型聚合。
+  const persistUsage = async () => {
+    if (!toolCalls || DRY_RUN_CHAT) return;
+    const u = r.usage && typeof r.usage === "object" ? r.usage : null;
+    if (!u) return;
+    try {
+      await toolCalls.logUsage({
+        tenantId: me.tenant.id,
+        workspaceId: "ws_" + me.tenant.id,
+        userId: uid,
+        model: selectedModel || null,
+        promptTokens: u.prompt_tokens != null ? Number(u.prompt_tokens) : null,
+        completionTokens: u.completion_tokens != null ? Number(u.completion_tokens) : null,
+        totalTokens: u.total_tokens != null ? Number(u.total_tokens) : null,
+      });
+    } catch (e) {
+      log.error("chat_usage.log_failed", { error: e && e.message ? e.message : String(e) });
+    }
+  };
+
   // 兜底：runDshForUser 内部因 key 来源缺失 / 无 key 失败
   if (!r.ok && (r.code === tenantMod.NO_API_KEY_CODE || r.code === tenantMod.NO_KEY_SOURCE_CODE)) {
     sse({ done: true, ok: false, needKey: true, error: r.error, messages });
     return res.end();
   }
 
-  // 停止：问题已保存，没跑完的回答丢弃不保存
+  // 停止 / 超时中断：问题已保存，没跑完的回答丢弃不保存。
+  // stopReason 区分「真超时被强制中断」与「用户手动点停止」—— 以前两者都只回一句「已停止」，
+  // 前端分不清是卡死被掐断还是自己停的，现在分开（timeout / user）。
   if (r.stopped) {
+    await persistSteps(r.steps, "interrupted");
+    await persistUsage();
     const cur = await conversations.get(uid, conversationId);
-    sse({ done: true, ok: false, stopped: true, error: "已停止", messages: cur ? cur.messages : messages });
+    const reason = r.stopReason === "timeout" ? "timeout" : "user";
+    sse({
+      done: true, ok: false, stopped: true, stopReason: reason,
+      error: reason === "timeout" ? "生成超时，已中断" : "已停止",
+      messages: cur ? cur.messages : messages,
+    });
     return res.end();
   }
 
   if (!r.ok) {
+    await persistSteps(r.steps, "failed");
+    await persistUsage();
     // DSH 执行失败：把失败信息作为助手回复落库
     const errText = "（DSH 执行失败：" + (r.error || "退出码 " + r.code) + "）" + (r.text ? "\n" + r.text : "");
     const saved = messages.concat([{ role: "assistant", text: errText, ts: new Date().toISOString() }]);
@@ -660,28 +723,8 @@ async function handleChat(req, res, me, body) {
   let reply = r.text;
   let steps = Array.isArray(r.steps) ? r.steps : [];
   // 任务1：对话内 DSH 调用不经过 /api/tools/:name/execute，这里把本轮真实用到的工具补写进 tool_calls 表
-  if (toolCalls && !DRY_RUN_CHAT) {
-    try {
-      for (const step of steps) {
-        if (!step || !step.name) continue;
-        const { id } = await toolCalls.start({
-          tenantId: me.tenant.id,
-          workspaceId: "ws_" + me.tenant.id,
-          userId: uid,
-          toolName: String(step.name),
-          inputSummary: step.args != null ? String(step.args) : "",
-        });
-        await toolCalls.finish(id, {
-          outputSummary: step.result != null ? String(step.result) : "",
-          durationMs: step.durationMs != null ? Number(step.durationMs) : null,
-          tokenCount: null,
-          status: step.isError === true ? "failed" : "completed",
-        });
-      }
-    } catch (e) {
-      log.error("tool_calls.log_failed", { error: e && e.message ? e.message : String(e) });
-    }
-  }
+  await persistSteps(steps, "completed");
+  await persistUsage();
   if (DRY_RUN_CHAT) {
     reply = "[PT_CHAT_DRYRUN 占位回复 #" + (++dryRunSeq) + " @ " + Date.now() + "，非真实 DSH 输出]";
     sse({ delta: reply });
@@ -1032,6 +1075,15 @@ async function handle(req, res) {
     }
     const calls = await toolCalls.list({ tenantId: me.tenant.id, workspaceId: workspaceIdFor(me), range });
     return json(res, 200, { ok: true, calls });
+  }
+  if (p === "/api/usage/summary" && req.method === "GET") {
+    const u = new URL(req.url, "http://127.0.0.1:" + PORT);
+    const range = (u.searchParams.get("range") || "month").toLowerCase();
+    if (!["today", "week", "month"].includes(range)) {
+      return json(res, 400, { ok: false, error: "range 只能是 today|week|month" });
+    }
+    const summary = await toolCalls.usageSummary({ tenantId: me.tenant.id, workspaceId: workspaceIdFor(me), range });
+    return json(res, 200, { ok: true, summary });
   }
 
   // ---- M3：工作区业务线启用状态查询（基座层只读接口）----

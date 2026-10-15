@@ -20,6 +20,35 @@ const { assembleSystemPrompt } = require("./contract.cjs");
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
+/* 视频生成（文生视频 / 图生视频）内部轮询预算是 1 小时
+ * （business/media/powertokens.cjs：pollVideoTask 的本地守护超时 3600000ms）。
+ * 外层 DSH 任务超时必须给足余量，否则会被默认 3 分钟预算提前掐断 ——
+ * 表现为「视频还没生成完就被 abort，前端只显示一句分不清原因的『已停止』」。
+ */
+const VIDEO_TASK_TIMEOUT_MS = 65 * 60 * 1000;
+
+/** 视频类 media_route 任务（与前端 mediaRouteStepMessage 的判定保持一致）。 */
+function isVideoTaskType(taskType) {
+  return taskType === "text2video" || taskType === "image2video";
+}
+
+/**
+ * 从 media_route 步骤的 args 里取 taskType。
+ * args 可能是对象，也可能是 JSON 字符串 —— 基座下发工具入参时会 stringify 并截断
+ * （truncate 200 字符），截断会让 JSON.parse 失败，所以解析失败时退回正则兜底。
+ */
+function mediaRouteTaskType(args) {
+  if (args == null) return null;
+  if (typeof args === "object") return args.taskType || null;
+  if (typeof args !== "string") return null;
+  try {
+    const o = JSON.parse(args);
+    if (o && typeof o === "object") return o.taskType || null;
+  } catch (e) { /* 截断导致 JSON 不完整，走下面的正则兜底 */ }
+  const m = args.match(/"taskType"\s*:\s*"([^"]+)"/);
+  return m ? m[1] : null;
+}
+
 /* ============================================================================
  * DSH 入口发现（跨平台）
  * ========================================================================== */
@@ -206,6 +235,11 @@ function createDshRuntime(opts = {}) {
             if (!w.pendingSteps) w.pendingSteps = new Map();
             w.pendingSteps.set(frame.callId, { name: frame.name, args: frame.args });
           }
+          // 观察到 agent 真的发起了视频类 media_route：把这一轮的超时预算放宽到 65 分钟。
+          // 不能只依赖前端预先声明的 taskType —— 自动模式下前端不传 taskType，只能靠这里动态识别。
+          if (frame.name === "media_route" && isVideoTaskType(mediaRouteTaskType(frame.args))) {
+            if (w && typeof w.extendDeadline === "function") w.extendDeadline(VIDEO_TASK_TIMEOUT_MS);
+          }
           if (typeof w.onStep === "function") { try { w.onStep({ name: frame.name, args: frame.args }); } catch (e) {} }
         } else {
           // 工具调用结束：与开始帧合并成一条 step（带真实耗时），供 tool_calls 日志补记；
@@ -221,6 +255,7 @@ function createDshRuntime(opts = {}) {
             result: frame.result,
             isError: frame.isError,
             durationMs: frame.durationMs,
+            modelName: frame.modelName,
           };
           if (Array.isArray(w.steps)) w.steps.push(step);
           if (typeof w.onStep === "function") { try { w.onStep({ name: step.name, args: step.args, result: step.result, isError: step.isError }); } catch (e) {} }
@@ -236,7 +271,7 @@ function createDshRuntime(opts = {}) {
         const sid = frame.sessionId;
         if (sid) {
           const w = proc.waiters.get(sid);
-          if (w) { proc.waiters.delete(sid); w.resolve({ ok: false, error: frame.message, text: "" }); }
+          if (w) { proc.waiters.delete(sid); w.resolve({ ok: false, error: frame.message, text: "", steps: w.steps || [] }); }
         }
         break;
       }
@@ -244,7 +279,16 @@ function createDshRuntime(opts = {}) {
         const sid = frame.sessionId;
         if (sid) {
           const w = proc.waiters.get(sid);
-          if (w) { proc.waiters.delete(sid); w.resolve({ ok: false, error: "已停止", text: "", stopped: true }); }
+          if (w) {
+            proc.waiters.delete(sid);
+            const byTimeout = w.timedOut === true || proc.timedOut === true;
+            w.resolve({
+              ok: false, text: "", stopped: true,
+              error: byTimeout ? "生成超时，已中断" : "已停止",
+              stopReason: byTimeout ? "timeout" : "user",
+              steps: w.steps || [],
+            });
+          }
         }
         break;
       }
@@ -320,7 +364,7 @@ function createDshRuntime(opts = {}) {
       userId: spec.userId,               // 该常驻进程属于哪个 userId（1 用户 = 1 租户）
       lastSize: 0, lastUsed: Date.now(),
       waiters: new Map(), lineBuf: "", ready: false,
-      pollTimer: null, killedByUser: false, idleTimer: null,
+      pollTimer: null, killedByUser: false, timedOut: false, idleTimer: null,
     };
     proc.pollTimer = setInterval(() => pollProc(proc), 50);
     persistentProcesses.set(key, proc);
@@ -329,7 +373,14 @@ function createDshRuntime(opts = {}) {
       try { clearInterval(proc.pollTimer); } catch (e) {}
       for (const [sid, w] of [...proc.waiters.entries()]) {
         proc.waiters.delete(sid);
-        w.resolve({ ok: false, error: proc.killedByUser ? "已停止" : "常驻 DSH 进程退出", text: "", stopped: proc.killedByUser });
+        const byTimeout = proc.timedOut === true;
+        w.resolve({
+          ok: false, text: "",
+          error: byTimeout ? "生成超时，已中断" : (proc.killedByUser ? "已停止" : "常驻 DSH 进程退出"),
+          stopped: proc.killedByUser || byTimeout,
+          stopReason: byTimeout ? "timeout" : (proc.killedByUser ? "user" : undefined),
+          steps: w.steps || [],
+        });
       }
     });
 
@@ -372,6 +423,7 @@ function createDshRuntime(opts = {}) {
       });
 
       const t0 = Date.now();
+      let waiter; // 声明提前，供 job.abort() 引用 steps（避免 TDZ）
       const job = {
         stopped: false,
         abort() {
@@ -382,7 +434,7 @@ function createDshRuntime(opts = {}) {
             proc.waiters.delete(sessionId);
             resolve({
           ok: false, text: "", ms: Date.now() - t0, error: "已停止",
-          stopped: true, steps: [], fresh: !warm,
+          stopped: true, stopReason: "user", steps: waiter.steps || [], fresh: !warm,
           workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
         });
           }
@@ -399,19 +451,25 @@ function createDshRuntime(opts = {}) {
       };
       if (typeof spec.onSpawn === "function") { try { spec.onSpawn(job); } catch (e) {} }
 
-      const waiter = {
+      waiter = {
         onDelta: spec.onDelta,
         onStep: spec.onStep,
+        timedOut: false,
+        extendDeadline,
         steps: [],
         resolve: (frame) => {
+          const stopped = frame.stopped === true || frame.canceled === true || waiter.timedOut === true;
+          const stopReason = stopped ? (frame.stopReason || (waiter.timedOut ? "timeout" : "user")) : undefined;
           resolve({
             ok: frame.ok !== false,
             text: frame.text || "",
             media: Array.isArray(frame.media) ? frame.media : null,
             report: frame.report || null,
+            usage: frame.usage || null,
             ms: frame.ms || (Date.now() - t0),
             error: frame.error || (frame.reasonDetail ? (frame.reasonDetail.code + ": " + frame.reasonDetail.message) : null),
-            stopped: frame.stopped === true || frame.canceled === true,
+            stopped,
+            stopReason,
             steps: waiter.steps || [],
             fresh: !warm,
             workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
@@ -424,9 +482,16 @@ function createDshRuntime(opts = {}) {
       // 成功发送后标记 warm（会话在 DSH 侧存活；记录实际 sessionId）
       if (sessionKey) warmSessions.set(sessionKey, { tenantId, sessionId });
 
-      // 超时保护：先按 sessionId 优雅取消，3 秒没收敛再杀进程并返回超时
-      setTimeout(() => {
+      // 超时保护：先按 sessionId 优雅取消，3 秒没收敛再杀进程并返回超时。
+      // deadline 可被 extendDeadline() 动态放宽 —— 视频生成等长任务靠它把 3 分钟提到 65 分钟。
+      const budget0 = spec.timeoutMs || taskTimeoutMs;
+      let deadline = Date.now() + budget0;
+      let timeoutTimer = setTimeout(fireTimeout, budget0);
+      function fireTimeout() {
         if (!proc.waiters.has(sessionId)) return;
+        proc.timedOut = true;                    // 标记「这一轮是被超时掐断的」，与用户手动停止区分
+        const w0 = proc.waiters.get(sessionId);
+        if (w0) w0.timedOut = true;
         writeJson(proc, { type: "abort", sessionId });
         setTimeout(() => {
           if (!proc.waiters.has(sessionId)) return;
@@ -435,11 +500,21 @@ function createDshRuntime(opts = {}) {
           try { proc.child.kill(); } catch (e) {}
           resolve({
             ok: false, code: "TIMEOUT", text: "", ms: Date.now() - t0,
-            error: "常驻 DSH 进程响应超时", fresh: !warm,
-            workspace, tenantId, keySha256: sha256(String(spec.apiKey || "")),
+            error: "生成超时，已中断", stopped: true, stopReason: "timeout", steps: w0 ? (w0.steps || []) : [], fresh: !warm,
+            workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
           });
         }, 3000);
-      }, spec.timeoutMs || taskTimeoutMs);
+      }
+      /** 放宽这一轮的超时预算到 now + ms（只放宽、不收紧），供视频生成等长任务动态提额。 */
+      function extendDeadline(ms) {
+        const now = Date.now();
+        const next = now + ms;
+        if (next <= deadline) return false;
+        deadline = next;
+        try { clearTimeout(timeoutTimer); } catch (e) {}
+        timeoutTimer = setTimeout(fireTimeout, Math.max(0, deadline - now));
+        return true;
+      }
 
       // 空闲回收：定时扫，超时退出进程
       if (!proc.idleTimer) {
@@ -547,6 +622,9 @@ function createDshRuntime(opts = {}) {
 }
 
 module.exports = {
+  VIDEO_TASK_TIMEOUT_MS,
+  mediaRouteTaskType,
+  isVideoTaskType,
   createDshRuntime,
   findDshEntry,
   dshMissingHint,
