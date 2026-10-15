@@ -26,7 +26,7 @@ const DEFAULT_MIGRATIONS_DIR = path.join(__dirname, "migrations");
 async function createStorage(opts = {}) {
   const { initAuth } = require("../auth.cjs");
   const keysMod = require("../keys.cjs");
-  const convMod = require("../conversations.cjs");   // 权威多对话仓储（原 conv/conversations-v2.cjs 已并入）
+  const convMod = require("../conversations.cjs");   // 权威多对话仓储（原历史 conversations 实现已并入此处）
   const memoryMod = require("../memory.cjs");
 
   const migrationsDir = opts.migrationsDir || DEFAULT_MIGRATIONS_DIR;
