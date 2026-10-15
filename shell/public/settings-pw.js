@@ -24,7 +24,9 @@
     e.textContent = ""; e.style.color = "var(--bad)";
     const cur = cp.value, n = np.value, c = np2.value;
     if (!cur) { e.textContent = "请输入当前密码"; return; }
-    if (n.length < 8) { e.textContent = "新密码至少 8 位"; return; }
+    const pwErr = (window.validatePasswordComplexity && window.validatePasswordComplexity(n))
+      || (n.length < 8 ? "新密码至少 8 位" : null);
+    if (pwErr) { e.textContent = pwErr; return; }
     if (n !== c) { e.textContent = "两次输入的新密码不一致"; return; }
     save.disabled = true; const ot = save.textContent; save.textContent = "更新中…";
     try {

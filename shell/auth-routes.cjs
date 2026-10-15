@@ -11,8 +11,10 @@
  */
 const crypto = require("crypto");
 const { createRateLimiter, createLoginGuard, clientIp } = require("./ratelimit.cjs");
-// 仅复用 auth.cjs 的哈希原语，不改动其登录/注册/会话等既有逻辑
-const { hashPassword, verifyPassword } = require("./auth.cjs");
+// 仅复用 auth.cjs 的哈希原语与密码复杂度校验，不改动其登录/注册/会话等既有逻辑
+const { hashPassword, verifyPassword, validatePasswordComplexity } = require("./auth.cjs");
+// 重置密码邮件投递（补齐「真实发信基础设施」）；mailer 内部按 PT_MAIL_MODE 选择 smtp / console / off
+const { getMailer, setMailer } = require("./mailer.cjs");
 
 const COOKIE_NAME = "pt_session";
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
@@ -173,19 +175,33 @@ async function handleAuthRoutes(req, res, auth) {
         if (r.rows.length) {
           await ensureResetTable(auth.db);
           const token = crypto.randomBytes(32).toString("hex");
-          const expiresAt = new Date(Date.now() + Number(process.env.PT_RESET_TTL_MS || 30 * 60 * 1000));
+          const ttlMs = Number(process.env.PT_RESET_TTL_MS || 30 * 60 * 1000);
+          const expiresAt = new Date(Date.now() + ttlMs);
           await auth.db.query(
             "INSERT INTO password_reset_tokens (token_hash, user_id, expires_at) VALUES ($1,$2,$3)",
             [sha256(token), r.rows[0].id, expiresAt]
           );
-          // 仅开发态显式 return 才把重置链接直接返回前端，绕开「尚不存在的发信基础设施」
           if (delivery === "return") {
+            // 开发态：直返 token/链接，绕开真实发信（仅限本地联调，切勿用于生产）
             const host = req.headers.host || "localhost";
             tokenInfo = { delivery, token, resetUrl: "http://" + host + "/reset?token=" + token };
+          } else {
+            // 真实发信模式（生产默认）：把重置链接发到账号邮箱，绝不在响应里回传 token
+            const u = r.rows[0];
+            if (u.email) {
+              try {
+                await getMailer().sendResetEmail({ to: u.email, token, username: u.username, ttlMs });
+              } catch (mailErr) {
+                console.error("[auth] 重置邮件发送失败：", mailErr && mailErr.message ? mailErr.message : mailErr);
+                // 安全：仍返回通用文案，不向请求方泄露发送失败细节
+              }
+            } else {
+              console.warn("[auth] 账号 " + u.username + " 未绑定邮箱，无法发送重置邮件");
+            }
           }
         }
       }
-      // 抗账户枚举：无论是否找到用户，都返回同一套通用成功文案；仅显式 return 模式才附带令牌
+      // 抗账户枚举：无论是否找到用户、是否成功发信，都返回同一套通用成功文案；仅 return 开发态才附带令牌
       const out = { ok: true, message: "若该账号存在，已生成重置链接。" };
       if (tokenInfo) { out.delivery = tokenInfo.delivery; out.token = tokenInfo.token; out.resetUrl = tokenInfo.resetUrl; }
       return sendJson(res, 200, out), true;
@@ -198,7 +214,8 @@ async function handleAuthRoutes(req, res, auth) {
       const token = String(body.token || "").trim();
       const password = String(body.password || "");
       if (!token) return sendJson(res, 400, { ok: false, error: "缺少重置令牌" }), true;
-      if (password.length < 8) return sendJson(res, 400, { ok: false, error: "新密码至少 8 位" }), true;
+      const pwErr = validatePasswordComplexity(password);
+      if (pwErr) return sendJson(res, 400, { ok: false, error: pwErr }), true;
       await ensureResetTable(auth.db);
       const r = await auth.db.query(
         "SELECT token_hash, user_id, expires_at, used FROM password_reset_tokens WHERE token_hash = $1",
@@ -225,7 +242,8 @@ async function handleAuthRoutes(req, res, auth) {
       const current = String(body.currentPassword || "");
       const np = String(body.newPassword || "");
       if (!current) return sendJson(res, 400, { ok: false, error: "请输入当前密码" }), true;
-      if (np.length < 8) return sendJson(res, 400, { ok: false, error: "新密码至少 8 位" }), true;
+      const npErr = validatePasswordComplexity(np);
+      if (npErr) return sendJson(res, 400, { ok: false, error: npErr }), true;
       const ur = await auth.db.query("SELECT password_hash FROM users WHERE id = $1", [sess.user.id]);
       if (!ur.rows.length) return sendJson(res, 400, { ok: false, error: "用户不存在" }), true;
       if (!verifyPassword(current, ur.rows[0].password_hash)) return sendJson(res, 400, { ok: false, error: "当前密码不正确" }), true;

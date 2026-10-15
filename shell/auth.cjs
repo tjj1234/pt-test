@@ -57,6 +57,17 @@ function verifyPassword(password, stored) {
   }
 }
 
+/** 密码复杂度硬校验（与前端 pw-strength.js 的 validatePasswordComplexity 规则保持一致）：
+ *  最少 8 位，且至少包含一个字母和一个数字。返回 null=通过，否则返回中文错误原因。
+ *  放在模块顶层：initAuth 内的 register() 与 module.exports 都能引用（单一事实来源）。 */
+function validatePasswordComplexity(p) {
+  const s = String(p || "");
+  if (s.length < 8) return "密码至少 8 位";
+  if (!/[a-zA-Z]/.test(s)) return "密码需包含至少一个字母";
+  if (!/\d/.test(s)) return "密码需包含至少一个数字";
+  return null;
+}
+
 // 用户名不存在时也跑一次等价耗时比较，抹平「用户名是否存在」的时序侧信道
 const DUMMY_HASH = hashPassword("northstar-dummy-timing-equalizer");
 
@@ -102,7 +113,8 @@ async function initAuth(opts = {}) {
     const mail = String(email || "").trim() || null;
 
     if (uname.length < 2 || uname.length > 64) return { ok: false, code: "VALIDATION", error: "用户名需 2~64 个字符" };
-    if (pass.length < 8) return { ok: false, code: "VALIDATION", error: "密码至少 8 位" };
+    const pwErr = validatePasswordComplexity(pass);
+    if (pwErr) return { ok: false, code: "VALIDATION", error: pwErr };
     if (mail && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(mail)) return { ok: false, code: "VALIDATION", error: "邮箱格式不对" };
 
     const dup = await db.query("SELECT 1 FROM users WHERE username = $1", [uname]);
@@ -241,4 +253,4 @@ async function callAnalyticsInternalTokenEndpoint(tenantId, label) {
   });
 }
 
-module.exports = { initAuth, hashPassword, verifyPassword, sha256, DEFAULT_TTL_MS, callAnalyticsInternalTokenEndpoint };
+module.exports = { initAuth, hashPassword, verifyPassword, sha256, DEFAULT_TTL_MS, callAnalyticsInternalTokenEndpoint, validatePasswordComplexity };

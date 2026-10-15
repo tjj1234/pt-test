@@ -23,7 +23,9 @@
     ev.preventDefault();
     e.textContent = ""; e.style.color = "var(--bad)";
     const n = np.value, c = np2.value;
-    if (n.length < 8) { e.textContent = "新密码至少 8 位"; return; }
+    const pwErr = (window.validatePasswordComplexity && window.validatePasswordComplexity(n))
+      || (n.length < 8 ? "新密码至少 8 位" : null);
+    if (pwErr) { e.textContent = pwErr; return; }
     if (n !== c) { e.textContent = "两次输入的密码不一致"; return; }
     b.disabled = true; const ot = b.textContent; b.textContent = "重置中…";
     try {

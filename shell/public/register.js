@@ -24,7 +24,9 @@
 
   const setBusy = (btn, busy, busyText, idleText) => {
     btn.disabled = busy;
-    if (busyText) btn.textContent = busy ? busyText : idleText;
+    // 修复 #2/#3：busy=false 时必须把文案恢复成 idleText（原来只在 busyText 为真时才改文案，
+    // 导致成功/失败分支都卡在「登录中… / 注册中…」）
+    btn.textContent = busy ? busyText : idleText;
   };
 
   /* ---------- 「登录 / 注册」标签切换 ---------- */
@@ -72,7 +74,10 @@
 
     // 客户端即时中文提示（后端仍会再校验一遍，双保险）
     if (username.length < 2 || username.length > 64) { el.re.textContent = "用户名需 2~64 个字符"; return; }
-    if (password.length < 8) { el.re.textContent = "密码至少 8 位"; return; }
+    // 客户端即时中文提示（后端仍会再校验一遍，双保险）：复杂度规则与后端保持一致
+    const pwErr = (window.validatePasswordComplexity && window.validatePasswordComplexity(password))
+      || (password.length < 8 ? "密码至少 8 位" : null);
+    if (pwErr) { el.re.textContent = pwErr; return; }
     if (password !== confirm) { el.re.textContent = "两次输入的密码不一致"; return; }
 
     setBusy(el.rb, true, "注册中…", "注册并进入对话");
