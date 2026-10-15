@@ -13,7 +13,7 @@ const fs = require("fs");
 const path = require("path");
 
 /**
- * PG 适配层（可选）：conv/db-pg.cjs。找不到就置 null（不影响纯 PGlite 场景）。
+ * PG 适配层（可选）：shell/db-pg.cjs（与 db.cjs 同级）。找不到就置 null（不影响纯 PGlite 场景）。
  * 只有当 PT_PG_DSN / PT_PG_HOST / PT_PG_DATABASE / PT_PG_USER 等环境变量被设置时，
  * open() 才会真正走真实 PostgreSQL；否则一律退回原来的 PGlite（现有测试不受影响）。
  */
@@ -21,7 +21,7 @@ let _pgmod; // undefined = 还没探测；null = 已探测且不存在
 function pgBackend() {
   if (_pgmod !== undefined) return _pgmod;
   _pgmod = null;
-  try { _pgmod = require(path.join(__dirname, "..", "conv", "db-pg.cjs")); }
+  try { _pgmod = require(path.join(__dirname, "db-pg.cjs")); }
   catch (e) { _pgmod = null; }
   return _pgmod;
 }

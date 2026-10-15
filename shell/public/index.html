@@ -248,6 +248,22 @@
     <!-- ============ 对话（多对话窗口：左对话列表 + 右聊天区） ============ -->
     <section class="view" id="v-chat">
       <div class="chat-pane">
+        <!-- 产出预览面板（B2）：Agent 生成了 PDF / HTML / md 时自动在这里打开。
+             宽度的显示/隐藏由 JS 控制（hidden 时不占布局）；md 走前端渲染，pdf/html 走 iframe。 -->
+        <aside class="art-pane" id="artPane" hidden aria-label="产出预览">
+          <div class="art-head">
+            <span class="art-ico" id="artIco">📄</span>
+            <span class="art-title" id="artTitle">产出预览</span>
+            <span class="sp"></span>
+            <select class="art-switch" id="artSwitch" hidden title="切换产出文件"></select>
+            <button class="art-btn" id="artOpen" type="button" title="新窗口打开">↗</button>
+            <button class="art-btn" id="artClose" type="button" title="关闭预览">×</button>
+          </div>
+          <div class="art-body" id="artBody"></div>
+          <div class="art-empty" id="artEmpty" hidden>还没有可预览的产出。让 Agent 生成一份 PDF / HTML / md 文档，会自动显示在这里。</div>
+        </aside>
+
+        <div class="chat-main">
         <div class="chat" id="chat">
           <div class="empty" id="hello">
             <h3>你好，我是 PowerTokens Agent 👋</h3>
@@ -301,6 +317,7 @@
           <div class="composer-notice" id="composerNotice" hidden role="status" aria-live="polite"></div>
           <div class="meta" style="max-width:820px;margin:8px auto 0" id="cm"></div>
         </div>
+        </div><!-- /.chat-main -->
       </div>
     </section>
 
