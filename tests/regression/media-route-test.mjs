@@ -21,6 +21,7 @@ import {
   TASK_TYPES,
   resolveRouting,
   callMediaRoute,
+  parseMediaParams,
   renderStylePrompt,
 } from "../../business/media/powertokens.cjs";
 import { STYLE_PRESETS, getStylePreset, listStylePresets } from "../../business/media/presets.cjs";
@@ -192,6 +193,102 @@ async function main() {
     let threw = false;
     try { await callMediaRoute({}, { taskType: "text2image", prompt: "x", stylePreset: "nope" }, { apiKey: "test-key", fetchImpl: async () => jsonResponse({}) }); } catch (e) { threw = /未知的 stylePreset/.test(e.message); }
     ok("未知 stylePreset 抛错", threw);
+  }
+
+  // ---- ②b 参数解析（prompt 解析 / 显式 opts 优先 / 兜底保留 / 防误伤）----
+  // 图片：prompt 里的尺寸解析生效（不同模型各测一次；image2image 需图）
+  for (const taskType of ["text2image", "image2image"]) {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/gen.png" }] }); };
+    const args = { taskType, prompt: "一只猫，尺寸1024x1024" };
+    if (taskType === "image2image") args.inputImageUrl = "https://cdn.example.com/in.png";
+    const r = await callMediaRoute({}, args, { apiKey: "test-key", fetchImpl });
+    const body = JSON.parse(calls[0].options.body);
+    ok(`${taskType} 解析 prompt 尺寸 1024x1024 生效`, body.size === "1024x1024", JSON.stringify(body));
+  }
+  // 图片：不同分隔符 / 全角 ×
+  {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/g.png" }] }); };
+    const r = await callMediaRoute({}, { taskType: "text2image", prompt: "风景照 800×600" }, { apiKey: "test-key", fetchImpl });
+    const body = JSON.parse(calls[0].options.body);
+    ok("全角 × 分隔尺寸解析 800x600", body.size === "800x600", JSON.stringify(body));
+    ok("尺寸解析不影响返回 URL", r.url === "https://img.example.com/g.png");
+  }
+  // 图片：prompt 无尺寸 → 兜底 2048x2048 仍然保留
+  {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/d.png" }] }); };
+    const r = await callMediaRoute({}, { taskType: "text2image", prompt: "一只猫" }, { apiKey: "test-key", fetchImpl });
+    const body = JSON.parse(calls[0].options.body);
+    ok("无尺寸 → 兜底 2048x2048", body.size === "2048x2048", JSON.stringify(body));
+    ok("无张数 → 兜底 n=1", body.n === 1, JSON.stringify(body));
+  }
+  // 图片：防误伤（年份 / 版本号不应被当作尺寸）
+  {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/y.png" }] }); };
+    const r = await callMediaRoute({}, { taskType: "text2image", prompt: "2024 年度发布海报" }, { apiKey: "test-key", fetchImpl });
+    const body = JSON.parse(calls[0].options.body);
+    ok("年份 2024 不被误判为尺寸（兜底 2048x2048）", body.size === "2048x2048", JSON.stringify(body));
+  }
+  // 图片：张数解析 n
+  {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/n.png" }] }); };
+    const r = await callMediaRoute({}, { taskType: "text2image", prompt: "生成 2 张猫咪图" }, { apiKey: "test-key", fetchImpl });
+    const body = JSON.parse(calls[0].options.body);
+    ok("张数解析 n=2 生效", body.n === 2, JSON.stringify(body));
+  }
+  // 视频：分辨率 + 时长解析（prompt 含 1080p 与 10秒）
+  for (const taskType of ["text2video", "image2video"]) {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => {
+      const u = String(url);
+      calls.push({ url: u, options });
+      if (u.endsWith("/v1/videos") && (options.method || "GET") === "POST") return jsonResponse({ task_id: "t-parse" });
+      if (u.includes("/v1/videos/t-parse")) return jsonResponse({ status: "completed", url: "https://vid.example.com/p.mp4" });
+      return { ok: false, status: 404, text: async () => "nf", json: async () => ({}) };
+    };
+    const r = await callMediaRoute({}, { taskType, prompt: "海边日落 1080p 时长10秒", ...(taskType === "image2video" ? { inputImageUrl: "https://cdn.example.com/in.png" } : {}) }, { apiKey: "test-key", fetchImpl });
+    const body = JSON.parse(calls.find((c) => c.url.endsWith("/v1/videos")).options.body);
+    ok(`${taskType} 解析分辨率 → 1080P`, body.size === "1080P", JSON.stringify(body));
+    ok(`${taskType} 解析时长 → 10`, body.seconds === "10", JSON.stringify(body));
+  }
+  // 视频：无解析 → 兜底 720P / 5s
+  {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => {
+      const u = String(url);
+      calls.push({ url: u, options });
+      if (u.endsWith("/v1/videos") && (options.method || "GET") === "POST") return jsonResponse({ task_id: "t-def" });
+      if (u.includes("/v1/videos/t-def")) return jsonResponse({ status: "completed", url: "https://vid.example.com/d.mp4" });
+      return { ok: false, status: 404, text: async () => "nf", json: async () => ({}) };
+    };
+    const r = await callMediaRoute({}, { taskType: "text2video", prompt: "海边日落" }, { apiKey: "test-key", fetchImpl });
+    const body = JSON.parse(calls[0].options.body);
+    ok("视频无解析 → 兜底 720P", body.size === "720P", JSON.stringify(body));
+    ok("视频无解析 → 兜底 5s", body.seconds === "5", JSON.stringify(body));
+  }
+  // 优先级：显式 opts 覆盖 prompt 解析值
+  {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/o.png" }] }); };
+    const r = await callMediaRoute({}, { taskType: "text2image", prompt: "一只猫，尺寸1024x1024" }, { apiKey: "test-key", fetchImpl, size: "512x512" });
+    const body = JSON.parse(calls[0].options.body);
+    ok("显式 opts.size 覆盖 prompt 解析值", body.size === "512x512", JSON.stringify(body));
+  }
+  // parseMediaParams 单测
+  {
+    ok("parseMediaParams 尺寸 1024x1024", parseMediaParams("尺寸1024x1024").size === "1024x1024");
+    ok("parseMediaParams 年份不误判", parseMediaParams("2024 年度").size === undefined);
+    ok("parseMediaParams 1080p→1080P", parseMediaParams("1080p 视频").resolution === "1080P");
+    ok("parseMediaParams 720p→720P", parseMediaParams("720p 视频").resolution === "720P");
+    ok("parseMediaParams 10秒→10", parseMediaParams("时长10秒").duration === 10);
+    ok("parseMediaParams 2张→n=2", parseMediaParams("生成2张").n === 2);
+    ok("parseMediaParams version=2 不误判 n", parseMediaParams("version=2 发布").n === undefined);
+    ok("parseMediaParams 10stars 不误判时长", parseMediaParams("10stars 视频").duration === undefined);
+    ok("parseMediaParams 无匹配全 undefined", JSON.stringify(parseMediaParams("一只猫")) === JSON.stringify({}));
   }
 
   // ---- ③ 错误路径 ----

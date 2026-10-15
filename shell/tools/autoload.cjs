@@ -101,7 +101,16 @@ function buildAttributionQueryExecutor({ internalKey, dashPort }) {
 function buildMediaRouteExecutor() {
   const media = require("../../business/media/index.js");
   return async function mediaRouteExecutor(args, context) {
-    return media.callMediaRoute(context, args || {});
+    const a = args || {};
+    // 上游传递：把显式生成参数从 args 透传给 callMediaRoute。
+    // 有值才传（undefined 不覆盖），callMediaRoute 内部再按「opts > prompt 解析 > 兜底」取值。
+    const opts = {
+      size: a.size,
+      resolution: a.resolution,
+      duration: a.duration,
+      n: a.n,
+    };
+    return media.callMediaRoute(context, a, opts);
   };
 }
 

@@ -309,10 +309,55 @@ function renderStylePrompt(preset, userPrompt) {
 }
 
 /**
+ * 从原始 prompt 文本里解析媒体生成参数（尺寸 / 视频分辨率 / 时长 / 张数）。
+ * 设计原则：只认「带分隔符或明确单位」的写法，避免误伤年份、版本号、随机数字。
+ *   - 尺寸（图）：1024x1024 / 1024*768 / 1024×1024 / 1024 X 768（两段均 2~4 位正整数，≤4096）
+ *   - 视频分辨率：1080p / 720p / 4k / 2160p（统一归并为 1080P / 720P；PT 视频端点仅支持这两档）
+ *   - 视频时长：10s / 10秒 / 10 seconds / 时长10（正整数 + 单位）
+ *   - 张数（图）：n=2 / 数量2 / 2张（明确标记，避免误伤）
+ * 解析不到则返回对应字段 undefined，由调用方继续走兜底默认值（绝不静默覆盖合法值）。
+ * @param {string} prompt
+ * @returns {{ size?: string, resolution?: "1080P"|"720P", duration?: number, n?: number }}
+ */
+function parseMediaParams(prompt) {
+  const p = String(prompt || "");
+  const out = {};
+
+  // 尺寸（图）：带 x / × / * / 空格 分隔的两段数字（年份「2024」无分隔符，不会被误判）
+  const sizeM = p.match(/(?:^|[^0-9])([1-9]\d{1,3})\s*[x×*]\s*([1-9]\d{1,3})(?=[^0-9]|$)/i);
+  if (sizeM) {
+    const w = Number(sizeM[1]), h = Number(sizeM[2]);
+    if (w >= 16 && w <= 4096 && h >= 16 && h <= 4096) out.size = `${w}x${h}`;
+  }
+
+  // 视频分辨率：1080p / 4k / 2160p → 1080P；720p / hd → 720P
+  const low = p.toLowerCase();
+  if (/\b(1080p?|4k|2160p?|qhd)\b/.test(low)) out.resolution = "1080P";
+  else if (/\b(720p?|hd)\b/.test(low)) out.resolution = "720P";
+
+  // 视频时长：数字 + s / 秒 / sec / seconds（带单位才认，避免「10stars」之类误判）
+  // ASCII 单位用 (?![a-z]) 防「10stars」；CJK「秒」直接匹配（无词边界问题）
+  const durM = p.match(/\b(\d{1,3})\s*(?:s|sec|seconds|second)(?![a-z])|(\d{1,3})\s*秒/i);
+  if (durM) {
+    const d = Number(durM[1] != null ? durM[1] : durM[2]);
+    if (d >= 1 && d <= 120) out.duration = d;
+  }
+
+  // 张数（图）：n=数字 / 数量数字 / 数字+张（明确标记，避免误伤；\bn 防「version=2」误判）
+  const nM = p.match(/(?:\bn\s*=\s*|数量\s*)(\d{1,2})/i) || p.match(/(\d{1,2})\s*张/);
+  if (nM) {
+    const n = Number(nM[1]);
+    if (n >= 1 && n <= 9) out.n = n;
+  }
+
+  return out;
+}
+
+/**
  * media.route 主入口：按 taskType 路由到 PowerTokens 生成，返回结果 URL。
  * @param {Object} context 执行上下文（shell 层为 {userId, tenantId, workspaceId}；DSH 层可空）
- * @param {Object} args    { taskType, prompt, inputImageUrl? }
- * @param {Object} opts    { apiKey?, baseUrl?, fetchImpl?, timeoutMs?, size?, duration? }
+ * @param {Object} args    { taskType, prompt, inputImageUrl?, stylePreset?, size?, resolution?, duration?, n? }
+ * @param {Object} opts    { apiKey?, baseUrl?, fetchImpl?, timeoutMs?, size?, resolution?, duration?, n? }
  */
 async function callMediaRoute(context, args = {}, opts = {}) {
   const routing = resolveRouting(args && args.taskType);
@@ -355,13 +400,18 @@ async function callMediaRoute(context, args = {}, opts = {}) {
   const timeoutMs = (opts && opts.timeoutMs) || (routing.kind === "image" ? 120000 : 3600000);
   const startedAt = Date.now();
 
+  // 上游解析：从 prompt 提取尺寸/分辨率/时长/张数（有合法解析值就准备用，无值走兜底）
+  const parsed = parseMediaParams(prompt);
+
   let url = null;
   if (routing.kind === "image") {
     const body = {
       model: routing.model,
       prompt,
-      size: (opts && opts.size) || "2048x2048",
-      n: 1,
+      // size：显式 opts.size > 解析 parsed.size > 兜底 2048x2048
+      size: (opts && opts.size) || parsed.size || "2048x2048",
+      // n：显式 opts.n > 解析 parsed.n > 兜底 1
+      n: (opts && opts.n) || parsed.n || 1,
     };
     if (inputImageUrl) body.image = inputImageUrl;
     let data = await postJson(fetchImpl, `${baseUrl}/v1/images/generations`, body, apiKey);
@@ -369,11 +419,17 @@ async function callMediaRoute(context, args = {}, opts = {}) {
     if (taskId) data = await pollImageTask(fetchImpl, baseUrl, taskId, apiKey, timeoutMs);
     url = extractImageUrl(data);
   } else {
+    // 分辨率：显式 opts.resolution > 解析 parsed.resolution > 兜底 720P（统一归一 1080P/720P）
+    const rawResolution = (opts && opts.resolution) || parsed.resolution;
+    const resolutionLabel = rawResolution
+      ? (/1080|4k|2160/i.test(String(rawResolution)) ? "1080P" : "720P")
+      : "720P";
     const body = {
       model: routing.model,
       prompt,
-      seconds: String((opts && opts.duration) || 5),
-      size: (opts && opts.resolution && String(opts.resolution).includes("1080")) ? "1080P" : "720P",
+      // seconds：显式 opts.duration > 解析 parsed.duration > 兜底 5
+      seconds: String((opts && opts.duration) || parsed.duration || 5),
+      size: resolutionLabel,
     };
     if (inputImageUrl) body.media = [{ type: "first_frame", url: inputImageUrl }];
     const data = await postJson(fetchImpl, `${baseUrl}/v1/videos`, body, apiKey);
@@ -399,6 +455,7 @@ module.exports = {
   TASK_TYPES,
   resolveRouting,
   callMediaRoute,
+  parseMediaParams,
   renderStylePrompt,
   extractImageUrl,
   extractVideoUrl,
