@@ -195,6 +195,215 @@ function formatElapsed(sec) {
   return "已等待 " + m + "分" + s + "秒";
 }
 
+
+/* ============================================================================
+ * 产出预览（B2）：Agent 在 workspace 里生成的 PDF / HTML / md，在聊天区左侧直接看。
+ * ----------------------------------------------------------------------------
+ * 安全前提：md 是 Agent 写出来的，里面可能有裸 HTML（<script> / <img onerror>）。
+ * 所以这里先整体转义、再只认我们自己的 markdown 标记 —— 转出来的标签都是我们拼的，
+ * 链接协议走白名单（http/https/mailto/相对），绝不把用户给的 href 原样塞进属性。
+ * PDF/HTML 走 iframe：HTML 额外套 sandbox（无脚本），服务端也给了 default-src 'none'。
+ * ========================================================================== */
+function escapeHtml(s) {
+  return String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+/** 链接协议白名单：只放行 http(s) / mailto / 站内相对路径，挡掉 javascript:、data: 之类。 */
+function safeHref(url) {
+  const u = String(url == null ? "" : url).trim();
+  if (!u) return null;
+  if (/^(https?:\/\/|mailto:)/i.test(u)) return u;
+  if (/^[/#?]/.test(u)) return u;                       // /a/b、#anchor、?q=1
+  if (/^[\w.-]+(\/|$)/.test(u)) return u;              // 相对目录 ./ 之外的 a/b.html
+  return null;
+}
+
+/** 行内标记：`code` 、**粗体**、*斜体*、[文字](链接)。入参是已经转义过的文本。 */
+function mdInline(s) {
+  // 先整体转义再解析标记：md 是 Agent 写出来的，裸 HTML 必须变成文本，绝不能原样进 innerHTML
+  let t = escapeHtml(s);
+  // 行内代码先抽出来占位：里面的 * _ 不该被当成强调标记
+  const codes = [];
+  t = t.replace(/`([^`]+)`/g, (m, p1) => { codes.push(p1); return "\u0000" + (codes.length - 1) + "\u0000"; });
+  t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
+  t = t.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, txt, href) => {
+    const safe = safeHref(href);
+    return safe ? '<a href="' + safe + '" target="_blank" rel="noopener noreferrer">' + txt + "</a>" : txt;
+  });
+  t = t.replace(/\u0000(\d+)\u0000/g, (m, i) => "<code>" + codes[Number(i)] + "</code>");
+  return t;
+}
+
+/**
+ * 极简 markdown -> HTML。支持：围栏代码块、# 标题、无序/有序列表、> 引用、--- 分隔线、
+ * 管道表格、以及行内的 `code` / **粗** / *斜* / [链接]()。
+ * 刻意不支持裸 HTML（已被转义成文本）—— 这是安全边界，不是功能缺失。
+ */
+function minimalMarkdown(src) {
+  const lines = String(src == null ? "" : src).replace(/\r\n?/g, "\n").split("\n");
+  const out = [];
+  let para = [], list = null, listItems = [], quote = [], tbl = null;
+
+  const flushPara = () => {
+    if (para.length) { out.push("<p>" + para.map(mdInline).join("<br>") + "</p>"); para = []; }
+  };
+  const flushList = () => {
+    if (list) { out.push("<" + list + ">" + listItems.map((x) => "<li>" + mdInline(x) + "</li>").join("") + "</" + list + ">"); list = null; listItems = []; }
+  };
+  const flushQuote = () => {
+    if (quote.length) { out.push("<blockquote>" + minimalMarkdown(quote.join("\n")) + "</blockquote>"); quote = []; }
+  };
+  const flushTable = () => {
+    if (tbl && tbl.rows.length) {
+      const head = "<thead><tr>" + tbl.head.map((c) => "<th>" + mdInline(c) + "</th>").join("") + "</tr></thead>";
+      const body = "<tbody>" + tbl.rows.map((r) => "<tr>" + r.map((c) => "<td>" + mdInline(c) + "</td>").join("") + "</tr>").join("") + "</tbody>";
+      out.push("<table>" + head + body + "</table>");
+    }
+    tbl = null;
+  };
+  const flushAll = () => { flushPara(); flushList(); flushQuote(); flushTable(); };
+  const splitRow = (line) => line.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|").map((c) => c.trim());
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = raw.replace(/\s+$/, "");
+
+    // 围栏代码块：整段原样转义，不解析内部任何标记
+    if (/^\s*```/.test(raw)) {
+      flushAll();
+      const lang = raw.slice(raw.indexOf("```") + 3).trim().replace(/[^a-zA-Z0-9+#._-]/g, "");
+      const buf = [];
+      i++;
+      while (i < lines.length && !/^\s*```/.test(lines[i])) { buf.push(lines[i]); i++; }
+      out.push("<pre><code" + (lang ? ' class="lang-' + lang + '"' : "") + ">" + escapeHtml(buf.join("\n")) + "</code></pre>");
+      continue;
+    }
+
+    if (!line.trim()) { flushAll(); continue; }
+
+    const h = /^(#{1,6})\s+(.*)$/.exec(line);
+    if (h) { flushAll(); const lv = h[1].length; out.push("<h" + lv + ">" + mdInline(h[2]) + "</h" + lv + ">"); continue; }
+
+    if (/^\s*([-*_])\s*\1\s*\1[\s\-*_]*$/.test(line)) { flushAll(); out.push("<hr>"); continue; }
+
+    if (/^\s*>\s?/.test(line)) { flushPara(); flushList(); flushTable(); quote.push(line.replace(/^\s*>\s?/, "")); continue; }
+    flushQuote();
+
+    // 表格：当前行含 | 且下一行是 |---|---| 分隔行
+    if (/\|/.test(line) && /^\s*\|?[\s:|-]*\|[\s:|-]*$/.test(lines[i + 1] || "") && /-/.test(lines[i + 1] || "")) {
+      flushPara(); flushList();
+      tbl = { head: splitRow(line), rows: [] };
+      i++;
+      while (i + 1 < lines.length && /\|/.test(lines[i + 1]) && lines[i + 1].trim()) { tbl.rows.push(splitRow(lines[i + 1])); i++; }
+      continue;
+    }
+    if (tbl) { flushTable(); }
+
+    const ul = /^\s*[-*+]\s+(.*)$/.exec(line);
+    const ol = /^\s*\d+[.)]\s+(.*)$/.exec(line);
+    if (ul || ol) {
+      flushPara();
+      const want = ul ? "ul" : "ol";
+      if (list && list !== want) flushList();
+      list = want;
+      listItems.push((ul || ol)[1]);
+      continue;
+    }
+    flushList();
+
+    para.push(line);
+  }
+  flushAll();
+  return out.join("\n");
+}
+
+/** 产出类型 -> 面板图标。 */
+function artifactIcon(kind) {
+  if (kind === "pdf") return "\uD83D\uDCD5";
+  if (kind === "html") return "\uD83C\uDF10";
+  return "\uD83D\uDCDD";   // md
+}
+
+/* ---- 面板状态：本轮会话已知的产出 + 当前看第几个 ---- */
+let artItems = [];
+let artIndex = 0;
+
+/** 记下一个产出（同 rel 视为同一个，后来者覆盖；新的排到最前）。 */
+function pushArtifact(a) {
+  if (!a || !a.url) return;
+  const i = artItems.findIndex((x) => x.rel === a.rel);
+  if (i >= 0) { artItems[i] = a; artIndex = i; return; }
+  artItems.unshift(a);
+  artIndex = 0;
+}
+
+/** 收尾扫描给出的产出列表：并入已有列表（去重），但不强行弹开用户已关掉的面板。 */
+function mergeArtifacts(list) {
+  if (!Array.isArray(list)) return;
+  for (const a of list) pushArtifact(a);
+}
+
+/** 渲染面板：md 拉文本转 HTML，pdf/html 走 iframe（HTML 额外禁脚本）。 */
+function renderArtifactPane() {
+  const pane = $("#artPane");
+  if (!pane) return;
+  if (!artItems.length) { pane.hidden = true; return; }
+  pane.hidden = false;
+  const a = artItems[artIndex] || artItems[0];
+  const title = $("#artTitle"), ico = $("#artIco"), body = $("#artBody"), empty = $("#artEmpty");
+  if (title) { title.textContent = a.name || "产出"; title.title = a.rel || ""; }
+  if (ico) ico.textContent = artifactIcon(a.kind);
+  if (empty) empty.hidden = true;
+
+  const sw = $("#artSwitch");
+  if (sw) {
+    if (artItems.length > 1) {
+      sw.hidden = false;
+      sw.replaceChildren();
+      artItems.forEach((it, i) => {
+        const o = document.createElement("option");
+        o.value = String(i);
+        o.textContent = it.name || it.rel || ("产出 " + (i + 1));
+        if (i === artIndex) o.selected = true;
+        sw.appendChild(o);
+      });
+    } else { sw.hidden = true; }
+  }
+
+  if (!body) return;
+  body.replaceChildren();
+  if (a.kind === "md") {
+    const d = document.createElement("div");
+    d.className = "art-md";
+    d.textContent = "正在读取…";
+    body.appendChild(d);
+    fetch(a.url).then((r) => r.text()).then((txt) => {
+      d.innerHTML = minimalMarkdown(txt);
+    }).catch(() => { d.textContent = "读取失败：" + (a.name || a.rel || ""); });
+    return;
+  }
+  const f = document.createElement("iframe");
+  f.src = a.url;
+  f.title = a.name || "产出预览";
+  // HTML 是 Agent 生成的内容 -> 不给脚本能力（服务端还额外下了 default-src 'none'）；
+  // PDF 需要浏览器内置阅读器，放行同源但同样不给脚本。
+  f.setAttribute("sandbox", a.kind === "html" ? "" : "allow-same-origin");
+  body.appendChild(f);
+}
+
+/** 有产出了就打开面板（用户手动关掉后，除非来新产出，否则不再自动弹）。 */
+function openArtifactPane() { renderArtifactPane(); }
+
+/** 关闭面板（清空列表，下次有新产出会重新打开）。 */
+function closeArtifactPane() {
+  artItems = []; artIndex = 0;
+  const pane = $("#artPane");
+  if (pane) pane.hidden = true;
+}
+
 /* 流式：把 thinking 气泡转成逐字增长的回复气泡 */
 function streamInto(el, text) {
   const bub = el.querySelector(".bub");
@@ -620,6 +829,7 @@ async function runChat(payload) {
           let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
           // 打字机和工具步骤只画在「用户当前正在看的那条对话」上
           if (obj.connecting && viewing()) { showConnecting(t); }
+          if (obj.artifact && viewing()) { pushArtifact(obj.artifact); openArtifactPane(); }
           if (obj.delta && viewing()) { acc += obj.delta; streamInto(t, acc); }
           if (obj.step && viewing()) {
             const live = t.querySelector(".steps-live");
@@ -643,6 +853,8 @@ async function runChat(payload) {
             }
           }
           if (obj.done) {
+            // 收尾扫描给出的产出列表（准的那一份）：并进面板；面板关着就不强行弹开
+            if (Array.isArray(obj.artifacts) && obj.artifacts.length) { mergeArtifacts(obj.artifacts); openArtifactPane(); }
             gotDone = true;
             clearInterval(tick); t.remove();
             // 界面已经不在目标对话上了：只标未读 + 刷列表，一个字都不写进当前视图
@@ -2787,3 +2999,15 @@ async function bizLoadSchedule() {
 }
 $("#scheduleUpload").addEventListener("click", () => switchView("import"));
 $("#scheduleRetry").addEventListener("click", bizLoadSchedule);
+
+
+/* ---- 产出预览面板（B2）：关闭 / 新窗口打开 / 切换文件 ---- */
+if ($("#artClose")) $("#artClose").addEventListener("click", () => closeArtifactPane());
+if ($("#artOpen")) $("#artOpen").addEventListener("click", () => {
+  const a = artItems[artIndex];
+  if (a && a.url) window.open(a.url, "_blank", "noopener");
+});
+if ($("#artSwitch")) $("#artSwitch").addEventListener("change", (e) => {
+  artIndex = parseInt(e.target.value, 10) || 0;
+  renderArtifactPane();
+});

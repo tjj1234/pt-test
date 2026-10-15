@@ -27,6 +27,9 @@ const { spawnSync } = require("child_process");
 // ---- 结构化日志（零第三方依赖，按天切割落 logs）----
 const log = require("./logging.cjs");
 
+// ---- 产出文件（PDF/HTML/md）预览：路径校验 + 扫描 + Content-Type ----
+const artifactsMod = require("./runtime/artifacts.cjs");
+
 // ---- 模块接线（全部最终名；conversations / tenant 为对话窗口化后的新版）----
 const { initAuth } = require("./auth.cjs");
 const { handleAuthRoutes, sessionFromCookie } = require("./auth-routes.cjs");
@@ -632,6 +635,7 @@ async function handleChat(req, res, me, body) {
     onSpawn: (job) => { runningJobs.set(uid, job); },
     onDelta: (delta) => { sse({ delta }); },
     onStep: (step) => { sse({ step }); },
+    onArtifact: (a) => { sse({ artifact: a }); },   // Agent 写了可预览文件：立刻让前端弹面板（提前量）
   });
 
   // A1/A3/A4：把本轮真实用到的工具补写进 tool_calls（含分类 / 模型 / 终态）。
@@ -703,6 +707,7 @@ async function handleChat(req, res, me, body) {
     sse({
       done: true, ok: false, stopped: true, stopReason: reason,
       error: reason === "timeout" ? "生成超时，已中断" : "已停止",
+      artifacts: Array.isArray(r.artifacts) ? r.artifacts : [],
       messages: cur ? cur.messages : messages,
     });
     return res.end();
@@ -746,6 +751,7 @@ async function handleChat(req, res, me, body) {
     reply: reply || "（DSH 没有输出）",
     messages: saved,
     steps,
+    artifacts: Array.isArray(r.artifacts) ? r.artifacts : [],
     ...(media ? { media } : {}),
     ...(report ? { report } : {}),
     ms: r.ms || 0,
@@ -1329,6 +1335,45 @@ async function handle(req, res) {
     fs.writeFileSync(abs, buf);
     return json(res, 200, { ok: true, url: "/uploads/" + me.tenant.id + "/" + name, path: abs });
   }
+// ---- 产出文件预览：GET /api/artifact?p=<workspace 相对路径> ----
+// Agent 在租户 workspace 里生成了 PDF / HTML / md，前端左侧面板靠这个地址把它显示出来。
+// 三道门必须都守住：① 登录；② 租户隔离（只能看自己 workspace 里的）；③ 防目录穿越（../ 与软链接）。
+if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
+  const meArt = await authed(req);
+  if (!meArt) return json(res, 401, { ok: false, error: "没登录" });
+  const artTenant = meArt.tenant && meArt.tenant.id;
+  if (!artTenant) return json(res, 403, { ok: false, error: "无法确定访问租户" });
+  const artRel = (new URL(req.url, "http://127.0.0.1:" + PORT).searchParams.get("p") || "").trim();
+  if (!artifactsMod.isSafeRel(artRel)) return json(res, 400, { ok: false, error: "路径不合法" });
+  if (!artifactsMod.isArtifactName(artRel)) return json(res, 400, { ok: false, error: "该类型不支持预览" });
+  const artRoot = path.join(RUNTIME, "workspaces", artTenant);
+  const artAbs = path.resolve(artRoot, artRel);
+  // realpath 兜底软链接逃逸：解析后的真实路径必须仍落在租户 workspace 里
+  let artRootReal = artRoot;
+  try { artRootReal = fs.realpathSync(artRoot); } catch (e) { /* workspace 还没建，下面 stat 会 404 */ }
+  if (artAbs !== artRootReal && artAbs.indexOf(artRootReal + path.sep) !== 0) {
+    return json(res, 403, { ok: false, error: "无权访问该路径" });
+  }
+  let artSt = null;
+  try { artSt = fs.statSync(artAbs); } catch (e) { return json(res, 404, { ok: false, error: "文件不存在" }); }
+  if (!artSt || !artSt.isFile()) return json(res, 404, { ok: false, error: "文件不存在" });
+  const artHeaders = {
+    "Content-Type": artifactsMod.artifactContentType(artRel),
+    "Content-Length": artSt.size,
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  };
+  // HTML 是 Agent 生成的内容，里面可能有脚本；同源 iframe 里它能读父页面的 storage / cookie。
+  // 这里先把脚本能力掐掉（前端 iframe 还会再套一层 sandbox，双保险）。
+  if (artifactsMod.artifactKind(artRel) === "html") {
+    artHeaders["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:";
+  }
+  res.writeHead(200, artHeaders);
+  if (req.method === "HEAD") return res.end();
+  fs.createReadStream(artAbs).pipe(res);
+  return;
+}
+
 
   // ---- 文档上传（multipart/form-data，兼容 base64 JSON；纯文本 v1：只收 .txt/.md/.csv，按内容判纯文本；5MB 上限；复用租户隔离落盘）----
   if (p === "/api/upload-doc" && req.method === "POST") {

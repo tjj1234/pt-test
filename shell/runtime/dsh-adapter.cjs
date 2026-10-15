@@ -17,8 +17,82 @@ const path = require("path");
 const crypto = require("crypto");
 const { spawn, spawnSync } = require("child_process");
 const { assembleSystemPrompt } = require("./contract.cjs");
+const artifactsMod = require("./artifacts.cjs");
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
+
+
+/* ---- 产出文件（artifact）识别：B2「生成 PDF/HTML + 左侧预览」----
+ * DSH 侧写文件的工具名各家不一（write_file / Write / fs_write / create_file…），
+ * 而且 Agent 用 bash + python 生成 PDF 时根本不经过工具调用帧。
+ * 所以这里只是「提前量」：一旦认出写文件调用就立刻通知前端先把面板弹出来；
+ * 认不出来也没关系 —— 任务结束时 collectArtifacts(dir) 会扫目录兜底，那才是准的。
+ */
+
+/** 这个工具名像不像「写文件」（宽松匹配，宁可多认也别漏；认错只是多弹一次面板）。 */
+function toolWroteFile(name) {
+  const n = String(name || "").trim();
+  if (!n) return false;
+  if (/^(write|create|save|new)_?(file|files|document|doc)s?$/i.test(n)) return true;
+  if (/^(Write|Edit|MultiEdit|NotebookEdit)$/.test(n)) return true;
+  if (/(file_write|fs_write|write_to_file|write_file|create_file|save_file)/i.test(n)) return true;
+  return false;
+}
+
+/** 从工具入参里掏出文件路径。args 可能是对象，也可能是被 stringify（甚至截断）的字符串。 */
+function pathFromToolArgs(args) {
+  let a = args;
+  if (typeof a === "string") {
+    try { a = JSON.parse(a); } catch (e) {
+      const m = a.match(/"(?:path|file_path|filePath|filename|file_name|target_file|file)"\s*:\s*"([^"]+)"/);
+      return m ? m[1] : null;
+    }
+  }
+  if (!a || typeof a !== "object") return null;
+  for (const k of ["path", "file_path", "filePath", "filename", "file_name", "target_file", "file"]) {
+    const v = a[k];
+    if (typeof v === "string" && v) return v;
+  }
+  return null;
+}
+
+/**
+ * 把工具调用里写的路径换算成 workspace 相对路径（/api/artifact 只认相对路径）。
+ * 绝对路径且在 workspace 内 -> 取相对部分；绝对路径在 workspace 外或本身就是相对路径 -> 退化为文件名
+ * （Agent 常见的写法是相对 workspace 根的 "report.pdf"，或绝对路径 <ws>/out/report.pdf）。
+ */
+function artifactRelFromToolPath(workspace, p) {
+  const raw = String(p || "").trim();
+  if (!raw) return null;
+  const base = raw.split(/[\\/]+/).pop();
+  if (!artifactsMod.isArtifactName(base)) return null;
+  const norm = raw.split(/[\\/]+/).join("/");
+  if (/^[a-zA-Z]:\//.test(norm) || norm.charAt(0) === "/") {
+    const ws = String(workspace || "").split(/[\\/]+/).join("/").replace(/\/+$/, "");
+    if (ws && norm.indexOf(ws + "/") === 0) return norm.slice(ws.length + 1);
+    return base;
+  }
+  const clean = norm.replace(/^\.\//, "");
+  return artifactsMod.isSafeRel(clean) ? clean : base;
+}
+
+/** 一条工具调用 step 是否写了可预览文件；是则返回归一化产物，否则 null（不影响兜底扫描）。 */
+function artifactFromToolStep(step, workspace) {
+  if (!step || step.isError) return null;
+  if (!toolWroteFile(step.name)) return null;
+  const p = pathFromToolArgs(step.args);
+  if (!p) return null;
+  const rel = artifactRelFromToolPath(workspace, p);
+  if (!rel) return null;
+  return artifactsMod.normalizeArtifact({
+    name: rel.split("/").pop(), rel, size: 0, mtime: Date.now(),
+  });
+}
+
+/** 任务收尾时扫目录，捞出本轮期间新增/改过的可预览文件。扫不动就返回 []，绝不抛错。 */
+function collectRoundArtifacts(workspace, sinceMs) {
+  return artifactsMod.collectArtifacts(workspace, sinceMs, { maxFiles: 20 });
+}
 
 /* 视频生成（文生视频 / 图生视频）内部轮询预算是 1 小时
  * （business/media/powertokens.cjs：pollVideoTask 的本地守护超时 3600000ms）。
@@ -259,6 +333,11 @@ function createDshRuntime(opts = {}) {
           };
           if (Array.isArray(w.steps)) w.steps.push(step);
           if (typeof w.onStep === "function") { try { w.onStep({ name: step.name, args: step.args, result: step.result, isError: step.isError }); } catch (e) {} }
+          // 认出「写了一个可预览文件」就立刻通知前端弹面板（提前量；准不准由收尾扫描兜底）
+          if (typeof w.onArtifact === "function") {
+            const art = artifactFromToolStep(step, w.wsDir);
+            if (art) { try { w.onArtifact(art); } catch (e) {} }
+          }
         }
         break;
       }
@@ -435,6 +514,7 @@ function createDshRuntime(opts = {}) {
             resolve({
           ok: false, text: "", ms: Date.now() - t0, error: "已停止",
           stopped: true, stopReason: "user", steps: waiter.steps || [], fresh: !warm,
+          artifacts: collectRoundArtifacts(workspace, t0),
           workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
         });
           }
@@ -452,6 +532,8 @@ function createDshRuntime(opts = {}) {
       if (typeof spec.onSpawn === "function") { try { spec.onSpawn(job); } catch (e) {} }
 
       waiter = {
+        onArtifact: spec.onArtifact,
+        wsDir: workspace,
         onDelta: spec.onDelta,
         onStep: spec.onStep,
         timedOut: false,
@@ -464,6 +546,7 @@ function createDshRuntime(opts = {}) {
             ok: frame.ok !== false,
             text: frame.text || "",
             media: Array.isArray(frame.media) ? frame.media : null,
+            artifacts: collectRoundArtifacts(workspace, t0),
             report: frame.report || null,
             usage: frame.usage || null,
             ms: frame.ms || (Date.now() - t0),
@@ -501,6 +584,7 @@ function createDshRuntime(opts = {}) {
           resolve({
             ok: false, code: "TIMEOUT", text: "", ms: Date.now() - t0,
             error: "生成超时，已中断", stopped: true, stopReason: "timeout", steps: w0 ? (w0.steps || []) : [], fresh: !warm,
+            artifacts: collectRoundArtifacts(workspace, t0),
             workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
           });
         }, 3000);
@@ -622,6 +706,11 @@ function createDshRuntime(opts = {}) {
 }
 
 module.exports = {
+  toolWroteFile,
+  pathFromToolArgs,
+  artifactRelFromToolPath,
+  artifactFromToolStep,
+  collectRoundArtifacts,
   VIDEO_TASK_TIMEOUT_MS,
   mediaRouteTaskType,
   isVideoTaskType,

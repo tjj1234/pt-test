@@ -229,7 +229,7 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 .conv-menu-pop button.danger:hover{background:#fee2e2}
 
 /* 聊天区 */
-.chat-pane{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg);max-height: calc(100vh - 62px);}
+.chat-pane{flex:1;min-width:0;display:flex;flex-direction:row;background:var(--bg);max-height: calc(100vh - 62px);}
 .chat{flex:1;overflow:auto;padding:28px 24px}
 
 /* 消息 */
@@ -1145,3 +1145,51 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 .pw-match{font-size:11.5px;margin-top:5px}
 .pw-match.ok{color:var(--ok)}
 .pw-match.bad{color:var(--bad)}
+
+
+/* ---------- 产出预览面板（B2：PDF / HTML / md 左侧预览）---------- */
+/* 面板在左、聊天在右；面板 hidden 时完全不占宽度，窄屏时改为上下堆叠。 */
+.chat-main{flex:1;min-width:0;display:flex;flex-direction:column}
+.art-pane{width:380px;flex:0 0 380px;min-width:0;display:flex;flex-direction:column;
+  border-right:1px solid var(--line);background:var(--card)}
+.art-pane[hidden]{display:none}
+.art-head{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line)}
+.art-ico{font-size:14px;line-height:1}
+.art-title{font-size:13px;font-weight:600;color:var(--text-1);max-width:190px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.art-head .sp{flex:1}
+.art-switch{max-width:140px;padding:4px 6px;border:1px solid var(--line);border-radius:8px;
+  font-size:12px;font-family:inherit;color:var(--text-2);background:#fff;cursor:pointer}
+.art-btn{border:1px solid var(--line);background:#fff;color:var(--text-2);border-radius:8px;
+  width:26px;height:26px;line-height:1;cursor:pointer;font-size:13px;font-family:inherit}
+.art-btn:hover{border-color:var(--brand);color:var(--brand)}
+.art-body{flex:1;min-height:0;overflow:auto;background:#fff}
+.art-body iframe{display:block;width:100%;height:100%;border:0}
+.art-empty{padding:28px 20px;color:var(--text-3);font-size:13px;line-height:1.7;text-align:center}
+
+/* md 渲染：只给「我们自己转出来的标签」上样式，裸 HTML 已被转义，不会真的执行 */
+.art-md{padding:18px 20px;font-size:14px;line-height:1.75;color:var(--text-1);word-wrap:break-word}
+.art-md h1,.art-md h2,.art-md h3,.art-md h4{line-height:1.35;margin:20px 0 10px;font-weight:650}
+.art-md h1{font-size:22px}
+.art-md h2{font-size:18px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.art-md h3{font-size:16px}
+.art-md h4{font-size:14px}
+.art-md p{margin:10px 0}
+.art-md ul,.art-md ol{margin:10px 0;padding-left:22px}
+.art-md li{margin:4px 0}
+.art-md code{padding:2px 5px;border-radius:5px;background:var(--bg-soft);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12.5px}
+.art-md pre{margin:12px 0;padding:12px 14px;border-radius:10px;background:var(--bg-soft);overflow:auto}
+.art-md pre code{padding:0;background:none}
+.art-md blockquote{margin:12px 0;padding:2px 0 2px 14px;border-left:3px solid var(--line);color:var(--text-2)}
+.art-md a{color:var(--brand);text-decoration:underline}
+.art-md hr{border:0;border-top:1px solid var(--line);margin:18px 0}
+.art-md table{border-collapse:collapse;margin:12px 0;font-size:13px}
+.art-md th,.art-md td{border:1px solid var(--line);padding:6px 10px;text-align:left}
+.art-md th{background:var(--bg-soft);font-weight:600}
+
+/* 窄屏：面板改为整块占上方，不与聊天抢横向空间 */
+@media (max-width: 900px){
+  .chat-pane{flex-direction:column}
+  .art-pane{width:100%;flex:0 0 45%;border-right:0;border-bottom:1px solid var(--line)}
+}
