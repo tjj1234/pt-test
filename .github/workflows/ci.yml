@@ -43,3 +43,28 @@ jobs:
             test -s "$f" || { echo "缺失或为空：$f"; exit 1; }
           done
           echo "迁移脚本齐备"
+
+  # 回归门禁：强制执行 tests/regression/ 全部套件（真正跑起来，不是语法检查）。
+  # 任一项失败即非零退出 → CI 标红 → 阻止合并。这是合并前必须通过的红线。
+  regression:
+    name: 回归测试（tests/regression 全量）
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # 回归套件会真实加载 shell 侧模块，需要 PGlite（@electric-sql/pglite）与
+      # 厂商打包的 @deepseek-ai/dsh（file:vendor/...），故先在 shell 目录装依赖。
+      - name: 安装 shell 依赖
+        working-directory: shell
+        run: npm ci
+
+      - name: 运行全部回归测试
+        run: node scripts/run-regression.mjs

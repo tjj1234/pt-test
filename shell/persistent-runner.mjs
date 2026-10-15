@@ -205,10 +205,10 @@ function apply(ctx) {
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
     const stepNames = new Map();      // callId -> 工具名（tool/result 时回填名字）
     const stepStarted = new Map();    // callId -> { name, args, t0 }（tool/call 起，tool/result 算真实耗时）
-    let lastMediaRouteResult = null;  // 本 turn 最近一次 media.route 的结构化结果 { type, url }
-    let lastMediaRouteModel = null;   // 本 turn 最近一次 media.route 实际使用的生成模型（seedream / wan 等）
+    let mediaRouteResults = [];       // 本 turn 全部 media.route 的结构化结果 [{ type, url }]（C4：不再只保留最后一次）
+    let lastMediaRouteModel = null;   // 本 turn 最近一次 media.route 实际使用的生成模型（seedream / wan 等，step 展示用）
     let currentTenantId = "";         // 本 turn 租户上下文（cmd.tenantId 注入，供 ga.query / attribution.query）
-    let lastReport = null;            // 本 turn 最近一次 ga.query / attribution.quality 返回的 report（outputType=report，透传前端抽屉）
+    let reportResults = [];           // 本 turn 全部 report 工具返回的 report（outputType=report，透传前端抽屉）（C4：不再只保留最后一次）
 
     // 逐字流 + 轨迹：把 assistant 文本增量 / 工具调用路由到对应 sessionId
     ctx.on("session/event", (session, event) => {
@@ -352,7 +352,7 @@ function apply(ctx) {
                 },
                 async execute(args) {
                   const result = await callMediaRoute({}, args || {});
-                  lastMediaRouteResult = result && result.url ? { type: result.kind, url: result.url } : null;
+                  if (result && result.url) mediaRouteResults.push({ type: result.kind, url: result.url });
                   lastMediaRouteModel = result && result.model ? String(result.model) : null;
                   return result;
                 },
@@ -390,7 +390,7 @@ function apply(ctx) {
                 async execute(args) {
                   if (!currentTenantId) throw new Error("ga.query 需要 tenantId");
                   const report = await gaQueryExecutor(args || {}, { tenantId: currentTenantId });
-                  lastReport = report && typeof report === "object" ? report : null;
+                  if (report && typeof report === "object") reportResults.push(report);
                   return report;
                 },
               }));
@@ -426,15 +426,35 @@ function apply(ctx) {
                 output: {
                   schema: { type: "object", additionalProperties: true },
                   render: (_args, value) => {
-                    const title = value && value.title ? value.title : "埋点质量分析";
-                    const score = value && value.score && value.score.value != null ? "；评分 " + value.score.value : "";
-                    return [{ type: "text", text: title + score }];
+                    // C3：模型只能拿到「标题 + 评分」这种短摘要，追问扣分项时答不上来。
+                    // 这里把报告的关键细节（评分口径、统计、问题清单/影响/建议）一并输出给模型，
+                    // 完整 report 仍由 execute 透传给前端抽屉展示。
+                    const v = value && typeof value === "object" ? value : {};
+                    const title = v.title || "埋点质量分析";
+                    const score = v.score && v.score.value != null ? String(v.score.value) : "未评分";
+                    const scoreLabel = v.score && v.score.label ? "（" + v.score.label + "）" : "";
+                    const stats = Array.isArray(v.stats) ? v.stats.map((r) => Array.isArray(r) ? r.join("：") : String(r)).filter(Boolean).join("；") : "";
+                    const rows = v.table && Array.isArray(v.table.rows) ? v.table.rows : [];
+                    const issues = rows.map((r) => {
+                      if (!Array.isArray(r)) return "";
+                      const sev = r[0] ? "[" + r[0] + "] " : "";
+                      const problem = r[1] || "";
+                      const impact = r[2] ? " — 影响：" + r[2] : "";
+                      const advice = r[3] ? " — 建议：" + r[3] : "";
+                      return problem ? sev + problem + impact + advice : "";
+                    }).filter(Boolean).join("\n");
+                    const suggestions = Array.isArray(v.suggestions) ? v.suggestions.filter(Boolean).join("\n") : "";
+                    const parts = [title + "；评分 " + score + scoreLabel];
+                    if (stats) parts.push("统计：" + stats);
+                    if (issues) parts.push("问题清单：\n" + issues);
+                    else if (suggestions) parts.push("建议：\n" + suggestions);
+                    return [{ type: "text", text: parts.join("\n") }];
                   },
                 },
                 async execute(args) {
                   if (!currentTenantId) throw new Error("attribution.quality 需要 tenantId");
                   const report = await attributionQuality(args || {}, currentTenantId);
-                  lastReport = report && typeof report === "object" ? report : null;
+                  if (report && typeof report === "object") reportResults.push(report);
                   return report;
                 },
               }));
@@ -449,15 +469,37 @@ function apply(ctx) {
                 output: {
                   schema: { type: "object", additionalProperties: true },
                   render: (_args, value) => {
-                    const title = value && value.title ? value.title : "埋点质量 AI 分析";
-                    const score = value && value.scoreBar && value.scoreBar.value != null ? "；评分 " + value.scoreBar.value : "";
-                    return [{ type: "text", text: title + score }];
+                    // C3：同 attribution_quality —— 把扣分项/原因/整改建议带进模型可见结果，
+                    // 完整 report 仍由 execute 透传给前端抽屉展示。
+                    const v = value && typeof value === "object" ? value : {};
+                    const title = v.title || "埋点质量 AI 分析";
+                    const score = v.scoreBar && v.scoreBar.value != null ? String(v.scoreBar.value) : "未评分";
+                    const scoreLabel = v.scoreBar && v.scoreBar.label ? "（" + v.scoreBar.label + "）" : "";
+                    const components = (v.scoreBar && Array.isArray(v.scoreBar.components))
+                      ? v.scoreBar.components.map((c) => c && c.label ? c.label + " 扣 " + (c.deduction == null ? "—" : c.deduction) : "").filter(Boolean).join("；")
+                      : "";
+                    const rows = v.issuesTable && Array.isArray(v.issuesTable.rows) ? v.issuesTable.rows : [];
+                    const issues = rows.map((r) => {
+                      if (!r || typeof r !== "object") return "";
+                      const sev = r.severity ? "[" + r.severity + "] " : "";
+                      const t = r.title || "";
+                      const impact = r.impact ? " — 影响：" + r.impact : "";
+                      return t ? sev + t + impact : "";
+                    }).filter(Boolean).join("\n");
+                    const recs = Array.isArray(v.recommendations)
+                      ? v.recommendations.map((r) => r && r.action ? (r.priority ? "[" + r.priority + "] " : "") + r.action : "").filter(Boolean).join("\n")
+                      : "";
+                    const parts = [title + "；评分 " + score + scoreLabel];
+                    if (components) parts.push("扣分项：" + components);
+                    if (issues) parts.push("问题：" + issues);
+                    if (recs) parts.push("整改建议：" + recs);
+                    return [{ type: "text", text: parts.join("\n") }];
                   },
                 },
                 async execute(args) {
                   if (!currentTenantId) throw new Error("tracking_quality_audit 需要 tenantId");
                   const report = await trackingQualityAudit(currentTenantId);
-                  lastReport = report && typeof report === "object" ? report : null;
+                  if (report && typeof report === "object") reportResults.push(report);
                   return report;
                 },
               }));
@@ -471,9 +513,9 @@ function apply(ctx) {
 
         const agent = rec.agent;
         const firstSeq = agent.session.seq;
-        lastMediaRouteResult = null;
+        mediaRouteResults = [];
         lastMediaRouteModel = null;
-        lastReport = null;
+        reportResults = [];
         agent.followup(createUserMessage({
           content: [{ type: "text", text: task + "\n\n[系统提示] " + MEDIA_NO_LINK_NOTE }],
           source: { kind: "user" },
@@ -485,8 +527,8 @@ function apply(ctx) {
           type: "done", sessionId: sid,
           ok: outcome.reason?.kind === "completed" || outcome.text !== "",
           text: outcome.text,
-          media: lastMediaRouteResult ? [lastMediaRouteResult] : null,
-          report: lastReport,
+          media: mediaRouteResults.length ? mediaRouteResults : null,
+          report: reportResults.length ? reportResults : null,
           usage: outcome.usage ?? null,
           reason: outcome.reason?.kind ?? null,
           reasonDetail: outcome.reason?.error ? { code: outcome.reason.error.code, message: outcome.reason.error.message } : null,
