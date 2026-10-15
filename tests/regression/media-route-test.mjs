@@ -22,6 +22,8 @@ import {
   resolveRouting,
   callMediaRoute,
   parseMediaParams,
+  enforceMinImageSize,
+  MIN_IMAGE_PIXELS,
   renderStylePrompt,
 } from "../../business/media/powertokens.cjs";
 import { STYLE_PRESETS, getStylePreset, listStylePresets } from "../../business/media/presets.cjs";
@@ -204,7 +206,8 @@ async function main() {
     if (taskType === "image2image") args.inputImageUrl = "https://cdn.example.com/in.png";
     const r = await callMediaRoute({}, args, { apiKey: "test-key", fetchImpl });
     const body = JSON.parse(calls[0].options.body);
-    ok(`${taskType} 解析 prompt 尺寸 1024x1024 生效`, body.size === "1024x1024", JSON.stringify(body));
+    // 1024x1024 = 1048576 px < PT 最低 3686400 px → 护栏回退 2048x2048，并透出 sizeAdjusted
+    ok(`${taskType} 解析 prompt 尺寸 1024x1024 低于下限被护栏回退 2048x2048`, body.size === "2048x2048" && r.sizeAdjusted && r.sizeAdjusted.from === "1024x1024", JSON.stringify({ bodySize: body.size, adj: r.sizeAdjusted }));
   }
   // 图片：不同分隔符 / 全角 ×
   {
@@ -212,7 +215,7 @@ async function main() {
     const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/g.png" }] }); };
     const r = await callMediaRoute({}, { taskType: "text2image", prompt: "风景照 800×600" }, { apiKey: "test-key", fetchImpl });
     const body = JSON.parse(calls[0].options.body);
-    ok("全角 × 分隔尺寸解析 800x600", body.size === "800x600", JSON.stringify(body));
+    ok("全角 × 分隔尺寸解析 800x600（低于下限被回退 2048x2048）", body.size === "2048x2048" && r.sizeAdjusted && r.sizeAdjusted.from === "800x600", JSON.stringify({ bodySize: body.size, adj: r.sizeAdjusted }));
     ok("尺寸解析不影响返回 URL", r.url === "https://img.example.com/g.png");
   }
   // 图片：prompt 无尺寸 → 兜底 2048x2048 仍然保留
@@ -270,13 +273,21 @@ async function main() {
     ok("视频无解析 → 兜底 720P", body.size === "720P", JSON.stringify(body));
     ok("视频无解析 → 兜底 5s", body.seconds === "5", JSON.stringify(body));
   }
-  // 优先级：显式 opts 覆盖 prompt 解析值
+  // 优先级：安全护栏 > 显式小尺寸（显式小于下限的 opts.size 也会被护栏回退，避免 PT 400）
   {
     const calls = [];
     const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/o.png" }] }); };
     const r = await callMediaRoute({}, { taskType: "text2image", prompt: "一只猫，尺寸1024x1024" }, { apiKey: "test-key", fetchImpl, size: "512x512" });
     const body = JSON.parse(calls[0].options.body);
-    ok("显式 opts.size 覆盖 prompt 解析值", body.size === "512x512", JSON.stringify(body));
+    ok("显式小尺寸 opts.size=512x512 被护栏回退 2048x2048（安全 > 显式小尺寸）", body.size === "2048x2048" && r.sizeAdjusted && r.sizeAdjusted.from === "512x512", JSON.stringify({ bodySize: body.size, adj: r.sizeAdjusted }));
+  }
+  // 合法大尺寸（≥1920×1920）不被护栏改动，原样透传
+  {
+    const calls = [];
+    const fetchImpl = async (url, options = {}) => { calls.push({ url: String(url), options }); return jsonResponse({ data: [{ url: "https://img.example.com/big.png" }] }); };
+    const r = await callMediaRoute({}, { taskType: "text2image", prompt: "一只猫" }, { apiKey: "test-key", fetchImpl, size: "1920x1920" });
+    const body = JSON.parse(calls[0].options.body);
+    ok("合法尺寸 1920x1920 不被护栏改动", body.size === "1920x1920" && !r.sizeAdjusted, JSON.stringify({ bodySize: body.size, adj: r.sizeAdjusted }));
   }
   // parseMediaParams 单测
   {
@@ -289,6 +300,19 @@ async function main() {
     ok("parseMediaParams version=2 不误判 n", parseMediaParams("version=2 发布").n === undefined);
     ok("parseMediaParams 10stars 不误判时长", parseMediaParams("10stars 视频").duration === undefined);
     ok("parseMediaParams 无匹配全 undefined", JSON.stringify(parseMediaParams("一只猫")) === JSON.stringify({}));
+  }
+
+  // ---- ②c 图片尺寸最低像素护栏（enforceMinImageSize）----
+  {
+    ok("护栏常量 MIN_IMAGE_PIXELS = 3686400", MIN_IMAGE_PIXELS === 3686400);
+    ok("1920x1920 恰好等于下限 → 不调整", enforceMinImageSize("1920x1920").adjusted === false && enforceMinImageSize("1920x1920").size === "1920x1920");
+    ok("1919x1919 低于下限 → 回退 2048x2048", enforceMinImageSize("1919x1919").adjusted === true && enforceMinImageSize("1919x1919").size === "2048x2048");
+    ok("1024x1024 低于下限 → 回退 2048x2048", enforceMinImageSize("1024x1024").adjusted === true && enforceMinImageSize("1024x1024").size === "2048x2048");
+    ok("800x600 低于下限 → 回退 2048x2048", enforceMinImageSize("800x600").adjusted === true);
+    ok("2048x2048 默认 → 不调整", enforceMinImageSize("2048x2048").adjusted === false);
+    ok("空尺寸无法识别 → 回退 2048x2048", enforceMinImageSize("").adjusted === true && enforceMinImageSize("").size === "2048x2048");
+    ok("全角 × 尺寸 1920×1080 可解析且低于下限 → 回退", enforceMinImageSize("1920×1080").adjusted === true && enforceMinImageSize("1920×1080").size === "2048x2048");
+    ok("4096x4096 大尺寸 → 不调整（护栏只管下限，不限制上限）", enforceMinImageSize("4096x4096").adjusted === false && enforceMinImageSize("4096x4096").size === "4096x4096");
   }
 
   // ---- ③ 错误路径 ----

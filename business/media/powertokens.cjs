@@ -354,6 +354,32 @@ function parseMediaParams(prompt) {
 }
 
 /**
+ * PT Seedream（文生图 / 图生图）对图片尺寸有最低像素要求：实测低于
+ * 1920×1920（= 3686400 像素）会直接 400 InvalidParameter。
+ * 这里加一道护栏：无论尺寸来自 prompt 解析还是显式 opts.size，只要像素数低于
+ * 下限就统一回退到 2048x2048，避免直接打 PT 触发 400。
+ * 返回 { size, adjusted, reason }。
+ */
+const MIN_IMAGE_PIXELS = 3686400; // 1920 × 1920
+
+function enforceMinImageSize(size) {
+  const raw = String(size || "").trim();
+  const m = raw.match(/^(\d{2,4})\s*[x×*]\s*(\d{2,4})$/i);
+  if (!m) {
+    return { size: "2048x2048", adjusted: true, reason: `尺寸「${raw || "空"}」无法识别，已回退默认 2048x2048` };
+  }
+  const w = Number(m[1]), h = Number(m[2]);
+  if (w * h < MIN_IMAGE_PIXELS) {
+    return {
+      size: "2048x2048",
+      adjusted: true,
+      reason: `尺寸 ${w}x${h} 低于 PT 最低要求（${MIN_IMAGE_PIXELS} 像素 ≈ 1920×1920），已回退 2048x2048`,
+    };
+  }
+  return { size: `${w}x${h}`, adjusted: false, reason: "" };
+}
+
+/**
  * media.route 主入口：按 taskType 路由到 PowerTokens 生成，返回结果 URL。
  * @param {Object} context 执行上下文（shell 层为 {userId, tenantId, workspaceId}；DSH 层可空）
  * @param {Object} args    { taskType, prompt, inputImageUrl?, stylePreset?, size?, resolution?, duration?, n? }
@@ -404,12 +430,18 @@ async function callMediaRoute(context, args = {}, opts = {}) {
   const parsed = parseMediaParams(prompt);
 
   let url = null;
+  let rawSize = null;
+  let sizeGuard = null;
   if (routing.kind === "image") {
+    // size：显式 opts.size > 解析 parsed.size > 兜底 2048x2048
+    rawSize = (opts && opts.size) || parsed.size || "2048x2048";
+    // 最低像素护栏：PT Seedream 低于 1920×1920（3686400 px）会 400，统一回退 2048x2048
+    sizeGuard = enforceMinImageSize(rawSize);
+    if (sizeGuard.adjusted) console.warn("[media] " + sizeGuard.reason);
     const body = {
       model: routing.model,
       prompt,
-      // size：显式 opts.size > 解析 parsed.size > 兜底 2048x2048
-      size: (opts && opts.size) || parsed.size || "2048x2048",
+      size: sizeGuard.size,
       // n：显式 opts.n > 解析 parsed.n > 兜底 1
       n: (opts && opts.n) || parsed.n || 1,
     };
@@ -447,6 +479,10 @@ async function callMediaRoute(context, args = {}, opts = {}) {
     kind: routing.kind,
     url,
     elapsedMs: Date.now() - startedAt,
+    // 图片尺寸被护栏回退时透出提示（前端可展示给用户）
+    sizeAdjusted: sizeGuard && sizeGuard.adjusted
+      ? { from: rawSize, to: sizeGuard.size, reason: sizeGuard.reason }
+      : undefined,
   };
 }
 
@@ -456,6 +492,8 @@ module.exports = {
   resolveRouting,
   callMediaRoute,
   parseMediaParams,
+  enforceMinImageSize,
+  MIN_IMAGE_PIXELS,
   renderStylePrompt,
   extractImageUrl,
   extractVideoUrl,
