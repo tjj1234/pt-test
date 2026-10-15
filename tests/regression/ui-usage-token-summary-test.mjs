@@ -1,18 +1,23 @@
 /**
- * 用量与日志页顶部汇总「Token 数据暂缺」回归测试。
+ * 用量与日志页顶部「Token 数据暂缺」回归测试（对应 A2/A5 的 chat_usage 汇总）。
  *
- * 背景：后端已把「没有 token 数据」诚实标成 null（DSH 协议本身不返回该数据），
- * 但顶部汇总旧写法 `Number(c.tokenCount) || 0` 把 null 当 0 累加，显示「0 Tokens」，
- * 看着像「测出来零消耗」，实际是「压根没测」——与后端想修的是同一类误导。
+ * 背景：旧的汇总把「没有 token 数据」诚实标成 null（DSH 协议本身不返回该数据），
+ * 但旧写法 `Number(c.tokenCount) || 0` 把 null 当 0 累加，显示「0 Tokens」，
+ * 看着像「测出来零消耗」，实际是「压根没测」。
+ *
+ * 新版把 token 汇总从 tool_calls 单条记录里拆出来，落独立的 chat_usage 表，
+ * 由 GET /api/usage/summary 返回 today/month/byModel 聚合；前端渲染成「今日/本月」卡片。
+ * 这里要守住同一条规则：卡片必须能区分「范围内压根没有 usage 记录」（显示「暂缺」）
+ * 和「有记录但汇总出来真的是 0」（显示「0」），不能把 null/空表伪装成 0。
  *
  * 老办法：仓库无 jsdom，用「最小 DOM 桩 + vm」把真实的 shell/public/app.js 跑起来，
- * 配内存版 /api/usage/tool-calls，验证的是真代码（bizLoadUsage → bizTokenSummary）。
+ * 配内存版 /api/usage/tool-calls 与 /api/usage/summary，验证真代码（bizLoadUsage → bizUsageRenderCards）。
  *
  * 覆盖：
- *   1. 全 null / 字段缺失 → 汇总显示「Token数据暂缺」，绝不出现「0 Tokens」。
- *   2. 有真实数据（部分或全部）→ 正常求和显示；真实测出的 0 也正常显示「0 Tokens」。
- *   3. 单条记录那一行仍是原始值透传（null → 「—」），没有被顺手改掉。
- *   4. 空列表 / 示例数据（mock 回退）路径的文案不受影响。
+ *   1. bizUsageRenderCards：无记录(count=0) → 暂缺；有记录但真 0 → 0；有真实值 → 数字。
+ *   2. summary 为 null / 字段缺失 → 暂缺，绝不出现「0」。
+ *   3. bizLoadUsage 拉两个接口：状态行只报调用次数，token 汇总落到卡片。
+ *   4. 接口报错 → 卡片清空；summary 404 → 回退示例（带 count）仍显示数字。
  *
  * 跑法：node tests/regression/ui-usage-token-summary-test.mjs
  */
@@ -95,7 +100,7 @@ const localStorage = {
 class EventStub { constructor(t, o) { this.type = t; Object.assign(this, o || {}); } }
 
 /* ---------------- 内存版后端 ---------------- */
-const db = { usageBody: null, usageMode: "ok", usageCalls: 0 };
+const db = { usageBody: null, usageMode: "ok", summaryBody: null, summaryMode: "ok" };
 function res(obj, code) {
   return {
     ok: (code || 200) < 400, status: code || 200,
@@ -103,23 +108,26 @@ function res(obj, code) {
     json: async () => obj, text: async () => JSON.stringify(obj),
   };
 }
-function mkCall(tokenCount, i) {
-  const c = {
+function mkCall(i) {
+  return {
     id: "c" + (i == null ? 0 : i),
     timestamp: "2026-10-13T08:30:00.000Z",
     toolName: "ga.query",
+    category: "Workflow",
+    modelName: null,
     inputSummary: "最近广告数据",
     outputSummary: "分析已完成",
     durationMs: 240,
     status: "success",
   };
-  if (tokenCount !== undefined) c.tokenCount = tokenCount; // undefined = 字段整个缺失
-  return c;
 }
 async function fakeFetch(url) {
   const u = String(url);
+  if (u.indexOf("/api/usage/summary") === 0) {
+    if (db.summaryMode === "404") return res({ ok: false, error: "Not Found" }, 404);
+    return res(db.summaryBody);
+  }
   if (u.indexOf("/api/usage/tool-calls") === 0) {
-    db.usageCalls++;
     if (db.usageMode === "404") return res({ ok: false, error: "Not Found" }, 404);
     return res(db.usageBody);
   }
@@ -146,84 +154,91 @@ const ctx = vm.createContext({
   Event: EventStub,
   URLSearchParams,
   setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask,
-  // app.js 的 bizTable 用 `c instanceof Node` 分流；vm 里必须提供，否则渲染表格直接 ReferenceError
   Node: class NodeStub {},
 });
 vm.runInContext(readFileSync(APP_JS, "utf8"), ctx, { filename: "app.js" });
 const run = (src) => vm.runInContext(src, ctx);
 const usageStatus = () => String(ctx.document.querySelector("#usageStatus").textContent || "");
-/** 取 usageList 表格第 rowIdx 行第 5 列（Tokens 列）的文本 */
-const tokenCell = (rowIdx) => {
-  const table = ctx.document.querySelector("#usageList").children[0];
-  const tbody = table.children[1];
-  return String(tbody.children[rowIdx].children[5].textContent || "");
+/** 取「用量卡片」里指定 label 卡片的数值文本（找不到返回 null）。 */
+const cardValue = (label) => {
+  const host = ctx.document.querySelector("#usageCards");
+  for (const card of host.children) {
+    if (card.children && card.children[0] && card.children[0].textContent === label) {
+      const val = card.children[1];
+      return val == null || val.textContent == null ? null : String(val.textContent);
+    }
+  }
+  return null;
 };
+const modelBlocks = () => ctx.document.querySelector("#usageModels").children.length;
 
-console.log("\n[1] 全 null（后端现状）→ 「Token数据暂缺」，不是「0 Tokens」");
+console.log("\n[1] 卡片区分「无记录(暂缺)」「有记录但真是 0」「有真实值」");
+{
+  run(`bizUsageRenderCards({ today: { totalTokens: 0, count: 0 }, month: { totalTokens: 0, count: 0 }, byModel: [] })`);
+  ok("今日无记录 → 暂缺", cardValue("今日 Tokens") === "暂缺", cardValue("今日 Tokens"));
+  ok("本月无记录 → 暂缺", cardValue("本月 Tokens") === "暂缺", cardValue("本月 Tokens"));
+}
+{
+  run(`bizUsageRenderCards({ today: { totalTokens: 0, count: 1 }, month: { totalTokens: 0, count: 2 }, byModel: [] })`);
+  ok("今日有记录但汇总真是 0 → 0", cardValue("今日 Tokens") === "0", cardValue("今日 Tokens"));
+  ok("本月有记录但汇总真是 0 → 0", cardValue("本月 Tokens") === "0", cardValue("本月 Tokens"));
+}
+{
+  run(`bizUsageRenderCards({ today: { totalTokens: 600, count: 3 }, month: { totalTokens: 820, count: 4 }, byModel: [] })`);
+  ok("今日真实值正常显示", cardValue("今日 Tokens") === "600", cardValue("今日 Tokens"));
+  ok("本月真实值正常显示", cardValue("本月 Tokens") === "820", cardValue("本月 Tokens"));
+}
+{
+  run(`bizUsageRenderCards(null)`);
+  ok("summary 为 null → 今日/本月都暂缺", cardValue("今日 Tokens") === "暂缺" && cardValue("本月 Tokens") === "暂缺", cardValue("今日 Tokens") + "/" + cardValue("本月 Tokens"));
+}
+{
+  run(`bizUsageRenderCards({ today: { totalTokens: 500 }, month: { totalTokens: 900 }, byModel: [] })`);
+  ok("字段缺失 count 同样按暂缺处理（不把缺 count 当 0 显示）", cardValue("今日 Tokens") === "暂缺" && cardValue("本月 Tokens") === "暂缺", cardValue("今日 Tokens") + "/" + cardValue("本月 Tokens"));
+}
+
+console.log("\n[2] 模型分布只在有数据时渲染");
+{
+  run(`bizUsageRenderModels({ byModel: [{ model: "deepseek-chat", totalTokens: 300, calls: 2 }] })`);
+  ok("有模型数据时渲染 1 块", modelBlocks() === 1, String(modelBlocks()));
+  run(`bizUsageRenderModels({ byModel: [] })`);
+  ok("无模型数据时不渲染", modelBlocks() === 0, String(modelBlocks()));
+}
+
+console.log("\n[3] bizLoadUsage 拉 tool-calls + summary，状态行只报调用次数");
 {
   db.usageMode = "ok";
-  db.usageBody = { ok: true, calls: [mkCall(null, 0), mkCall(null, 1), mkCall(null, 2)] };
+  db.usageBody = { ok: true, calls: [mkCall(0), mkCall(1)] };
+  db.summaryMode = "ok";
+  db.summaryBody = { ok: true, summary: { today: { totalTokens: 300, count: 2 }, month: { totalTokens: 300, count: 2 }, byModel: [{ model: "deepseek-chat", totalTokens: 300, calls: 2 }] } };
   await run("bizLoadUsage()");
-  ok("显示调用次数", /^3 次调用/.test(usageStatus()), usageStatus());
-  ok("显示「Token数据暂缺」", /Token数据暂缺/.test(usageStatus()), usageStatus());
-  ok("绝不出现「0 Tokens」", !/0 Tokens/.test(usageStatus()), usageStatus());
-  ok("连「Tokens」字样都不出现", !/Tokens/.test(usageStatus()), usageStatus());
+  ok("状态行显示调用次数（不再混 token 汇总）", usageStatus() === "2 次调用", usageStatus());
+  ok("卡片显示今日汇总", cardValue("今日 Tokens") === "300", cardValue("今日 Tokens"));
 }
-{
-  db.usageBody = { ok: true, calls: [mkCall(undefined, 0), mkCall(undefined, 1)] };
-  await run("bizLoadUsage()");
-  ok("字段整个缺失同样按暂缺处理", /2 次调用 · Token数据暂缺/.test(usageStatus()) && !/0 Tokens/.test(usageStatus()), usageStatus());
-}
-{
-  const s = run("bizTokenSummary([{tokenCount:null},{tokenCount:null}])");
-  ok("helper 单测：全 null → 暂缺", s === "Token数据暂缺", s);
-  const s2 = run("bizTokenSummary([])");
-  ok("helper 单测：空数组 → 暂缺（不会画蛇头添 0）", s2 === "Token数据暂缺", s2);
-}
-
-console.log("\n[2] 有真实数据 → 正常求和");
-{
-  db.usageBody = { ok: true, calls: [mkCall(100, 0), mkCall(200, 1), mkCall(300, 2)] };
-  await run("bizLoadUsage()");
-  ok("全真实值精确求和", usageStatus() === "3 次调用 · 600 Tokens", usageStatus());
-
-  db.usageBody = { ok: true, calls: [mkCall(380, 0), mkCall(null, 1), mkCall(440, 2)] };
-  await run("bizLoadUsage()");
-  ok("部分 null 不影响有数据时的求和（null 按 0 计入）", usageStatus() === "3 次调用 · 820 Tokens", usageStatus());
-
-  db.usageBody = { ok: true, calls: [mkCall(0, 0)] };
-  await run("bizLoadUsage()");
-  ok("真实测出的 0 正常显示「0 Tokens」（这才是真的是 0）", usageStatus() === "1 次调用 · 0 Tokens", usageStatus());
-
-  const s = run("bizTokenSummary([{tokenCount:5},{tokenCount:7}])");
-  ok("helper 单测：求和", s === "12 Tokens", s);
-}
-
-console.log("\n[3] 单条记录那一行仍是原始值透传（这次只改汇总）");
-{
-  db.usageBody = { ok: true, calls: [mkCall(null, 0), mkCall(380, 1)] };
-  await run("bizLoadUsage()");
-  ok("null 的 Tokens 单元格透传为「—」", tokenCell(0) === "—", tokenCell(0));
-  ok("真实值原样透传", tokenCell(1) === "380", tokenCell(1));
-  const src = readFileSync(APP_JS, "utf8");
-  ok("透传行仍是裸 c.tokenCount（没被顺手加 || 0）", /, c\.tokenCount,/.test(src));
-  ok("旧的内联 reduce 写法已移除", src.indexOf("calls.reduce((n, c) => n + (Number(c.tokenCount) || 0), 0)") < 0);
-}
-
-console.log("\n[4] 其他路径不受影响");
 {
   db.usageBody = { ok: true, calls: [] };
+  db.summaryBody = { ok: true, summary: { today: { totalTokens: 0, count: 0 }, month: { totalTokens: 0, count: 0 }, byModel: [] } };
   await run("bizLoadUsage()");
-  ok("空列表文案不变", usageStatus() === "所选时间范围内没有工具调用", usageStatus());
+  ok("无调用时状态行文案", usageStatus() === "所选时间范围内没有工具调用", usageStatus());
+  ok("无记录时卡片暂缺", cardValue("今日 Tokens") === "暂缺" && cardValue("本月 Tokens") === "暂缺", cardValue("今日 Tokens") + "/" + cardValue("本月 Tokens"));
+}
 
-  db.usageMode = "404"; // 接口未接入 → 回退示例数据（带真实 tokenCount）
+console.log("\n[4] 错误路径与示例回退");
+{
+  db.summaryMode = "ok";
+  db.summaryBody = { ok: false, error: "读取失败" };
+  db.usageBody = { ok: true, calls: [] };
   await run("bizLoadUsage()");
-  ok("示例数据仍正常求和并带 mock 前缀", /^示例数据 · 日志接口待接入。1 次调用 · 380 Tokens$/.test(usageStatus()), usageStatus());
-  db.usageMode = "ok";
-
-  db.usageBody = { ok: false, error: "读取失败" };
+  ok("summary 报错 → 状态行显示错误", usageStatus() === "读取失败", usageStatus());
+  ok("报错时卡片清空", cardValue("今日 Tokens") === null, cardValue("今日 Tokens"));
+  db.summaryBody = null;
+}
+{
+  db.summaryMode = "404"; // summary 接口未接入 → 回退示例（示例带 count>0）
+  db.usageBody = { ok: true, calls: [mkCall(0)] };
   await run("bizLoadUsage()");
-  ok("接口报错时仍是错误文案（不画蛇头添汇总）", usageStatus() === "读取失败", usageStatus());
+  ok("summary 404 回退示例仍显示真实数字", cardValue("今日 Tokens") === "1,200", cardValue("今日 Tokens"));
+  db.summaryMode = "ok";
 }
 
 console.log("\n结果：" + pass + " 通过，" + failures.length + " 失败");

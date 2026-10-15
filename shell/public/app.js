@@ -2669,8 +2669,8 @@ function bizUsageSample() {
 }
 function bizUsageSummarySample() {
   return { ok: true, summary: {
-    today: { promptTokens: 800, completionTokens: 400, totalTokens: 1200 },
-    month: { promptTokens: 12200, completionTokens: 6200, totalTokens: 18400 },
+    today: { promptTokens: 800, completionTokens: 400, totalTokens: 1200, count: 3 },
+    month: { promptTokens: 12200, completionTokens: 6200, totalTokens: 18400, count: 12 },
     byModel: [
       { model: "deepseek-chat", calls: 8, promptTokens: 7200, completionTokens: 2000, totalTokens: 9200 },
       { model: "seedream-5-0-260128", calls: 3, promptTokens: 3000, completionTokens: 3400, totalTokens: 6400 },
@@ -2691,12 +2691,15 @@ function bizUsageStatus(status) {
 function bizUsageRenderCards(summary) {
   const host = $("#usageCards");
   host.replaceChildren();
-  const today = summary && summary.today ? summary.today.totalTokens : 0;
-  const month = summary && summary.month ? summary.month.totalTokens : 0;
+  const today = summary && summary.today ? summary.today : null;
+  const month = summary && summary.month ? summary.month : null;
   const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("zh-CN"));
+  // 区分「范围内压根没有 usage 记录」（count=0 → 暂缺）与「有记录但汇总真的是 0」（→ 0），
+  // 避免把「没测到」伪装成「测出来是 0」。
+  const tokenText = (slot) => (slot && slot.count ? fmt(slot.totalTokens) : "暂缺");
   [
-    ["今日 Tokens", fmt(today)],
-    ["本月 Tokens", fmt(month)],
+    ["今日 Tokens", tokenText(today)],
+    ["本月 Tokens", tokenText(month)],
     ["本月费用 (¥)", "待确认单价"],
   ].forEach(([label, value]) => {
     const c = bizNode("div", null, "card"); c.style.cssText = "flex:1;min-width:140px;padding:14px 16px";

@@ -107,7 +107,8 @@ async function initToolCalls(db) {
 
     const [today, month, byModel] = await Promise.all([
       db.query(
-        `SELECT COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+        `SELECT COUNT(*) AS count,
+                COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
                 COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
                 COALESCE(SUM(total_tokens), 0) AS total_tokens
            FROM chat_usage
@@ -115,7 +116,8 @@ async function initToolCalls(db) {
         [workspaceId, tenantId]
       ),
       db.query(
-        `SELECT COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+        `SELECT COUNT(*) AS count,
+                COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
                 COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
                 COALESCE(SUM(total_tokens), 0) AS total_tokens
            FROM chat_usage
@@ -141,8 +143,9 @@ async function initToolCalls(db) {
           promptTokens: Number(row.rows[0].prompt_tokens) || 0,
           completionTokens: Number(row.rows[0].completion_tokens) || 0,
           totalTokens: Number(row.rows[0].total_tokens) || 0,
+          count: Number(row.rows[0].count) || 0,
         }
-      : { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+      : { promptTokens: 0, completionTokens: 0, totalTokens: 0, count: 0 };
 
     return {
       today: pick(today),
