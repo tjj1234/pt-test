@@ -9,9 +9,15 @@
 
 import { registerTool, listToolsForWorkspace, validateToolCall, executeTool } from "../../shell/tools/registry.cjs";
 import { CONTRACTS } from "../../business/attribution/contracts/validate.js";
+import { setDb } from "../../shell/permissions/index.cjs";
 
 async function main() {
   console.log("🧪 开始 Tool Registry 契约测试");
+
+  // 本测试只验证「注册 → 列出 → 校验 → 执行」的接线，不测真实数据库。
+  // 注入一个返回 owner 角色的 mock db，让 checkPermission 不落到真实 PGlite，
+  // 使测试在无数据库的 CI 环境里也能独立、可重复地运行。
+  setDb({ query: async () => ({ rows: [{ role: "owner" }] }) });
 
   // 1. 注册工具
   const exampleTool = CONTRACTS.toolRegistration.examples[0];

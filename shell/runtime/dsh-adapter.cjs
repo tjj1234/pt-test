@@ -273,6 +273,58 @@ function makeProfile(dshHome, settingsTemplate, persistentRunner) {
 }
 
 /* ============================================================================
+ * 子进程环境白名单 + 身份隔离（C2 安全边界）
+ * ============================================================================
+ * DSH 子进程不再继承父进程完整 process.env：原来 Object.assign({}, process.env)
+ * 会把服务端自己的密钥 / DB 连接串 / 登录口令 / 模型 API Key / 看板只读 token 等
+ * 原样透给每个租户的子进程。这里改成白名单：
+ *   · 只复制平台运行必需的键（PATH / HOME / TEMP / Windows SystemRoot …）；
+ *   · 只显式注入业务真正需要的键（DSH_HOME / NODE_PATH / POWERTOKENS_* /
+ *     DASH_PORT / PT_DASH_INTERNAL_KEY）。
+ * 其余一律不下发。
+ */
+
+// 平台运行必需变量：缺失时 node 自身或 DSH/npm 会直接起不来（跨平台白名单）。
+const RUNTIME_ENV_KEYS = [
+  "PATH", "PATHEXT", "SystemRoot", "WINDIR", "ComSpec",
+  "TEMP", "TMP", "TMPDIR",
+  "HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH", "USERNAME",
+  "LANG", "LC_ALL", "LC_CTYPE",
+];
+
+function buildDshChildEnv(parentEnv, opts = {}) {
+  const env = {};
+  for (const k of RUNTIME_ENV_KEYS) {
+    if (parentEnv && parentEnv[k] != null) env[k] = parentEnv[k];
+  }
+  if (opts.dshHome != null) env.DSH_HOME = String(opts.dshHome);
+  if (opts.nodePath) env.NODE_PATH = opts.nodePath;
+  if (opts.powerTokensApiKey != null) env.POWERTOKENS_API_KEY = String(opts.powerTokensApiKey);
+  if (opts.powerTokensBaseUrl) env.POWERTOKENS_BASE_URL = opts.powerTokensBaseUrl;
+  if (opts.dashInternalKey) env.PT_DASH_INTERNAL_KEY = opts.dashInternalKey;
+  if (opts.dashPort != null) env.DASH_PORT = String(opts.dashPort);
+  return env;
+}
+
+/**
+ * 子进程 OS 身份隔离评估（C2）：
+ *   · Windows：spawn 不支持 uid/gid，无法做 OS 级身份隔离 —— 依赖「每租户 cwd
+ *     工作目录隔离 + 白名单 env」这一层，返回空身份。
+ *   · POSIX：仅当调用方显式通过 opts.childUid / opts.childGid（或 PT_DSH_UID /
+ *     PT_DSH_GID）提供、且父进程具备降权能力时，才设置 uid/gid；默认不自动猜测，
+ *     避免在无特权环境下把 spawn 搞挂。未配置时返回空身份。
+ */
+function buildSpawnIdentity(opts = {}) {
+  if (process.platform === "win32") return {};
+  const uid = opts.childUid != null ? opts.childUid : (process.env.PT_DSH_UID ? Number(process.env.PT_DSH_UID) : undefined);
+  const gid = opts.childGid != null ? opts.childGid : (process.env.PT_DSH_GID ? Number(process.env.PT_DSH_GID) : undefined);
+  const identity = {};
+  if (Number.isInteger(uid) && uid >= 0) identity.uid = uid;
+  if (Number.isInteger(gid) && gid >= 0) identity.gid = gid;
+  return identity;
+}
+
+/* ============================================================================
  * createDshRuntime —— 构造满足 Runtime Contract 的真实 DSH 实例
  * ========================================================================== */
 function createDshRuntime(opts = {}) {
@@ -424,14 +476,21 @@ function createDshRuntime(opts = {}) {
     const fdErr = fs.openSync(errFile, "w");
 
     const profile = makeProfile(dshHome, settingsTemplate, persistentRunner);
-    const env = Object.assign({}, process.env, { DSH_HOME: dshHome });
-    if (opts.nodePath) env.NODE_PATH = opts.nodePath;
-    env.POWERTOKENS_API_KEY = String(spec.apiKey || "");
+    const env = buildDshChildEnv(process.env, {
+      dshHome,
+      nodePath: opts.nodePath,
+      powerTokensApiKey: String(spec.apiKey || ""),
+      powerTokensBaseUrl: process.env.POWERTOKENS_BASE_URL,
+      dashInternalKey: process.env.PT_DASH_INTERNAL_KEY,
+      dashPort: process.env.DASH_PORT,
+    });
+    const identity = buildSpawnIdentity(opts);
 
     let child;
     try {
       child = spawn(process.execPath, [entry, "--profile", profile.name], {
         cwd: spec.workspace, env, stdio: ["pipe", fdOut, fdErr], windowsHide: true,
+        ...identity,
       });
     } catch (e) {
       try { fs.closeSync(fdOut); fs.closeSync(fdErr); } catch (e2) {}
@@ -718,4 +777,6 @@ module.exports = {
   findDshEntry,
   dshMissingHint,
   makeProfile,
+  buildDshChildEnv,
+  buildSpawnIdentity,
 };

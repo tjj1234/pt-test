@@ -206,7 +206,11 @@ async function validateToolCall(toolName, args, context) {
   }
 
   // TODO: 输入参数验证（根据 inputSchema）
-  // B2: 暂不实现完整 JSON Schema 验证，仅检查必要字段存在性
+  // B2: 暂不实现完整 JSON Schema 验证，仅检查必要字段存在性。
+  // 已知问题 C5（暂缓，不在此单独补）：真正要解决的是「所有工具走同一套校验逻辑」——
+  // 即 REST 注册的 registry 工具与 persistent-runner 里 agentCtx.tools.register() 直连注册的
+  // DSH 工具（media.route / ga.query / attribution.* / tracking_quality_audit 等）共用同一校验路径。
+  // 否则此处单独补 inputSchema 校验，DSH 直连工具仍绕过本路径，等于头痛医头。
 
   return true;
 }

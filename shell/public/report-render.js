@@ -469,6 +469,12 @@
 
   // 返回 report 主体 HTML（不含抽屉外壳）。纯函数，可单测。
   function renderReportHTML(input) {
+    // C4：一轮对话可能连续产出多份 report（ga.query / attribution.quality / tracking_quality_audit）。
+    // 前端收到的 report 是数组时，把每一份都渲染出来，中间用分隔线隔开，避免只剩最后一份。
+    if (Array.isArray(input)) {
+      const blocks = input.map((one) => renderReportHTML(one)).filter(Boolean);
+      return blocks.join('<div style="border:0;border-top:1px solid var(--line);margin:20px 0"></div>');
+    }
     const r = coerceFields(normalizeReport(input) || {});
     const title = (r.title != null) ? String(r.title) : "未命名报告";
     let meta = (r.meta != null) ? String(r.meta) : "";
