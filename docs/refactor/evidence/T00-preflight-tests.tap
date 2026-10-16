@@ -1,0 +1,15 @@
+✔ known offline checks pass without loading services (3.849375ms)
+✔ tampering and mock flags fail closed while snapshot mismatch is informational (2.928208ms)
+✔ explicit entry version mismatch and web snapshot are detected (3.549667ms)
+✔ secrets, paths and malicious version strings never enter output (2.917125ms)
+✔ missing fixtures produce bounded failure without exposing read errors (2.484708ms)
+✔ legacy snapshot divergence does not block unified default metadata (2.497375ms)
+✔ default entry drift is blocked even when migration directory copies match (2.530833ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 50.263958
