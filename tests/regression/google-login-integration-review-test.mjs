@@ -85,6 +85,7 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     assert.ok(runId, 'chat response identifies its durable run');
     const chatFrames = await chat.text();
     assert.match(chatFrames, /\"done\":true/);
+    assert.match(chatFrames, /^id: \d+$/m, 'legacy chat SSE includes durable event cursors for browser resume');
     let run;
     for (let i = 0; i < 30; i++) {
       const response = await fetch(origin + '/api/runs/' + runId, { headers: { Cookie: authCookie } });

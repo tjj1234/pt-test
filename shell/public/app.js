@@ -821,17 +821,21 @@ async function runChat(payload) {
       // 流式：逐段消费 SSE，边到边打字机渲染
       const reader = r.body.getReader();
       const decoder = new TextDecoder("utf-8");
-      let buf = "", acc = "", gotDone = false;
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += decoder.decode(value, { stream: true });
-        let idx;
-        while ((idx = buf.indexOf("\n\n")) >= 0) {
-          const frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
-          const line = frame.split("\n").find((l) => l.indexOf("data: ") === 0);
-          if (!line) continue;
-          let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
+      let buf = "", acc = "", gotDone = false, lastSeq = 0;
+      const runId = r.headers.get("x-agent-run-id");
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let idx;
+          while ((idx = buf.indexOf("\n\n")) >= 0) {
+            const frame = buf.slice(0, idx); buf = buf.slice(idx + 2);
+            const idLine = frame.split("\n").find((l) => l.indexOf("id: ") === 0);
+            if (idLine && /^\d+$/.test(idLine.slice(4))) lastSeq = Math.max(lastSeq, Number(idLine.slice(4)));
+            const line = frame.split("\n").find((l) => l.indexOf("data: ") === 0);
+            if (!line) continue;
+            let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
           // 打字机和工具步骤只画在「用户当前正在看的那条对话」上
           if (obj.connecting && viewing()) { showConnecting(t); }
           if (obj.artifact && viewing()) { pushArtifact(obj.artifact); openArtifactPane(); }
@@ -870,14 +874,50 @@ async function runChat(payload) {
             else { if (Array.isArray(obj.messages)) renderChat(obj.messages); else bubbleSys("执行失败：" + (obj.error || "")); cm.textContent = ""; }
             await refreshList();
           }
+          }
         }
+      } catch (streamError) {
+        // The durable Run survives a dropped browser connection; resume below from lastSeq.
       }
-      // 保险：流异常结束却没收到 done
+      // 网络断开只会分离浏览器订阅，Run 仍由服务端执行。按持久事件游标补读，直到收到终态。
       if (!gotDone) {
-        clearInterval(tick); t.remove();
-        if (!viewing()) { markUnread(targetId); await refreshList(); return; }
-        if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
-        await refreshList();
+        if (runId) {
+          let finished = false, attempts = 0;
+          while (!finished && attempts < 1800) {
+            try {
+              const replay = await fetch("/api/runs/" + encodeURIComponent(runId) + "/events?after=" + lastSeq + "&limit=500", { credentials: "same-origin" });
+              if (!replay.ok) break;
+              const page = await replay.json();
+              for (const event of (page.events || [])) {
+                lastSeq = Math.max(lastSeq, Number(event.seq) || 0);
+                const payload = event.payload || {};
+                if (event.type === "delta") { acc += payload.text || ""; if (viewing()) streamInto(t, acc); }
+                else if (event.type === "step" && viewing()) {
+                  const live = t.querySelector(".steps-live");
+                  if (live) { const d = document.createElement("div"); d.className = "step-live" + (payload.step && payload.step.isError ? " err" : ""); d.textContent = (payload.step && payload.step.name || "工具"); live.appendChild(d); }
+                } else if (event.type === "artifact" && viewing() && payload.artifact) { pushArtifact(payload.artifact); openArtifactPane(); }
+                else if (event.type === "done") {
+                  finished = true; gotDone = true; clearInterval(tick); t.remove();
+                  if (viewing()) {
+                    const latest = await fetch("/api/conversations/" + encodeURIComponent(targetId), { credentials: "same-origin" });
+                    const detail = await latest.json().catch(() => null);
+                    const messages = detail && detail.conversation && detail.conversation.messages;
+                    if (Array.isArray(messages)) renderChat(messages); else if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                    cm.textContent = event.payload && event.payload.state === "cancelled" ? stoppedChipText("user") : "";
+                  }
+                  await refreshList();
+                }
+              }
+            } catch (e) { /* transient network failure; retry from the last durable sequence */ }
+            if (!finished) { attempts++; await new Promise((resolve) => setTimeout(resolve, 1000)); }
+          }
+        }
+        if (!gotDone) {
+          clearInterval(tick); t.remove();
+          if (!viewing()) { markUnread(targetId); await refreshList(); return; }
+          if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+          await refreshList();
+        }
       }
     } else {
       // 非流式（预检错误 / needKey / busy 等 JSON）

@@ -1662,11 +1662,12 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
       const writeLegacyEvent = async (event) => {
         if (streamClosed || res.writableEnded) return;
         const p = event.payload || {};
-        if (event.type === "queued") res.write("data: {\"queued\":true}\n\n");
-        else if (event.type === "connecting") res.write("data: {\"connecting\":true}\n\n");
-        else if (event.type === "delta") res.write("data: " + JSON.stringify({ delta: p.text || "" }) + "\n\n");
-        else if (event.type === "step") res.write("data: " + JSON.stringify({ step: p.step }) + "\n\n");
-        else if (event.type === "artifact") res.write("data: " + JSON.stringify({ artifact: p.artifact }) + "\n\n");
+        const frame = (data) => res.write("id: " + event.seq + "\ndata: " + JSON.stringify(data) + "\n\n");
+        if (event.type === "queued") frame({ queued: true });
+        else if (event.type === "connecting") frame({ connecting: true });
+        else if (event.type === "delta") frame({ delta: p.text || "" });
+        else if (event.type === "step") frame({ step: p.step });
+        else if (event.type === "artifact") frame({ artifact: p.artifact });
         else if (event.type === "done") {
           const current = await taskStore.getRun(runIdentity, event.runId);
           const conversation = await conversations.get(uid, current.conversationId);
@@ -1680,7 +1681,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
             reply: lastAssistant && lastAssistant.text,
             turns: messages.filter((message) => message.role === "assistant").length,
           }, outcome || {});
-          res.write("data: " + JSON.stringify(donePayload) + "\n\n");
+          frame(donePayload);
           streamClosed = true;
           res.end();
         }
@@ -1713,17 +1714,18 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
           if (closed || event.seq <= last) return;
           last = event.seq;
           const p = event.payload || {};
-          if (event.type === "connecting") res.write("data: {\"connecting\":true}\n\n");
-          else if (event.type === "delta") res.write("data: " + JSON.stringify({ delta: p.text || "" }) + "\n\n");
-          else if (event.type === "step") res.write("data: " + JSON.stringify({ step: p.step }) + "\n\n");
-          else if (event.type === "artifact") res.write("data: " + JSON.stringify({ artifact: p.artifact }) + "\n\n");
+          const frame = (data) => res.write("id: " + event.seq + "\ndata: " + JSON.stringify(data) + "\n\n");
+          if (event.type === "connecting") frame({ connecting: true });
+          else if (event.type === "delta") frame({ delta: p.text || "" });
+          else if (event.type === "step") frame({ step: p.step });
+          else if (event.type === "artifact") frame({ artifact: p.artifact });
           else if (event.type === "done") {
             const current = await taskStore.getRun(runIdentity, runId);
             const convNow = await conversations.get(uid, submission.run.conversationId);
             const messagesNow = convNow ? convNow.messages : [];
             const stopped = current.state === "cancelled";
             const lastAssistant = [...messagesNow].reverse().find((m) => m.role === "assistant");
-            res.write("data: " + JSON.stringify({ done: true, ok: current.state === "completed", stopped, stopReason: stopped ? "user" : undefined, messages: messagesNow, reply: lastAssistant && lastAssistant.text, turns: messagesNow.filter((m) => m.role === "assistant").length }) + "\n\n");
+            frame({ done: true, ok: current.state === "completed", stopped, stopReason: stopped ? "user" : undefined, messages: messagesNow, reply: lastAssistant && lastAssistant.text, turns: messagesNow.filter((m) => m.role === "assistant").length });
             closed = true; unsubscribe(); res.end();
           }
         };
