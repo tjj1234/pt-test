@@ -29,7 +29,7 @@
 | T03 | 存储模块独立通过，执行闭环待接线 | `21021432c6bfc602d3a1b1223cad33b13e3e56be`；独立review与实现共测试通过；尚未接HTTP、scheduler、runner、预算/恢复 |
 | T04 | 纯调度模块独立通过，真实runtime并发待实现 | `06e88e46df22cfd393e2382354dc340575438a36`；复验19/19；尚未证明DSH SDK同进程真实并发、取消收敛、事件与资源边界 |
 | T06 | 能力生命周期纯模块独立通过，目录接线待实现 | `21098eb92133f0a341f4548a23d6789cacd74ad4`；首验3处FAIL、修复后21/21独立通过；尚未接每日目录同步、持久缓存、权限范围或AUTO运行时 |
-| T05 | schema校验子范围首验不通过，修复中 | 独立反例发现同名新schema未带execute时可能沿用旧executor，形成schema/executor版本错配；已交实现者修复并新增实现测试，等待独立复验。即使复验通过，也只覆盖Registry路径；DSH直连工具桥接及完整权限/报告/沙箱仍未验 |
+| T05 | Registry Schema校验子范围 PASS；整包仍未完成 | commit `39d324dd32de9fbf39c49749f2c07798ef6677a2`；Ajv精确直接依赖、非法输入在logger/executor前拒绝、版本竞态和stale executor首验缺陷均独立复验通过（18/18）。首验FAIL→修复→PASS证据见`docs/refactor/evidence/T05-schema-review.md`。DSH直连工具桥接及完整权限/报告/沙箱仍未验 |
 | T10 | 产物路径子范围修复并独立通过，整包未完成 | commit `33210cbf8a9d79b68aa9f2a39ad7a48ac65efc77`；`artifacts.cjs` 跨平台反斜杠归一化、拒绝盘符相对路径及C0/C1控制字符；实现75/75 + 边界1/1，独立反例发现DEL/NEL后修复复验通过，见`docs/refactor/evidence/T10-artifact-path-review.md`。产物归属、持久化、下载与文档包格式仍待验 |
 | T07–T09、T11–T18 | 未交付 | 按依赖批次推进；不会以模块自测替代独立验收或端到端验收 |
 

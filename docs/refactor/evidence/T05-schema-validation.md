@@ -1,6 +1,6 @@
 # T05 · Registry JSON Schema 输入校验子范围
 
-日期：2026-10-16 17:20–17:30 JST。实施者：架构子 Agent；主集成者：Codex。分支：`feature/northstar-phase1-refactor-20261016`。状态：**Registry JSON Schema 输入校验子范围独立验收 PASS；不是 T05 全包完成，也未统一 DSH 直连注册路径。** 提交待做；合并和部署未做。
+日期：2026-10-16 17:20–17:30 JST。实施者：架构子 Agent；主集成者：Codex。分支：`feature/northstar-phase1-refactor-20261016`。commit：`39d324dd32de9fbf39c49749f2c07798ef6677a2`。状态：**Registry JSON Schema 输入校验子范围独立验收 PASS；不是 T05 全包完成，也未统一 DSH 直连注册路径。** 未合并、未部署、未push。
 
 ## 变更与依赖证据
 
