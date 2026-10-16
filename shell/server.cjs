@@ -36,6 +36,7 @@ const artifactsMod = require("./runtime/artifacts.cjs");
 // ---- 模块接线（全部最终名；conversations / tenant 为对话窗口化后的新版）----
 const { initAuth } = require("./auth.cjs");
 const { handleAuthRoutes, sessionFromCookie } = require("./auth-routes.cjs");
+const { createGoogleAuthRoutes } = require("./auth-google-routes.cjs");
 const keysMod = require("./keys.cjs");
 const { handleKeyRoutes } = require("./key-routes.cjs");
 const { handleMemberRoutes } = require("./member-routes.cjs");
@@ -99,13 +100,6 @@ const DASH_PORT = Number(arg("--dashboard-port", process.env.PT_DASH_PORT || 809
 // 能经 process.env.DASH_PORT 回连看板内部只读接口；PT_DASH_INTERNAL_KEY 已随 process.env 继承。
 process.env.DASH_PORT = String(DASH_PORT);
 const DASH_TOKEN = arg("--dashboard-token", process.env.PT_DASH_TOKEN || null); // P0-2：不再内置默认 token
-// P0-1 安全：取消固定默认密码。显式提供 PT_SHELL_PASSWORD / --password 才用；
-// 否则生成随机密码；非回环监听 + 无显式密码 → 直接拒绝启动（见下方检查）。
-const PASSWORD_EXPLICIT = process.env.PT_SHELL_PASSWORD
-  || (process.argv.indexOf("--password") >= 0 ? process.argv[process.argv.indexOf("--password") + 1] : null)
-  || null;
-const PASSWORD = PASSWORD_EXPLICIT || crypto.randomBytes(12).toString("base64url");
-const USERNAME = arg("--user", process.env.PT_SHELL_USER || "admin");
 const DSH_TIMEOUT_MS = Number(arg("--timeout", 300000));
 
 // ---- 监听地址（默认 127.0.0.1，容器/反代部署用 0.0.0.0）----
@@ -114,23 +108,11 @@ const LISTEN_HOST = process.env.PT_LISTEN_HOST || "127.0.0.1";
 // P0-4 安全：生产 HTTPS 部署设 PT_COOKIE_SECURE=1 → Cookie 加 Secure + 响应加 HSTS
 const COOKIE_SECURE = process.env.PT_COOKIE_SECURE === "1";
 
-// P0-1 安全：非回环监听（0.0.0.0 / 公网）时，必须显式设置管理员密码，否则拒绝启动。
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
-if (!PASSWORD_EXPLICIT && !LOOPBACK_HOSTS.has(String(LISTEN_HOST).toLowerCase())) {
-  console.error("【拒绝启动】监听地址 = " + LISTEN_HOST + "（非回环），但未设置 PT_SHELL_PASSWORD。");
-  console.error("  生产环境必须显式设置 PT_SHELL_PASSWORD，禁止用随机/默认密码暴露到非本机网络。");
-  process.exit(1);
-}
-if (!PASSWORD_EXPLICIT) {
-  console.log("★ 未设置 PT_SHELL_PASSWORD，已生成随机管理员密码（仅本次启动打印一次，请记下）: " + PASSWORD);
-}
-
 // 身份库 / master key 落点（可用环境变量覆盖，便于自测用临时目录）
 const DB_DIR = process.env.PT_DB_DIR || path.join(REPO_ROOT, "db");
 const MASTER_KEY_FILE = process.env.PT_MASTER_KEY_FILE || path.join(REPO_ROOT, "secrets", "master.key");
 
 // ---- 登记「绝不允许写进日志」的明文串（密码 / 看板只读 token）----
-log.addSecret(PASSWORD);
 if (DASH_TOKEN) log.addSecret(DASH_TOKEN);
 
 // 自测开关：PT_CHAT_DRYRUN=1 时 /api/chat 不 spawn DSH
@@ -162,6 +144,7 @@ const UPLOAD_MIME = {
 };
 
 let auth = null;                 // 身份库句柄
+let googleRoutes = null;         // Google OAuth：产品唯一登录入口
 let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
 let memory = null;               // 用户长期记忆 / 所选模型
@@ -945,6 +928,16 @@ async function handle(req, res) {
     });
   }
 
+  // OAuth callback is a cross-site top-level GET; its persisted state and browser binding cookie
+  // provide the CSRF boundary. Mount before legacy password routes.
+  if (googleRoutes && await googleRoutes.handle(req, res)) return;
+
+  const p = new URL(req.url, "http://127.0.0.1:" + PORT).pathname;
+  if (["/api/login", "/api/auth/login", "/api/auth/register", "/api/auth/forgot-password",
+       "/api/auth/reset-password", "/api/auth/change-password"].includes(p)) {
+    return json(res, 410, { ok: false, code: "GOOGLE_LOGIN_REQUIRED", error: "请使用 Google 登录" });
+  }
+
   // ---- P1-1 CSRF：所有写操作（非 GET/HEAD/OPTIONS）校验同源 ----
   const method0 = (req.method || "GET").toUpperCase();
   if (method0 !== "GET" && method0 !== "HEAD" && method0 !== "OPTIONS" && !csrfOk(req)) {
@@ -954,8 +947,6 @@ async function handle(req, res) {
   // ---- 先交给身份路由与 key 路由（含旧 /api/login|logout|me 别名）----
   if (auth && (await handleAuthRoutes(req, res, auth))) return;
   if (auth && keys && (await handleKeyRoutes(req, res, auth, keys))) return;
-
-  const p = new URL(req.url, "http://127.0.0.1:" + PORT).pathname;
 
   // ---- 优雅停机端点（仅在设 PT_TEST_SHUTDOWN_TOKEN 时存在）----
   if (process.env.PT_TEST_SHUTDOWN_TOKEN && p === "/__test_shutdown" && req.method === "POST") {
@@ -970,8 +961,7 @@ async function handle(req, res) {
   if (p === "/login" || p === "/login.html") return serveFile(res, path.join(PUBLIC, "login.html"));
   if (p === "/settings" || p === "/settings.html") return serveFile(res, path.join(PUBLIC, "settings.html"));
   // ---- U3：忘记/重置密码页（登出态公开页，不能套 authed 重定向）----
-  if (p === "/forgot" || p === "/forgot.html") return serveFile(res, path.join(PUBLIC, "forgot.html"));
-  if (p === "/reset" || p === "/reset.html") return serveFile(res, path.join(PUBLIC, "reset.html"));
+  if (p === "/forgot" || p === "/forgot.html" || p === "/reset" || p === "/reset.html") { res.writeHead(302, { Location: "/login" }); return res.end(); }
   if (p === "/" || p === "/index.html") {
     if (!(await authed(req))) { res.writeHead(302, { Location: "/login" }); return res.end(); }
     return serveFile(res, path.join(PUBLIC, "index.html"));
@@ -1642,7 +1632,7 @@ function startHeartbeat() {
 }
 
 /* ============================================================================
- * 启动：① initAuth（迁移 + 种默认管理员）→ ② initKeys（主密钥）→ ③ initConversations → ④ 监听
+ * 启动：迁移身份／存储 → Google 单一登录 → 用户首次登录时按租户建工作区 → 监听
  * ========================================================================== */
 async function main() {
   // B6-fix：门禁③ - 检查 DSH 环境是否泄漏 RYZE_MCP_TOKEN
@@ -1654,19 +1644,22 @@ async function main() {
   auth = await initAuth({
     dataDir: DB_DIR,
     migrationsDir: path.join(SHELL, "db-migrations"),
-    defaultAdmin: { username: USERNAME, password: PASSWORD },
   });
-  
-  // B3-fix：为默认管理员创建 workspace
-  const defaultAdminTenant = await auth.db.query("SELECT id, tenant_id FROM users WHERE username = $1", [USERNAME]);
-  if (defaultAdminTenant.rows.length > 0) {
-    const { createWorkspace } = require("./workspace/index.cjs");
-    await createWorkspace("ws_" + defaultAdminTenant.rows[0].tenant_id, defaultAdminTenant.rows[0].tenant_id);
-    
-    // B14：为演示租户（默认管理员）调用内部接口，签发 HMAC 分析 token
-    const demoTenantId = defaultAdminTenant.rows[0].tenant_id;
-    const { callAnalyticsInternalTokenEndpoint } = require("./auth.cjs");
-    await callAnalyticsInternalTokenEndpoint(demoTenantId, "演示租户分析 token");
+  googleRoutes = await createGoogleAuthRoutes({
+    db: auth.db,
+    config: process.env,
+    getClientKey: (req) => clientIp(req),
+    onAuthenticated: async (result) => {
+      const tenantId = result?.user?.tenant_id;
+      if (typeof tenantId !== "string" || !/^[0-9a-f-]{36}$/i.test(tenantId)) throw new Error("Invalid authenticated tenant");
+      const { createWorkspace } = require("./workspace/index.cjs");
+      createWorkspace("ws_" + tenantId, tenantId);
+      tenantMod.ensureTenantWorkspace(tenantId);
+    },
+  });
+  const loopbackHosts = new Set(["127.0.0.1", "localhost", "::1"]);
+  if (!loopbackHosts.has(String(LISTEN_HOST).toLowerCase()) && !googleRoutes.configured) {
+    throw new Error("Google OAuth must be configured before listening on a non-loopback interface");
   }
   keys = await keysMod.initKeys({ db: auth.db, masterKeyFile: MASTER_KEY_FILE });
   conversations = await convMod.initConversations(auth.db);
@@ -1699,7 +1692,7 @@ async function main() {
   }
   
   pruneUploads(); // P1-2：启动清理过期上传
-  log.info("init", { stage: "ready", dbDir: DB_DIR, username: USERNAME, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
+  log.info("init", { stage: "ready", dbDir: DB_DIR, googleAuthConfigured: googleRoutes.configured, rateChatPerMin: RATE_CHAT_PER_MIN, dryRunChat: DRY_RUN_CHAT, dashTenantInject: DASH_TENANT_INJECT, trustProxy: process.env.TRUST_PROXY === "1" });
 
   pickPort(PORT, (port) => {
     http.createServer((req, res) => {
@@ -1752,7 +1745,7 @@ async function main() {
       console.log("");
       console.log("  ★ 这就是产品对外的唯一入口（DSH 本身不开端口）");
       console.log("      http://127.0.0.1:" + port + "   （监听 " + LISTEN_HOST + "）");
-      console.log("  登录： " + USERNAME + "（密码见启动配置，不在屏幕/日志打印）");
+      console.log("  登录：Google OAuth " + (googleRoutes.configured ? "已配置" : "未配置；登录暂不可用"));
       console.log("");
       console.log("  —— 隔离边界（多租户）——");
       console.log("    DSH_HOME      = " + DSH_HOME);
@@ -1768,7 +1761,7 @@ async function main() {
       console.log("  ★ 设置页（存 PT key / BYOK）：http://127.0.0.1:" + port + "/settings");
       console.log("  ★ 探活端点：/healthz（供监控/负载均衡探活）");
       console.log("  ★ 日志：结构化 JSON 行 → " + log.LOG_DIR + "（按天切割，零泄露）");
-      console.log("  ★ 身份库已就绪：账号/会话落库（" + DB_DIR + "），重启不丢");
+      console.log("  ★ 身份库已就绪：Google 身份／会话落库（" + DB_DIR + "），重启不丢");
       console.log("  ★ 限流已启用（chat 限流 " + RATE_CHAT_PER_MIN + "/分）");
       console.log("  ★ 并发：同一用户同一时刻只允许一个生成中的对话；不同用户并行");
       console.log("  ★ TRUST_PROXY=" + (process.env.TRUST_PROXY === "1" ? "开" : "关")

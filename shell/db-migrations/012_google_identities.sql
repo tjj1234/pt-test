@@ -19,3 +19,7 @@ CREATE TABLE IF NOT EXISTS google_oauth_states (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_google_oauth_expiry ON google_oauth_states(expires_at);
+-- Force existing password-only browser sessions to re-enter through Google OIDC after upgrade.
+-- Keep users and all tenant assets intact; preserve a session only when an identity is already bound.
+DELETE FROM sessions s
+WHERE NOT EXISTS (SELECT 1 FROM google_identities g WHERE g.user_id = s.user_id);

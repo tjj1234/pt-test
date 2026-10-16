@@ -87,6 +87,10 @@ async function createGoogleAuth({db,config=process.env,fetchImpl=globalThis.fetc
       const user=await tx.query('SELECT id FROM users WHERE id=$1',[userId]);
       if(!user.rows.length)throw new GoogleAuthError('BINDING_USER_NOT_FOUND');
       await tx.query('INSERT INTO google_identities(issuer,subject,user_id,email,binding_approved_by) VALUES ($1,$2,$3,$4,$5)',[ISSUER,subject,userId,email.toLowerCase(),approvedBy]);
+      // A trusted binding changes the authentication authority for this account.
+      // Revoke legacy sessions atomically so a previously issued password cookie
+      // cannot continue to authenticate after the account is migrated.
+      await tx.query('DELETE FROM sessions WHERE user_id=$1',[userId]);
       return {ok:true,userId};
     });
   }

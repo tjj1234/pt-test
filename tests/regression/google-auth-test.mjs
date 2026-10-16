@@ -62,13 +62,15 @@ for(const [name,claims] of Object.entries({issuer:{iss:'https://evil.example'},a
  test('rejects invalid '+name,()=>withFixture(async f=>{f.setClaims(claims);const r=await f.callback(await f.begin());assert.equal(r.ok,false);assert.equal((await f.db.query('SELECT count(*)::int n FROM users')).rows[0].n,0);}));
 }
 
-test('email collision never merges; trusted binding preserves old IDs and assets',()=>withFixture(async f=>{
+test('email collision never merges; trusted binding preserves old IDs and assets and revokes legacy sessions',()=>withFixture(async f=>{
  const tenant=(await f.db.query("INSERT INTO tenants(name) VALUES ('old') RETURNING id")).rows[0];
  const user=(await f.db.query("INSERT INTO users(tenant_id,username,email,password_hash,role) VALUES ($1,'old','Employee@Example.com','invalid','admin') RETURNING id",[tenant.id])).rows[0];
+ await f.db.query("INSERT INTO sessions(user_id,token_hash,expires_at) VALUES ($1,'legacy-hash',NOW()+INTERVAL '1 day')",[user.id]);
  assert.equal((await f.callback(await f.begin())).code,'IDENTITY_BINDING_REQUIRED');
  assert.equal((await f.db.query('SELECT count(*)::int n FROM tenants')).rows[0].n,1);
  await assert.rejects(f.auth.bindIdentity({issuer:ISSUER,subject:'subject-one',userId:user.id,email:'employee@example.com'}),{code:'INVALID_TRUSTED_BINDING'});
  await f.auth.bindIdentity({issuer:ISSUER,subject:'subject-one',userId:user.id,email:'employee@example.com',approvedBy:'trusted-migration-operator'});
+ assert.equal((await f.db.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1',[user.id])).rows[0].n,0);
  const r=await f.callback(await f.begin());assert.equal(r.user.id,user.id);assert.equal(r.tenant.id,tenant.id);
 }));
 

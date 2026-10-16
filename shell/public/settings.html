@@ -16,8 +16,6 @@
 
   .settings-card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:22px 22px 20px;margin-bottom:18px}
   .settings-card > section{margin-bottom:18px}
-  .settings-details{margin-bottom:18px;border:1px solid var(--line);border-radius:14px;background:#fff;overflow:hidden}
-  #pwf{padding:4px 22px 22px}
 
   /* 输入框 / 标签：原来靠 .login-card 的样式，现在由设置页自己提供，避免依赖登录页 */
   .settings-main label{display:block;font-size:12px;color:var(--sub);margin:16px 0 6px}
@@ -25,12 +23,6 @@
     font-family:inherit;font-size:14px;box-sizing:border-box;background:#fff;color:var(--ink)}
   .settings-main input:focus{outline:none;border-color:#1a1a1a;box-shadow:0 0 0 3px rgba(26,26,26,.08)}
 
-  /* 折叠的「修改登录密码」区块：默认收起，点了 summary 才展开 */
-  .settings-summary{list-style:none;cursor:pointer;padding:16px 18px;font-size:14px;font-weight:600;
-    color:var(--ink);user-select:none}
-  .settings-summary::-webkit-details-marker{display:none}
-  .settings-summary::before{content:"▸";display:inline-block;margin-right:8px;color:var(--sub);transition:transform .15s}
-  details[open] > .settings-summary::before{transform:rotate(90deg)}
 
   /* 下面这些功能类都在 styles.css 里、与登录页视觉无关，直接沿用，不在本页重造 */
   .keyrow{display:flex;gap:8px}
@@ -80,7 +72,6 @@
   @media (max-width:480px){
     .settings-main{padding:16px 12px 40px}
     .settings-card{padding:18px 16px 16px}
-    #pwf{padding:4px 16px 18px}
   }
 </style>
 </head>
@@ -134,19 +125,6 @@
     <p class="settings-foot"><a href="/">返回工作区</a></p>
   </form>
 
-  <!-- U3：修改登录密码（与 PT Key 绑定互不干扰，独立区块；默认折叠，点了再展开） -->
-  <details class="settings-details" id="pwWrap">
-    <summary class="settings-summary">修改登录密码</summary>
-    <form id="pwf" autocomplete="off">
-      <label for="cp">当前密码</label><input id="cp" type="password" autocomplete="current-password">
-      <label for="np">新密码</label><input id="np" type="password" autocomplete="new-password" placeholder="至少 8 位">
-      <div class="pw-meter" id="pwMeter2" hidden><div class="pw-bar"><span class="pw-bar-fill" id="pwBar2"></span></div><div class="pw-tip" id="pwTip2"></div></div>
-      <label for="np2">确认新密码</label><input id="np2" type="password" autocomplete="new-password" placeholder="再输一遍">
-      <div class="pw-match" id="pwMatch2" hidden></div>
-      <button class="btn" id="pwSave" type="submit">更新密码</button>
-      <div class="err" id="pwe"></div>
-    </form>
-  </details>
 </main>
 <!-- M7：解除授权前的「解除影响提醒」弹框 -->
 <div class="modal-mask" id="revokeModal" role="dialog" aria-modal="true" aria-labelledby="revokeTitle">
@@ -160,6 +138,4 @@
   </div>
 </div>
 <script src="/assets/settings.js"></script>
-<script src="/assets/pw-strength.js"></script>
-<script src="/assets/settings-pw.js"></script>
 </body></html>
