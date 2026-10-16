@@ -52,8 +52,8 @@ function isArtifactName(name) {
  */
 function isSafeRel(rel) {
   const s = String(rel || "");
-  if (!s || s.length > 1024) return false;
-  if (/^[a-zA-Z]:[\\/]/.test(s)) return false;          // C:\... 或 C:/...
+  if (!s || s.length > 1024 || /[\x00-\x1f\x7f-\x9f]/.test(s)) return false;
+  if (/^[a-zA-Z]:/.test(s)) return false;              // Includes drive-relative C:foo
   if (s.charAt(0) === "/" || s.charAt(0) === "\\") return false; // 绝对路径
   const parts = s.split(/[\\/]+/);
   for (const p of parts) {
@@ -65,13 +65,13 @@ function isSafeRel(rel) {
 
 /** 相对路径 -> 前端可直接访问的同源 URL（租户校验由 /api/artifact 做）。 */
 function artifactUrlFor(rel) {
-  return "/api/artifact?p=" + encodeURIComponent(String(rel || "").split(path.sep).join("/"));
+  return "/api/artifact?p=" + encodeURIComponent(String(rel || "").replace(/\\/g, "/"));
 }
 
 /** 补齐 kind / url / name 等展示字段；缺字段或类型不支持时返回 null。 */
 function normalizeArtifact(a) {
   if (!a || !a.rel) return null;
-  const rel = String(a.rel).split(path.sep).join("/");
+  const rel = String(a.rel).replace(/\\/g, "/");
   if (!isSafeRel(rel)) return null;
   const base = rel.slice(rel.lastIndexOf("/") + 1);
   const kind = artifactKind(base);
