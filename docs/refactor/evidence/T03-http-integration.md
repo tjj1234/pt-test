@@ -1,6 +1,6 @@
 # T03 · 持久 Run 的 HTTP/SSE 接线证据
 
-日期：2026-10-16。分支：`feature/northstar-phase1-refactor-20261016`。验证时基线 HEAD：`4b98e570f941f773eba79719769734da81b072e8`；接线 commit：`f484924376bf01645a7f709a35631599b8c1e169`；排队HTTP验收测试与证据 commit：`6b72810b7cea80bf1fccb608ecf6a836688822bf`。结论：**HTTP接线与本地集成子范围通过；T03整包仍未完成。**
+日期：2026-10-16。分支：`feature/northstar-phase1-refactor-20261016`。验证时基线 HEAD：`4b98e570f941f773eba79719769734da81b072e8`；接线 commit：`f484924376bf01645a7f709a35631599b8c1e169`；HTTP排队取消验收 commit：`6b72810b7cea80bf1fccb608ecf6a836688822bf`；Last-Event-ID与跨租户边界验收 commit：`d77aa9e1b55bda3a90a968e8ca90d6a996955c3a`。结论：**HTTP接线与本地集成子范围通过；T03整包仍未完成。**
 
 ## 变更范围
 
