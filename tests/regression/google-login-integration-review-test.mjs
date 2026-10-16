@@ -97,6 +97,12 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     const eventPage = await runEvents.json();
     assert.ok(eventPage.events.some((event) => event.type === 'delta'));
     assert.equal(eventPage.events.at(-1).type, 'done');
+    const lastPersistedSeq = eventPage.events.at(-1).seq;
+    const reconnect = await fetch(origin + '/api/runs/' + runId + '/events?stream=1', { headers: { Cookie: authCookie, Accept: 'text/event-stream', 'Last-Event-ID': String(lastPersistedSeq - 1) } });
+    const reconnectFrames = await reconnect.text();
+    assert.equal(reconnect.status, 200);
+    assert.deepEqual([...reconnectFrames.matchAll(/^id: (\d+)$/gm)].map((match) => match[1]), [String(lastPersistedSeq)], 'Last-Event-ID reconnect sends only events after the supplied cursor');
+    assert.deepEqual([...reconnectFrames.matchAll(/^data: (.+)$/gm)].map((match) => JSON.parse(match[1]).type), ['done']);
     const replay = await fetch(origin + '/api/chat', { method: 'POST', headers: chatHeaders, body: JSON.stringify(chatBody) });
     assert.equal(replay.status, 200);
     assert.equal(replay.headers.get('x-agent-run-id'), runId, 'idempotent retry returns the original run');
@@ -110,6 +116,7 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     const secondCallback = await fetch(origin + '/api/auth/google/callback?state=fixture-state-2&code=second-user', { headers: { Cookie: secondBinding.split(';')[0], Origin: 'https://accounts.google.com' }, redirect: 'manual' });
     assert.equal(secondCallback.status, 303);
     const secondCookie = secondCallback.headers.get('set-cookie').split(';')[0];
+    assert.equal((await fetch(origin + '/api/runs/' + runId, { headers: { Cookie: secondCookie } })).status, 404, 'a different tenant cannot read the first user run');
     const secondConversationResponse = await fetch(origin + '/api/conversations', { method: 'POST', headers: { Cookie: secondCookie } });
     const secondConversationId = (await secondConversationResponse.json()).id;
     const holdingResponse = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-hold' }, body: JSON.stringify({ conversationId, message: 'hold worker' }) });
@@ -122,6 +129,8 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     assert.ok(queuedRunId, 'queued chat immediately exposes its run ID');
     const queuedBeforeCancel = await fetch(origin + '/api/runs/' + queuedRunId, { headers: { Cookie: secondCookie } });
     assert.equal((await queuedBeforeCancel.json()).run.state, 'queued', 'second user is actually queued behind the occupied global worker');
+    const crossOwnerCancel = await fetch(origin + '/api/runs/' + queuedRunId + '/cancel', { method: 'POST', headers: { Cookie: authCookie } });
+    assert.equal(crossOwnerCancel.status, 404, 'another tenant cannot cancel the queued task');
     const cancelResponse = await fetch(origin + '/api/runs/' + queuedRunId + '/cancel', { method: 'POST', headers: { Cookie: secondCookie } });
     assert.equal(cancelResponse.status, 200);
     assert.equal((await cancelResponse.json()).stopped, true, 'HTTP cancellation can stop a durably queued run');

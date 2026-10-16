@@ -21,7 +21,7 @@
 |---|---|---|
 | `node --check shell/server.cjs && node --check shell/public/app.js && git diff --check` | PASS | Node v24.14.0；本机语法与diff格式检查。|
 | `node --test tests/regression/task-store-test.mjs tests/regression/task-execution-test.mjs tests/regression/task-store-review-test.mjs tests/regression/session-scheduler-test.mjs tests/regression/run-events-contract-test.mjs` | 21/21 PASS（取消race后专项：1/1） | 隔离临时目录和磁盘PGlite；未读取`.env`，无真实PG/DSH/PT请求。确定性反例以globalLimit=1先占满槽位，将第二个run排队；暂停queued→cancelled写入，释放首任务使第二任务晋升running，再恢复CAS；最终`stopped=true`、持久state=`cancelled`，executor收到AbortSignal。|
-| `node --test tests/regression/google-login-integration-review-test.mjs` | 1/1 PASS | 本地HTTP服务、PGlite、受控双用户Google身份fixture、`PT_CHAT_DRYRUN=1`、`PT_RUNS_GLOBAL=1`。第一用户持有worker期间第二用户实际进入queued；HTTP响应立即给run ID及queued帧；`POST /api/runs/:id/cancel`返回stopped=true，SSE包含done/stopped，持久状态为cancelled；同时验证常规Run事件回读、done末帧、同幂等键返回原run且不重复写用户消息。测试临时密钥与本机`.env`隔离。|
+| `node --test tests/regression/google-login-integration-review-test.mjs` | 1/1 PASS | 本地HTTP服务、PGlite、受控双用户身份fixture、`PT_CHAT_DRYRUN=1`、`PT_RUNS_GLOBAL=1`。第一用户持有worker期间第二用户实际进入queued；响应立即给run ID及queued帧；`POST /api/runs/:id/cancel`返回stopped=true，SSE包含done/stopped且持久状态为cancelled。另验证有效第二租户不能读取或取消他人run；Last-Event-ID从终态done前重连只收到done；常规事件回读、幂等重试不重复写用户消息。测试临时密钥与本机`.env`隔离。|
 | 独立代码复核 `/root/t03_review` | PASS（取消CAS反例修复） | 审查者未修改文件；先独立重现取消竞态，再复核重试逻辑与新增反例测试。其指出本范围仍缺HTTP级强制排队/取消测试。|
 
 ## 已知缺口与结论边界
