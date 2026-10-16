@@ -15,11 +15,11 @@
 环境 macOS、Node `v24.14.0`、声明依赖 PGlite `0.5.8`。依赖由主 Agent 完成 `npm ci` 后使用，未绕过缺失依赖或采用 mock 替代。测试创建系统临时目录和独立 master key；所有数据为合成夹具，不请求 PT；成功或失败均清理测试目录。
 
 1. 用旧 `shell/storage/migrations` 建真实磁盘 PGlite，仅应用原 001–006 六个文件，确认无 chat_usage。
-2. 创建用户与真实 session，写有固定消息、标题的归档对话，写普通记忆和模型内部偏好；通过既有 keys 模块 AES-GCM 加密合成 Key。
+2. 创建用户与真实旧密码 session，写有固定消息、标题的归档对话，写普通记忆和模型内部偏好；通过既有 keys 模块 AES-GCM 加密合成 Key。
 3. 保存旧用户／sessions／conversations／user_memory／api_keys 全行快照，关闭真实连接。
-4. 使用 `createStorage` 默认源重开；当前完整目录含 11 个迁移文件（含 `002_roles.sql`），确认 schema_migrations 与目录逐一对应、无重复；确认 roles／tool_calls／auth_accounts／chat_usage 存在，category／model_name 和 nullable token_count 正确。
-5. 升级后的五类原行与升级前完全一致；原登录态有效，归档、消息、普通记忆、模型选择和 Key 解密正确。登录态检查会更新 last_seen_at，之后用新快照验证后续重启。
-6. 重跑 migrate 不改应用记录；调用 Storage close 和 Adapter close 并发、再次 close，真实 auth 关闭只执行一次；重新打开无新增迁移，所有数据与 session 保留。
+4. 使用 `createStorage` 默认源重开；当前完整目录含 13 个迁移文件（含 `002_roles.sql`、`011_runs_events.sql`、`012_google_identities.sql`），确认 schema_migrations 与目录逐一对应、无重复；确认 roles／tool_calls／auth_accounts／chat_usage 存在，category／model_name 和 nullable token_count 正确。
+5. Google-only 迁移按 T02 决策清除旧密码 session，但保留 users／conversations／user_memory／api_keys；旧token失效。随后通过底层 auth repository 创建一个仅用于存储层验证的 synthetic session，确认既有 auth.getSession 可解析且重启后保留；这不是产品登录路径，也不声称由Google回调签发。Google回调签发与重启的独立验证另见 T01 口径复核／T02 集成证据。归档、消息、普通记忆、模型选择和 Key 解密正确。
+6. 重跑 migrate 不改应用记录；调用 Storage close 和 Adapter close 并发、再次 close，真实 auth 关闭只执行一次；重新打开无新增迁移，资产与绑定身份的新session保留。
 7. 新连接验证事务提交落盘、抛错回滚、回滚后连接仍可查询。
 
 | 完整命令 | 实际结果 |
@@ -34,6 +34,7 @@
 ## 未覆盖与风险
 
 - **真实 PostgreSQL 未执行，不能标 PASS。** 测试发现任何非空 `PT_PG_*` 即失败，避免误触外部数据库；目标 PG 的迁移、连接、备份仍须独立验证。
+- 旧密码 session 被撤销是 T02 Google-only 身份切换的授权策略；未删除旧用户、租户、对话、Key或用量资产。此测试的 repository-level synthetic session 只验证行格式与持久性；不得将其表述为真实产品Google会话或有效的密码登录。Google实际回调链路由独立复核覆盖。
 - Schema 已升级不等于服务生产入口已经全量通过；本批未跑 Google、真实 DSH、多模态、UI 或生产部署。
 - 旧 `storage/migrations` 保留可能误用；README 明确不能向其中添加新迁移，生产默认已收口；显式目录参数为兼容保留，不能据此宣称所有外部脚本都自动改好了。
 - 关闭一次保证限于 Storage 的两个公开入口；直接使用 auth.close 或 db.close 会绕过它，应由产品生命周期统一关闭。auth 仍拥有连接，仓储初始化失败后的统一清理与跨仓储事务化留后续，不隐瞒。

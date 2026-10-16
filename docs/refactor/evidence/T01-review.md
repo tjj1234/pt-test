@@ -31,3 +31,11 @@ node --test tests/regression/storage-review-test.mjs tests/regression/storage-up
 ## 独立复验：本组存储边界通过
 
 主 Agent 修复 SR01/SR02 后，审查者重新执行上述三文件联合命令：**9/9 PASS，exit 0**。查询失败并且 pool.end 也失败时仍得到 PG_CONNECTION_FAILED 安全错误，合成凭据标记不再出现在输出；idle error 也不再输出原始驱动消息。marker 失败原子回滚、修复重试、旧库升级及原 fail-closed 测试同时通过。当前结论更新为 **PASS（本组 PGlite 升级及 fake-driver 错误边界）**，历史 FAIL 保留。真实 PostgreSQL／TLS／生产连接池与恢复验证仍未完成，不能据此扩大验收范围。
+
+## T02 Google-only 迁移后的口径校正
+
+上述9项旧库升级独立复验发生在 Google-only 迁移政策加入之前，当时旧密码session按字节保留。随后 T02 明确退役密码登录并新增迁移删除**未绑定Google身份的旧sessions**；这一安全行为有意改变，不再要求旧密码cookie存活。主 Agent 已更新 `tests/regression/storage-upgrade-test.mjs` 与 T01-storage实施证据：用户、对话、记忆、加密Key保持；旧密码session清空；测试绑定Google身份后新建的session可跨重启保留。调整后 `node --test tests/regression/storage-upgrade-test.mjs tests/regression/google-session-upgrade-test.mjs tests/regression/google-auth-test.mjs` 为 **19/19 PASS**。该口径变化尚未由原T01独立验收者复核，T02集成独立审查仍进行中；不把T01旧的session保留结果套用到新的Google登录语义。
+
+## 当前补充：Google-only 存储口径独立复核已完成
+
+2026-10-16 后续复核见 [T01-google-policy-review.md](T01-google-policy-review.md)。新增真实磁盘PGlite升级→受控真实OIDC callback签发→磁盘重开验证；未绑定旧密码session失效、旧用户及资产保留、新Google callback session重启保留。与原Storage/PG错误边界联合 **10/10 PASS**。因此上节“该口径变化尚未复核”的时点状态已被本节取代；旧“密码session原样保留”结论作废，其余存储定向结论经本轮重跑仍成立。底层auth.login仍能构造session不等于产品开放密码登录，且它单独不能证明Google签发链路。真实Google／Web登录与真实PG不在此次放行范围。

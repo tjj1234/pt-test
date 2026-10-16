@@ -36,7 +36,7 @@ test('storage defaults to the same complete migration source as product auth', (
   for (const name of migrationNames(legacyDir)) assert.ok(migrationNames(DEFAULT_MIGRATIONS_DIR).includes(name), name);
 });
 
-test('real legacy PGlite upgrades, preserves assets and sessions, and reopens idempotently', async () => {
+test('real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently', async () => {
   assertIsolatedEnvironment();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'northstar-storage-upgrade-'));
   const opts = { dataDir: path.join(tmp, 'db'), masterKeyFile: path.join(tmp, 'master.key') };
@@ -68,8 +68,17 @@ test('real legacy PGlite upgrades, preserves assets and sessions, and reopens id
     current = await createStorage(opts);
     assert.equal(current.db, current.repositories.auth.db, 'storage shares the auth-owned real connection');
     assert.equal(current.ownsDb, false);
-    assert.deepEqual(await snapshot(current, uid), before, 'upgrade leaves all old rows byte-value equivalent');
-    assert.equal((await current.repositories.auth.getSession(login.token)).user.id, uid);
+    const afterUpgrade = await snapshot(current, uid);
+    for (const table of ['users', 'conversations', 'user_memory', 'api_keys']) assert.deepEqual(afterUpgrade[table], before[table], 'upgrade preserves old ' + table + ' rows');
+    assert.deepEqual(afterUpgrade.sessions, [], 'Google-only migration revokes legacy password sessions without deleting users');
+    assert.equal(await current.repositories.auth.getSession(login.token), null, 'old password browser session requires Google reauthentication');
+    await current.adapter.query("INSERT INTO google_identities(issuer,subject,user_id,email) VALUES ('https://accounts.google.com','upgrade-subject',$1,'upgrade@example.test')", [uid]);
+    // This storage test exercises the repository's session row format after the
+    // migration. Product password login is retired; Google callback issuance is
+    // covered by the separate Google integration/restart acceptance.
+    const repositorySession = await current.repositories.auth.login({ username: 'upgrade-fixture', password: 'UpgradeTest123' });
+    assert.equal(repositorySession.ok, true);
+    assert.equal((await current.repositories.auth.getSession(repositorySession.token)).user.id, uid, 'repository-level session remains readable after migration');
     assert.equal((await current.repositories.conversations.get(uid, conv.id)).archived, true);
     assert.deepEqual((await current.repositories.conversations.get(uid, conv.id)).messages, messages);
     assert.equal((await current.repositories.memory.list(uid))[0].value, '升级前资料');
@@ -101,7 +110,7 @@ test('real legacy PGlite upgrades, preserves assets and sessions, and reopens id
 
     current = await createStorage(opts);
     assert.deepEqual(await applied(), upgraded, 'restart applies no duplicate migrations');
-    assert.deepEqual(await snapshot(current, uid), afterSessionTouch, 'second reopen preserves rows and sessions');
+    assert.deepEqual(await snapshot(current, uid), afterSessionTouch, 'second reopen preserves rows and repository-level session');
     assert.equal(await current.repositories.keys.decryptApiKey(uid), syntheticKey);
     await current.adapter.transaction(async (tx) => {
       await tx.query('INSERT INTO user_memory (user_id,key,value) VALUES ($1,$2,$3)', [uid, 'committed', 'yes']);
