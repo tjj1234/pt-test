@@ -42,6 +42,27 @@ function mediaRouteToolDefinition(overrides = {}) {
             "可选：风格预设模板 id，仅适用于文生图(text2image)/图生图(image2image)，不支持视频。选择后按模板的提示词套路生成，模板里的占位符内容请写进 prompt；需上传参考图的模板必须同时传 inputImageUrl。可选模板：\n" +
             stylePresetSummary(),
         },
+        size: {
+          type: "string",
+          description:
+            "可选：图片尺寸，如 1024x1024 / 1024x768。不填则尝试从 prompt 自动解析，再不行走默认 2048x2048。",
+        },
+        resolution: {
+          type: "string",
+          enum: ["720P", "1080P"],
+          description:
+            "可选：视频分辨率，720P 或 1080P。不填则尝试从 prompt 解析或默认 720P。",
+        },
+        duration: {
+          type: "number",
+          description:
+            "可选：视频时长（秒），如 10。不填则尝试从 prompt 解析或默认 5。",
+        },
+        n: {
+          type: "number",
+          description:
+            "可选：图片生成张数（1~9）。不填则尝试从 prompt 解析或默认 1。",
+        },
       },
     },
     outputType: "data",
