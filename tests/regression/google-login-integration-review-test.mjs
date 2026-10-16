@@ -15,7 +15,7 @@ async function freePort() { const server = createServer(); await new Promise((r,
 test('independent integration: upgrade denies legacy password sessions/routes; callback provisions before cookie', { timeout: 30000 }, async () => {
   assert.equal(Object.keys(process.env).some((key) => key.startsWith('PT_PG_') && process.env[key]), false);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'northstar-google-integration-review-'));
-  let storage, child, tenantId;
+  let storage, child, tenantId, secondTenantId;
   const runtimeDirs = [];
   try {
     const oldMigrations = path.join(tmp, 'old-migrations'); fs.mkdirSync(oldMigrations);
@@ -25,6 +25,9 @@ test('independent integration: upgrade denies legacy password sessions/routes; c
     const registered = await storage.repositories.auth.register({ username: 'legacy-review', email: 'review@example.test', password: 'LegacyReview123' });
     assert.equal(registered.ok, true);
     tenantId = registered.user.tenant_id;
+    const secondRegistered = await storage.repositories.auth.register({ username: 'second-review', email: 'second@example.test', password: 'SecondReview123' });
+    assert.equal(secondRegistered.ok, true);
+    secondTenantId = secondRegistered.user.tenant_id;
     const legacy = await storage.repositories.auth.login({ username: 'legacy-review', password: 'LegacyReview123' });
     assert.equal(legacy.ok, true);
     await storage.close(); storage = null;
@@ -34,9 +37,9 @@ test('independent integration: upgrade denies legacy password sessions/routes; c
     // Mock only the external verified identity exchange. Real routes, product composition,
     // PGlite sessions, migration, workspace initialization and Cookie responses remain real.
     const preload = path.join(tmp, 'verified-identity-fixture.cjs');
-    fs.writeFileSync(preload, `const Module=require('node:module'); const load=Module._load; const crypto=require('node:crypto');
-Module._load=function(name,parent,isMain){ const loaded=load.apply(this,arguments); if(parent?.filename.endsWith('auth-google-routes.cjs') && name==='./auth-google.cjs') return {...loaded,createGoogleAuth:async({db})=>({begin:async()=>({authorizationUrl:'https://accounts.google.com/o/oauth2/v2/auth?state=fixture-state'}),callback:async()=>{const user=(await db.query("SELECT id,username,email,role,tenant_id FROM users WHERE username=$1",['legacy-review'])).rows[0]; const token=crypto.randomBytes(32).toString('base64url');const expiresAt=new Date(Date.now()+60000).toISOString();await db.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)',[user.id,crypto.createHash('sha256').update(token).digest('hex'),expiresAt]);return {ok:true,user,token,expiresAt};}})}; return loaded;};`);
-    const env = { PATH: process.env.PATH, HOME: tmp, PT_DB_DIR: dbDir, PT_MASTER_KEY_FILE: path.join(tmp, 'key'), PT_LOG_DIR: path.join(tmp, 'logs'), PT_SHELL_PORT: String(port), PT_LISTEN_HOST: '127.0.0.1', PT_TEST_SHUTDOWN_TOKEN: stopToken, PT_KEY_LIVE_VERIFY: '0', PT_CHAT_DRYRUN: '1', GOOGLE_CLIENT_ID: 'fixture-client', GOOGLE_CLIENT_SECRET: 'fixture-secret', GOOGLE_REDIRECT_URI: origin + '/api/auth/google/callback' };
+    fs.writeFileSync(preload, `const Module=require('node:module'); const load=Module._load; const crypto=require('node:crypto'); let stateNo=0;
+Module._load=function(name,parent,isMain){ const loaded=load.apply(this,arguments); if(parent?.filename.endsWith('auth-google-routes.cjs') && name==='./auth-google.cjs') return {...loaded,createGoogleAuth:async({db})=>({begin:async()=>({authorizationUrl:'https://accounts.google.com/o/oauth2/v2/auth?state='+(++stateNo===1?'fixture-state':'fixture-state-'+stateNo)}),callback:async({code})=>{const username=code==='second-user'?'second-review':'legacy-review';const user=(await db.query("SELECT id,username,email,role,tenant_id FROM users WHERE username=$1",[username])).rows[0]; const token=crypto.randomBytes(32).toString('base64url');const expiresAt=new Date(Date.now()+60000).toISOString();await db.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)',[user.id,crypto.createHash('sha256').update(token).digest('hex'),expiresAt]);return {ok:true,user,token,expiresAt};}})}; if(parent?.filename.endsWith('/server.cjs') && name==='./tenant.cjs') return {...loaded,runDshForUser:async(userId,question,options)=>{if(question==='hold worker')await new Promise(resolve=>setTimeout(resolve,1200));return loaded.runDshForUser(userId,question,options);}}; return loaded;};`);
+    const env = { PATH: process.env.PATH, HOME: tmp, PT_DB_DIR: dbDir, PT_MASTER_KEY_FILE: path.join(tmp, 'key'), PT_LOG_DIR: path.join(tmp, 'logs'), PT_SHELL_PORT: String(port), PT_LISTEN_HOST: '127.0.0.1', PT_TEST_SHUTDOWN_TOKEN: stopToken, PT_KEY_LIVE_VERIFY: '0', PT_CHAT_DRYRUN: '1', PT_RUNS_GLOBAL: '1', GOOGLE_CLIENT_ID: 'fixture-client', GOOGLE_CLIENT_SECRET: 'fixture-secret', GOOGLE_REDIRECT_URI: origin + '/api/auth/google/callback' };
     child = spawn(process.execPath, ['--require', preload, 'shell/server.cjs', '--port', String(port)], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; child.stdout.on('data', (b) => output += b); child.stderr.on('data', (b) => output += b);
     let ready = false;
@@ -56,7 +59,7 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     const missingBinding = await fetch(origin + '/api/auth/google/callback?state=x&code=x', { headers: { Origin: 'https://accounts.google.com' }, redirect: 'manual' });
     assert.equal(missingBinding.headers.get('location'), '/login?error=google_auth');
     assert.equal(missingBinding.headers.get('set-cookie'), null);
-    const fixtureDirs = [path.join(root, 'runtime/workspaces', tenantId), path.join(root, 'runtime/workspaces', 'ws_' + tenantId)];
+    const fixtureDirs = [path.join(root, 'runtime/workspaces', tenantId), path.join(root, 'runtime/workspaces', 'ws_' + tenantId), path.join(root, 'runtime/workspaces', secondTenantId), path.join(root, 'runtime/workspaces', 'ws_' + secondTenantId)];
     for (const dir of fixtureDirs) assert.equal(fs.existsSync(dir), false, 'synthetic workspace must not preexist');
     runtimeDirs.push(...fixtureDirs);
     const callback = await fetch(origin + '/api/auth/google/callback?state=fixture-state&code=fixture-code', { headers: { Cookie: binding.split(';')[0], Origin: 'https://accounts.google.com' }, redirect: 'manual' });
@@ -100,6 +103,34 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     assert.match(await replay.text(), /\"done\":true/);
     const history = await fetch(origin + '/api/conversations/' + conversationId, { headers: { Cookie: authCookie } });
     assert.equal((await history.json()).conversation.messages.filter((message) => message.role === 'user').length, 1, 'idempotent retry does not append a duplicate user turn');
+
+    const secondStart = await fetch(origin + '/api/auth/google/start', { redirect: 'manual' });
+    assert.equal(secondStart.status, 303);
+    const secondBinding = secondStart.headers.get('set-cookie');
+    const secondCallback = await fetch(origin + '/api/auth/google/callback?state=fixture-state-2&code=second-user', { headers: { Cookie: secondBinding.split(';')[0], Origin: 'https://accounts.google.com' }, redirect: 'manual' });
+    assert.equal(secondCallback.status, 303);
+    const secondCookie = secondCallback.headers.get('set-cookie').split(';')[0];
+    const secondConversationResponse = await fetch(origin + '/api/conversations', { method: 'POST', headers: { Cookie: secondCookie } });
+    const secondConversationId = (await secondConversationResponse.json()).id;
+    const holdingResponse = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-hold' }, body: JSON.stringify({ conversationId, message: 'hold worker' }) });
+    const holdingRunId = holdingResponse.headers.get('x-agent-run-id');
+    assert.ok(holdingRunId, 'running chat immediately exposes its run ID');
+    const holdingFrames = holdingResponse.text();
+    const queuedResponse = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: secondCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-queued' }, body: JSON.stringify({ conversationId: secondConversationId, message: 'queued and cancel' }) });
+    assert.equal(queuedResponse.status, 200);
+    const queuedRunId = queuedResponse.headers.get('x-agent-run-id');
+    assert.ok(queuedRunId, 'queued chat immediately exposes its run ID');
+    const queuedBeforeCancel = await fetch(origin + '/api/runs/' + queuedRunId, { headers: { Cookie: secondCookie } });
+    assert.equal((await queuedBeforeCancel.json()).run.state, 'queued', 'second user is actually queued behind the occupied global worker');
+    const cancelResponse = await fetch(origin + '/api/runs/' + queuedRunId + '/cancel', { method: 'POST', headers: { Cookie: secondCookie } });
+    assert.equal(cancelResponse.status, 200);
+    assert.equal((await cancelResponse.json()).stopped, true, 'HTTP cancellation can stop a durably queued run');
+    const queuedFrames = await queuedResponse.text();
+    assert.match(queuedFrames, /"queued":true/);
+    assert.match(queuedFrames, /"stopped":true/);
+    const queuedRunResponse = await fetch(origin + '/api/runs/' + queuedRunId, { headers: { Cookie: secondCookie } });
+    assert.equal((await queuedRunResponse.json()).run.state, 'cancelled');
+    assert.match(await holdingFrames, /"done":true/);
     fs.writeFileSync(path.join(runtimeDirs[1], 'metadata.json'), 'broken-fixture-json');
     const failedProvision = await fetch(origin + '/api/auth/google/callback?state=fixture-state&code=fixture-code', { headers: { Cookie: binding.split(';')[0], Origin: 'https://accounts.google.com' }, redirect: 'manual' });
     assert.equal(failedProvision.headers.get('location'), '/login?error=google_auth');
