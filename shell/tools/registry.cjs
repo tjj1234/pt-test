@@ -9,10 +9,12 @@
  * ============================================================================
  */
 
+const { compileInputSchema } = require("./schema-validator.cjs");
 const { checkPermission, PERMISSIONS, ROLE_PERMISSIONS, ROLES } = require("../permissions/index.cjs");
 
 // 工具存储（内存中，后续可持久化）
 const tools = new Map();
+const inputValidators = new Map();
 
 // 工具执行函数映射：toolName -> executeFn(args, context)。executeTool() 按此分发真实执行。
 const toolExecutors = new Map();
@@ -88,13 +90,16 @@ function registerTool(toolDefinition) {
   } = toolDefinition;
 
   // 基本验证
-  if (!name || !type || !version || !description || !inputSchema || !outputType || !riskLevel || !requiredPermissions) {
+  if (!name || !type || !version || !description || inputSchema === undefined || !outputType || !riskLevel || !requiredPermissions) {
     throw new Error("工具定义缺少必要字段");
   }
 
   if (!Array.isArray(requiredPermissions)) {
     throw new Error("requiredPermissions 必须是数组");
   }
+
+  // Compile before any registry/permission mutation; rejected schemas leave no partial registration.
+  const inputValidator = compileInputSchema(inputSchema);
 
   // B11：工具声明的 requiredPermissions 如果基座权限模型里还没有，
   // 自动登记为默认权限（owner/admin 可用）。业务线需要更宽范围时，
@@ -117,16 +122,20 @@ function registerTool(toolDefinition) {
     category: typeToCategory(type),
     version,
     description,
-    inputSchema,
+    inputSchema: inputValidator.schema,
     outputType,
     riskLevel,
-    requiredPermissions,
-    requiredCredentials,
+    requiredPermissions: [...requiredPermissions],
+    requiredCredentials: [...requiredCredentials],
   });
+  inputValidators.set(name, inputValidator);
 
   // 若定义里直接带了执行函数，一并登记为 executor（等同于单独调 registerToolExecutor）。
   if (typeof execute === "function") {
     toolExecutors.set(name, execute);
+  } else {
+    // A new definition must never inherit an executor validated against another schema/version.
+    toolExecutors.delete(name);
   }
 
   return true;
@@ -198,6 +207,7 @@ async function validateToolCall(toolName, args, context) {
     throw new Error(`工具未找到: ${toolName}`);
   }
 
+  const inputValidator = inputValidators.get(toolName);
   // 权限检查
   for (const permission of tool.requiredPermissions) {
     if (!(await checkPermission(context, permission))) {
@@ -205,14 +215,7 @@ async function validateToolCall(toolName, args, context) {
     }
   }
 
-  // TODO: 输入参数验证（根据 inputSchema）
-  // B2: 暂不实现完整 JSON Schema 验证，仅检查必要字段存在性。
-  // 已知问题 C5（暂缓，不在此单独补）：真正要解决的是「所有工具走同一套校验逻辑」——
-  // 即 REST 注册的 registry 工具与 persistent-runner 里 agentCtx.tools.register() 直连注册的
-  // DSH 工具（media.route / ga.query / attribution.* / tracking_quality_audit 等）共用同一校验路径。
-  // 否则此处单独补 inputSchema 校验，DSH 直连工具仍绕过本路径，等于头痛医头。
-
-  return true;
+  return inputValidator.prepare(args).valid;
 }
 
 /**
@@ -223,12 +226,18 @@ async function validateToolCall(toolName, args, context) {
  * @returns {Promise<Object>} 执行结果
  */
 async function executeTool(toolName, args, context) {
-  const isValid = await validateToolCall(toolName, args, context);
-  if (!isValid) {
-    throw new Error(`工具调用验证失败: ${toolName}`);
+  const tool = tools.get(toolName);
+  if (!tool) throw new Error(`工具未找到: ${toolName}`);
+  // Capture the exact input before asynchronous permission/logging calls can race caller mutation.
+  const prepared = inputValidators.get(toolName).prepare(args);
+  if (!prepared.valid) throw Object.assign(new Error(`工具调用参数无效: ${toolName}`), { code: "TOOL_INPUT_INVALID", statusCode: 400, errors: prepared.errors });
+  args = prepared.value;
+  // Pin the executor with the definition/version before awaiting permission checks.
+  const executor = toolExecutors.get(toolName);
+  for (const permission of tool.requiredPermissions) {
+    if (!(await checkPermission(context, permission))) throw Object.assign(new Error(`工具调用验证失败: ${toolName}`), { code: "TOOL_PERMISSION_DENIED", statusCode: 403 });
   }
 
-  const executor = toolExecutors.get(toolName);
   const ctx = context || {};
   const startedAt = Date.now();
 
@@ -242,7 +251,7 @@ async function executeTool(toolName, args, context) {
         userId: ctx.userId,
         toolName,
         inputSummary: summarize(args),
-        category: (tools.get(toolName) && tools.get(toolName).category) || toolCategory(toolName),
+        category: tool.category || toolCategory(toolName),
       });
       logId = started && started.id;
     } catch (e) {
