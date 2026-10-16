@@ -42,6 +42,16 @@ test('persistent task store: ownership, atomic claims, event order, revisions an
     const ownB = await store.createRun(b, { ...input(), conversationId: convB.id });
     assert.notEqual(ownB.run.runId, id, 'same client key in another identity has independent scope');
 
+    const leaseA = await store.acquireLease(a, id, 'worker-a', 10000);
+    assert.equal(leaseA.acquired, true);
+    assert.equal((await store.acquireLease(a, id, 'worker-b', 10000)).acquired, false, 'live lease excludes a competing worker');
+    await store.renewLease(a, id, 'worker-a', 10000);
+    await assert.rejects(store.renewLease(a, id, 'worker-b', 10000), { code: 'LEASE_LOST' });
+    await storage.adapter.query("UPDATE agent_runs SET lease_expires_at=now()-interval '1 second' WHERE run_id=$1", [id]);
+    assert.equal((await store.acquireLease(a, id, 'worker-b', 10000)).acquired, true, 'expired lease can be taken over');
+    assert.equal(await store.releaseLease(a, id, 'worker-a'), false, 'old owner cannot release successor lease');
+    assert.equal(await store.releaseLease(a, id, 'worker-b'), true);
+
     const running = await store.transition(a, id, 'running', 0);
     assert.equal(running.revision, 1);
     const races = await Promise.allSettled([store.transition(a, id, 'awaiting_confirmation', 1), store.transition(a, id, 'waiting_external', 1)]);

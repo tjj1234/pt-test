@@ -49,6 +49,16 @@ test('independent: startup recovery interrupts abandoned work and preserves user
  assert.equal((await s.getRun(f.a,queued.runId)).state,'interrupted');assert.equal((await s.getRun(f.a,running.runId)).state,'interrupted');
  assert.equal((await s.getRun(f.a,awaiting.runId)).state,'awaiting_confirmation','restart must retain the user decision boundary');
 });
+test('independent: lease recovery preserves live workers and interrupts expired owners',async t=>{
+ const f=await fixture(t),s=f.store();const live=(await s.createRun(f.a,f.input('lease-live'))).run;const abandoned=(await s.createRun(f.a,f.input('lease-expired'))).run;
+ assert.equal((await s.acquireLease(f.a,live.runId,'worker-a',10000)).acquired,true);
+ assert.equal((await s.acquireLease(f.a,abandoned.runId,'worker-b',10000)).acquired,true);
+ await f.storage.adapter.query("UPDATE agent_runs SET lease_expires_at=now()-interval '1 second' WHERE run_id=$1",[abandoned.runId]);
+ const recovered=await s.recoverExpiredLeases();assert.deepEqual(recovered.map(x=>x.runId),[abandoned.runId]);
+ assert.equal((await s.getRun(f.a,live.runId)).state,'queued','startup must not interrupt a live lease');
+ assert.equal((await s.getRun(f.a,abandoned.runId)).state,'interrupted');
+ assert.deepEqual(await s.acquireLease(f.a,abandoned.runId,'worker-c',10000),{acquired:false,run:await s.getRun(f.a,abandoned.runId)});
+});
 test('independent: event IDs are globally unique and failures preserve next sequence',async t=>{
  const f=await fixture(t),s=f.store();const r=(await s.createRun(f.a,f.input())).run;const r2=(await s.createRun(f.a,f.input('second'))).run;const id=randomUUID();
  await s.appendEvent(f.a,r.runId,{eventId:id,type:'usage',payload:{tokens:null}});

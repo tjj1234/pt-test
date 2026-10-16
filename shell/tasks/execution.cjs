@@ -1,11 +1,13 @@
 "use strict";
+const { randomUUID } = require("node:crypto");
 
 const fail = (code, message) => Object.assign(new Error(message), { code });
 
 // Durable run lifecycle around an injected executor. It intentionally knows
 // nothing about HTTP, DSH internals, credentials, or client supplied identity.
-function createRunExecutionService({ store, scheduler, executor, processId = "product-runtime" }) {
+function createRunExecutionService({ store, scheduler, executor, processId = randomUUID(), leaseTtlMs = 30000 }) {
   if (!store || !scheduler || typeof executor !== "function") throw new TypeError("store, scheduler and executor are required");
+  if (!Number.isSafeInteger(leaseTtlMs) || leaseTtlMs < 1000 || leaseTtlMs > 300000) throw new TypeError("leaseTtlMs must be 1s to 5m");
   const active = new Map();
   const listeners = new Map();
   const publishedSeq = new Map();
@@ -33,7 +35,7 @@ function createRunExecutionService({ store, scheduler, executor, processId = "pr
   async function submit(identity, input, executionContext = {}, options = {}) {
     // Keep user content in conversations. The run request is a minimal replay/audit descriptor.
     const request = input.request;
-    const created = await store.createRun(identity, { ...input, request });
+    const created = await store.createRun(identity, { ...input, request }, { owner: processId, ttlMs: leaseTtlMs });
     const runId = created.run.runId;
     let replaying = typeof options.onEvent === "function", lastDelivered = 0;
     const buffered = [];
@@ -63,6 +65,7 @@ function createRunExecutionService({ store, scheduler, executor, processId = "pr
     const runExecutor = typeof options.executor === "function" ? options.executor : executor;
     const finalize = typeof options.finalize === "function" ? options.finalize : async (result) => result;
     const eventTail = { current: Promise.resolve(), failure: null };
+    let leaseHeartbeat;
     let entry;
     try {
       entry = scheduler.submit({
@@ -97,11 +100,13 @@ function createRunExecutionService({ store, scheduler, executor, processId = "pr
           if (eventTail.failure) throw eventTail.failure;
           await eventTail.current;
           if (eventTail.failure) throw eventTail.failure;
+          clearInterval(leaseHeartbeat);
           const terminal = outcome && outcome.stopped ? "cancelled" : outcome && outcome.ok === false ? "failed" : "completed";
           await store.transition(identity, runId, terminal, latest.revision);
           await publishPersisted(identity, runId);
           return finalized;
         } catch (error) {
+          clearInterval(leaseHeartbeat);
           await eventTail.current.catch(() => {});
           const latest = await store.getRun(identity, runId);
           if (!["completed", "failed", "cancelled", "interrupted"].includes(latest.state)) {
@@ -118,6 +123,7 @@ function createRunExecutionService({ store, scheduler, executor, processId = "pr
       },
       });
     } catch (error) {
+      clearInterval(leaseHeartbeat);
       try {
         const latest = await store.getRun(identity, runId);
         await store.appendEvent(identity, runId, { type: "error", payload: { code: String(error.code || "SCHEDULER_REJECTED").slice(0, 64) } });
@@ -129,7 +135,17 @@ function createRunExecutionService({ store, scheduler, executor, processId = "pr
       throw error;
     }
     active.set(runId, { identity, entry });
-    entry.result.finally(() => active.delete(runId)).catch(() => {});
+    leaseHeartbeat = setInterval(() => {
+      store.renewLease(identity, runId, processId, leaseTtlMs).catch((error) => {
+        if (error.code === "LEASE_LOST") scheduler.cancel(runId).catch(() => {});
+      });
+    }, Math.max(1000, Math.floor(leaseTtlMs / 3)));
+    leaseHeartbeat.unref?.();
+    entry.result.finally(() => {
+      clearInterval(leaseHeartbeat);
+      active.delete(runId);
+      return store.releaseLease(identity, runId, processId).catch(() => false);
+    }).catch(() => {});
     return { ...created, execution: entry, unsubscribe };
   }
 

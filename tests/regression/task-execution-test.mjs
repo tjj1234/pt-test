@@ -58,15 +58,20 @@ test('run execution persists ordered events, deduplicates before execution, and 
     const cancelInput = { ...input, idempotencyKey: 'request-2' };
     let started;
     const startedPromise = new Promise((resolve) => { started = resolve; });
-    const cancellable = createRunExecutionService({ store, scheduler, executor: ({ signal }) => new Promise((resolve, reject) => {
+    const cancellable = createRunExecutionService({ store, scheduler, processId: 'worker-cancel-test', executor: ({ signal }) => new Promise((resolve, reject) => {
       started();
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     }) });
     const run = await cancellable.submit(identity, cancelInput);
     await startedPromise;
+    const liveLease = (await storage.adapter.query('SELECT lease_owner,lease_expires_at FROM agent_runs WHERE run_id=$1', [run.run.runId])).rows[0];
+    assert.equal(liveLease.lease_owner, 'worker-cancel-test');
+    assert.ok(liveLease.lease_expires_at);
+    assert.equal((await store.acquireLease(identity, run.run.runId, 'competing-worker', 10000)).acquired, false);
     const stopped = await cancellable.cancel(identity, run.run.runId);
     assert.equal(stopped.stopped, true);
     assert.equal(stopped.run.state, 'cancelled');
+    assert.equal((await storage.adapter.query('SELECT lease_owner FROM agent_runs WHERE run_id=$1', [run.run.runId])).rows[0].lease_owner, null, 'terminal transition releases its worker lease');
 
     let failDelta = true;
     const flakyStore = Object.create(store);

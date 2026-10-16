@@ -1916,7 +1916,7 @@ async function main() {
     scheduler: taskScheduler,
     executor: async () => { throw Object.assign(new Error("No task executor was supplied"), { code: "EXECUTOR_REQUIRED" }); },
   });
-  const recoveredRuns = await taskStore.recoverAllInterrupted();
+  const recoveredRuns = await taskStore.recoverExpiredLeases();
   if (recoveredRuns.length) log.info("agent_runs_recovered", { count: recoveredRuns.length });
 
   // 任务A：启动保活心跳（扫描「仍存活的常驻进程租户」，逐个发心跳），防空闲回收导致的首字延迟。
