@@ -47,6 +47,10 @@ PM 同意：本期保留现有原生 HTML/CSS/JavaScript，不做全量 Vue 迁�
 
 未进行真实Google授权、PT模型/媒体付费调用、生产PostgreSQL或部署验证。`.env`不读取；测试临时环境不继承Key。子Agent两次遇到平台用量限制后已按轮换方式继续；不降低独立验收要求。当前未合并main、未部署、未push；全任务仍需Claude整体验收和全新Claude Code测试。
 
+### 2026-10-17 · T03 浏览器流断开后的持久事件续读（实现子范围）
+
+提交 `c579960d6b14aa2c5e7e3d7d8926a773c0326f2e` 为旧 `/api/chat` SSE帧增加持久 `id` 序号；浏览器记录最后序号，读取流结束或报错后通过 `GET /api/runs/:id/events?after=...` 补读 delta、step、artifact，收到 done 后刷新目标对话。轮询最长30分钟，瞬时断网会从最后游标重试。新增集成断言确保 legacy SSE 暴露游标。验证 `node --test tests/regression/google-login-integration-review-test.mjs` 1/1 PASS（本地HTTP、临时PGlite、受控身份、dry-run；沙箱内一次因 loopback `EPERM` 失败，授权沙箱外重跑通过）；`node --check shell/public/app.js`、`node --check shell/server.cjs`、`git diff --check` PASS。该测试未真实模拟浏览器网络中断，也未证明真实PostgreSQL/多进程行为；浏览器端到端断线验收仍待补。T03 的 worker lease／故障恢复、预算熔断、外部provider查询与reconciliation仍未实现，故不标记T03完成。
+
 ### 2026-10-16 · 今日停点与下次恢复入口
 
 **停点**：专用集成分支 `feature/northstar-phase1-refactor-20261016`，记录时 HEAD 为 `1eea5911a42c35ae4e4800680e989ffd357e3481`；分支起点仍按开工授权核对 `a2adbee64c326653dbf5bfed3f918dd09f96589d`。今天已提交的 T03 HTTP/SSE 范围及独立复核见上文与 `docs/refactor/evidence/T03-http-integration.md`；重点回归为 `node --test tests/regression/task-store-test.mjs tests/regression/task-execution-test.mjs tests/regression/task-store-review-test.mjs tests/regression/session-scheduler-test.mjs tests/regression/run-events-contract-test.mjs`（21/21）以及 `node --test tests/regression/google-login-integration-review-test.mjs`（1/1）。本地验证使用 Node v24.14.0、临时 PGlite 和受控身份；不是生产PG、真实Google、真实DSH/PT或浏览器断线重连验收。尚未合并 main、未部署、未push。工作区中 `wb copy/` 是用户已有未跟踪目录，恢复时必须原样保留、不清理、不暂存。
