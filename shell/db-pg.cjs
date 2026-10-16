@@ -38,7 +38,8 @@ const path = require("path");
 /** 是否配置了 PG（读 DSN 或 HOST/DATABASE/USER 任一即视为「要用 PG」）。 */
 function pgConfigured(env) {
   const e = env || process.env;
-  return !!(e.PT_PG_DSN || e.PT_PG_HOST || e.PT_PG_DATABASE || e.PT_PG_DB || e.PT_PG_USER);
+  return ["PT_PG_DSN", "PT_PG_HOST", "PT_PG_DATABASE", "PT_PG_DB", "PT_PG_USER", "PT_PG_USERNAME"]
+    .some((key) => typeof e[key] === "string" && e[key].trim().length > 0);
 }
 
 /**
@@ -107,12 +108,17 @@ async function openPg(env) {
 
   const pool = new Pool(cfg);
   // 空闲连接报错不能变成未捕获异常（否则进程直接崩）
-  pool.on("error", (err) => {
-    console.error("[db-pg] 连接池空闲连接错误：", err && err.message ? err.message : String(err));
+  pool.on("error", () => {
+    console.error("[db-pg] PG_POOL_ERROR: idle connection failed");
   });
 
   // 启动探活：连不上立刻抛错，让 server.cjs 的 main().catch 给出清晰中文提示。
-  await pool.query("SELECT 1");
+  try {
+    await pool.query("SELECT 1");
+  } catch {
+    try { await pool.end(); } catch { /* Preserve the bounded startup error. */ }
+    throw Object.assign(new Error("PostgreSQL connection failed"), { code: "PG_CONNECTION_FAILED" });
+  }
 
   /** 参数化查询：返回 { rows }（与 PGlite 的 db.query 返回形状一致）。 */
   const query = (text, params) => pool.query(text, params);

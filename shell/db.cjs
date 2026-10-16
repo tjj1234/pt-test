@@ -13,17 +13,23 @@ const fs = require("fs");
 const path = require("path");
 
 /**
- * PG 适配层（可选）：shell/db-pg.cjs（与 db.cjs 同级）。找不到就置 null（不影响纯 PGlite 场景）。
+ * PG 适配层仅在显式配置 PG 时加载；加载失败必须终止，不得悄悄改用 PGlite。
  * 只有当 PT_PG_DSN / PT_PG_HOST / PT_PG_DATABASE / PT_PG_USER 等环境变量被设置时，
  * open() 才会真正走真实 PostgreSQL；否则一律退回原来的 PGlite（现有测试不受影响）。
  */
-let _pgmod; // undefined = 还没探测；null = 已探测且不存在
+let _pgmod;
 function pgBackend() {
   if (_pgmod !== undefined) return _pgmod;
-  _pgmod = null;
   try { _pgmod = require(path.join(__dirname, "db-pg.cjs")); }
-  catch (e) { _pgmod = null; }
+  catch {
+    throw Object.assign(new Error("PostgreSQL adapter unavailable for explicit PG configuration"), { code: "PG_ADAPTER_UNAVAILABLE" });
+  }
   return _pgmod;
+}
+
+function pgConfigured(env = process.env) {
+  return ["PT_PG_DSN", "PT_PG_HOST", "PT_PG_DATABASE", "PT_PG_DB", "PT_PG_USER", "PT_PG_USERNAME"]
+    .some((key) => typeof env[key] === "string" && env[key].trim().length > 0);
 }
 
 /** 找到 PGlite 的 CommonJS 入口（dist/index.cjs 的绝对路径）。 */
@@ -70,10 +76,8 @@ async function openPglite({ dataDir }) {
  * 返回的 { db, close } 形状两者完全一致，上层 auth / keys / conversations 无需感知。
  */
 async function open({ dataDir }) {
-  const pg = pgBackend();
-  if (pg && pg.pgConfigured()) {
-    console.log("[db] 检测到 PT_PG_* 配置，切换到真实 PostgreSQL（忽略 dataDir：" + dataDir + "）");
-    return pg.openPg();
+  if (pgConfigured()) {
+    return pgBackend().openPg();
   }
   return openPglite({ dataDir });
 }
@@ -101,10 +105,13 @@ async function migrate(db, migrationsDir) {
     const done = await db.query("SELECT 1 FROM schema_migrations WHERE name = $1", [f]);
     if (done.rows.length) continue;
     const sql = fs.readFileSync(path.join(migrationsDir, f), "utf8");
-    await db.exec(sql);
-    await db.query("INSERT INTO schema_migrations (name) VALUES ($1)", [f]);
+    // DDL and its applied marker must commit together; a failed file remains retryable.
+    await db.transaction(async (tx) => {
+      await tx.exec(sql);
+      await tx.query("INSERT INTO schema_migrations (name) VALUES ($1)", [f]);
+    });
   }
   return files.length;
 }
 
-module.exports = { resolvePgliteEntry, open, migrate };
+module.exports = { resolvePgliteEntry, open, migrate, pgConfigured };

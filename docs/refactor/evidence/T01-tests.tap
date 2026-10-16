@@ -1,0 +1,19 @@
+✔ all supported PG selectors are explicit and whitespace alone does not select a backend (0.349042ms)
+✔ configured PG with a missing adapter fails before creating a fallback database (21.380208ms)
+✔ migration SQL and applied marker roll back atomically and repaired file can retry (969.999625ms)
+✔ independent: applied-marker failure rolls back DDL and data, repaired marker can retry (950.274625ms)
+✔ independent: explicit PG open failure never creates fallback or leaks driver error (31.697709ms)
+✔ independent: PG cleanup failure must not replace sanitized connection error (21.7495ms)
+✔ independent: idle pool errors must be logged without raw credential-bearing message (20.859584ms)
+✔ storage defaults to the same complete migration source as product auth (0.509042ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-WkKAt5/master.key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ real legacy PGlite upgrades, preserves assets and sessions, and reopens idempotently (1334.227125ms)
+ℹ tests 9
+ℹ suites 0
+ℹ pass 9
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1379.359375
