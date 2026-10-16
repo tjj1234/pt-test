@@ -1,0 +1,39 @@
+✔ review: cyclic fingerprint must reject with controlled TypeError, not stack overflow (0.687916ms)
+✔ review: excessive nesting must reject before stack exhaustion (0.685958ms)
+✔ review: accepted event metadata must serialize safely (0.33825ms)
+✔ review: extension fields cannot smuggle non-serializable values into accepted run (0.148667ms)
+✔ review: revision increment must preserve valid run contract (0.188ms)
+✔ review: terminal done event cannot accompany queued run (0.110416ms)
+✔ review: tool.finished event must require a terminal tool outcome (0.054917ms)
+✔ review: explicit unknown capabilities must not enter AUTO (0.090542ms)
+✔ review: overlong idempotency key is rejected at boundary (0.142916ms)
+✔ review control: trusted identity override is rejected, same identity remains bound (0.182667ms)
+✔ review control: wrong event run and conversation are rejected (0.120458ms)
+✔ review control: unknown reported model is preserved as null (0.078916ms)
+✔ review control: done accepts each terminal append snapshot (0.147ms)
+✔ review control: tool.finished accepts terminal outcomes including unknown (0.065917ms)
+✔ review control: shared references are not confused with ancestor cycles (0.070167ms)
+✔ review control: JSON byte, node and depth budgets accept boundaries and reject overflow (7.549583ms)
+✔ review control: ordinary payload and exact idempotency limits remain usable (0.161917ms)
+✔ review control: last safe revision transition succeeds then rejects further increment (0.077542ms)
+✔ review: done declared outcome must match terminal snapshot (0.055417ms)
+✔ review: hidden toJSON cannot bypass accepted metadata serialization safety (0.061917ms)
+✔ existing runtime method and event contract is reused without a second runtime (0.550917ms)
+✔ trusted identity binding rejects client overrides and cross-owner access (0.47075ms)
+✔ run state changes are immutable, revision checked, and terminal states cannot reopen (0.536791ms)
+✔ late completion while cancelling remains a truthful completed result (0.081459ms)
+✔ external unknown outcome is a reconciliation marker, not automatic re-execution (0.098ms)
+✔ events require scope, sequence, unique adjacent IDs, versions and semantic links (0.378334ms)
+✔ unknown actual model and usage source remain null; denied tools cannot execute (0.106167ms)
+✔ attachment and artifact metadata retain ownership, revisions and constrained storage keys (0.248583ms)
+✔ unverified or unsupported models cannot enter AUTO (0.190958ms)
+✔ idempotency is identity-scoped, stable for reordered JSON, and conflicts do not replay (0.412167ms)
+✔ fingerprints reject non-JSON values rather than silently colliding (0.101875ms)
+ℹ tests 31
+ℹ suites 0
+ℹ pass 31
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 43.074875

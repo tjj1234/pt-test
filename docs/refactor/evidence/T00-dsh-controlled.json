@@ -1,0 +1,56 @@
+{
+  "status": "PASS",
+  "scope": "real SDK with deterministic in-process model/tool only",
+  "paidCalls": 0,
+  "assertions": [
+    "two real SDK sessions overlap before either tool finishes",
+    "session cwd metadata independent without chdir",
+    "cancel A reaches controlled tool signal",
+    "cancel A does not end B tool",
+    "B completes after A cancellation",
+    "usage stays per model response across tool round trip",
+    "public model selection changes next hot-session request",
+    "dispose removes agents and sessions",
+    "disposed identity can be recreated without registry collision",
+    "real filesystem provider honors per-call cwd without chdir",
+    "filesystem cwd is resolution only and permits parent path"
+  ],
+  "requests": [
+    {
+      "sessionId": "A",
+      "model": "one",
+      "n": 1,
+      "at": 1792122280780
+    },
+    {
+      "sessionId": "B",
+      "model": "one",
+      "n": 1,
+      "at": 1792122280780
+    },
+    {
+      "sessionId": "B",
+      "model": "one",
+      "n": 2,
+      "at": 1792122280782
+    },
+    {
+      "sessionId": "B",
+      "model": "two",
+      "n": 3,
+      "at": 1792122280782
+    }
+  ],
+  "usageB": [
+    {
+      "inputTokens": 10,
+      "outputTokens": 1,
+      "cacheReadTokens": 2
+    },
+    {
+      "inputTokens": 20,
+      "outputTokens": 2,
+      "cacheReadTokens": 2
+    }
+  ]
+}
