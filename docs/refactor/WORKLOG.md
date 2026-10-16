@@ -33,4 +33,8 @@
 | T10 | 产物路径子范围修复并独立通过，整包未完成 | commit `33210cbf8a9d79b68aa9f2a39ad7a48ac65efc77`；`artifacts.cjs` 跨平台反斜杠归一化、拒绝盘符相对路径及C0/C1控制字符；实现75/75 + 边界1/1，独立反例发现DEL/NEL后修复复验通过，见`docs/refactor/evidence/T10-artifact-path-review.md`。产物归属、持久化、下载与文档包格式仍待验 |
 | T07–T09、T11–T18 | 未交付 | 按依赖批次推进；不会以模块自测替代独立验收或端到端验收 |
 
+### 2026-10-16 · T03 执行生命周期服务子范围（过程记录）
+
+新增 `shell/tasks/execution.cjs`，用注入式 executor 接通已验收的持久 store 与 T04 scheduler：幂等 replay 短路、串行事件持久化、终态记录、按 runId 取消并等待执行器收敛。新增真实临时磁盘 PGlite 集成测试 `tests/regression/task-execution-test.mjs`。独立首验 FAIL 抓到 rejected event tail 未终态化、晚完成与取消回执不一致两项；修复并加入反例后，原独立 reviewer `/root/architecture` 限定复验 PASS（联合测试7/7，两个原反例独立受控 probe 均闭环）。命令 `node --test tests/regression/task-execution-test.mjs tests/regression/task-store-test.mjs tests/regression/task-store-review-test.mjs`：7/7 PASS，Node v24.14.0，无外部 PG／网络／DSH／PT 调用。证据 `docs/refactor/evidence/T03-execution-service.md`。此结论仅是服务模块子范围；不宣称 T03 完成。HTTP/SSE／重连、旧 `/api/chat` 接线、worker lease 与重启恢复扫描、预算和外部 provider 查询仍未交付。
+
 未进行真实Google授权、PT模型/媒体付费调用、生产PostgreSQL或部署验证。`.env`不读取；测试临时环境不继承Key。子Agent两次遇到平台用量限制后已按轮换方式继续；不降低独立验收要求。当前未合并main、未部署、未push；全任务仍需Claude整体验收和全新Claude Code测试。
