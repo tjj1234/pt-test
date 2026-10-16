@@ -47,6 +47,10 @@ const memoryMod = require("./memory.cjs");
 const panelSharesMod = require("./panel-share.cjs");
 const toolCallsMod = require("./tool-calls.cjs");
 const toolsRegistry = require("./tools/registry.cjs");
+const { createTaskStore } = require("./tasks/store.cjs");
+const { createRunExecutionService } = require("./tasks/execution.cjs");
+const { createSessionScheduler } = require("./runtime/session-scheduler.cjs");
+const phase1Contracts = require("./contracts/phase1.cjs");
 
 /* ---- 模型目录：进程内缓存 + 每日同步（B3）----
  * 同步失败不影响对话：拉不到就用上次缓存，缓存也没有就退回 yaml 静态列表。 */
@@ -150,6 +154,11 @@ let conversations = null;        // 对话窗口化落库句柄
 let memory = null;               // 用户长期记忆 / 所选模型
 let panelShares = null;          // 面板分享落库句柄
 let toolCalls = null;            // 工具调用日志落库句柄（M1）
+let taskStore = null;            // 持久化 run 与事件（T03）
+let taskScheduler = null;        // 有界进程内执行队列（T03）
+let taskExecution = null;        // run 生命周期服务（T03）
+const runningChatRequests = new Map();
+const runningChatRuns = new Map();
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
@@ -403,23 +412,29 @@ function toMarkdown(messages) {
 /* ============================================================================
  * /api/chat 核心流程（异步，事件循环不阻塞）
  * ========================================================================== */
-async function handleChat(req, res, me, body) {
+async function handleChat(req, res, me, body, taskRun = null) {
   const uid = me.user.id;
   const conversationId = String(body.conversationId || "").trim();
   const regenerate = body.regenerate === true;
   const msgRaw = String(body.message || "").trim();
   const hasBranch = body.branchFrom !== undefined && body.branchFrom !== null;
+  const rejectChat = (status, payload) => {
+    if (!taskRun) return json(res, status, payload);
+    taskRun.outcome = { ok: false, error: payload.error || "请求无效", needKey: payload.needKey === true };
+    taskRun.finalPayload = { done: true, ...payload };
+    return;
+  };
 
-  if (!conversationId) return json(res, 400, { ok: false, error: "缺少 conversationId" });
-  if (!regenerate && !hasBranch && !msgRaw) return json(res, 400, { ok: false, error: "问题不能为空" });
+  if (!conversationId) return rejectChat(400, { ok: false, error: "缺少 conversationId" });
+  if (!regenerate && !hasBranch && !msgRaw) return rejectChat(400, { ok: false, error: "问题不能为空" });
 
   // 加载对话（归属校验：只取属于当前用户的）
   const conv = await conversations.get(uid, conversationId);
-  if (!conv) return json(res, 404, { ok: false, error: "对话不存在或不属于你" });
+  if (!conv) return rejectChat(404, { ok: false, error: "对话不存在或不属于你" });
 
   // 归档对话只读：后端硬拦截（不依赖前端禁用），防止绕开前端直接调接口继续生成
   if (conv.archived) {
-    return json(res, 409, { ok: false, archived: true, error: "该对话已归档，请先解除归档" });
+    return rejectChat(409, { ok: false, archived: true, error: "该对话已归档，请先解除归档" });
   }
 
   let messages = Array.isArray(conv.messages) ? conv.messages : [];
@@ -449,7 +464,7 @@ async function handleChat(req, res, me, body) {
   for (const d of documents) {
     const m = /^\/uploads\/([^/?#]+)\/([^/?#]+)$/.exec(d);
     if (!m || m[1] !== me.tenant.id || !/^[A-Za-z0-9._-]+$/.test(m[2])) {
-      return json(res, 400, { ok: false, error: "无法读取该文档（不属于当前租户或文件已失效），请重新上传" });
+      return rejectChat(400, { ok: false, error: "无法读取该文档（不属于当前租户或文件已失效），请重新上传" });
     }
   }
 
@@ -470,7 +485,7 @@ async function handleChat(req, res, me, body) {
   for (const att of mediaAttachments) {
     const m = /^\/uploads\/([^/?#]+)\/([^/?#]+)$/.exec(att.url);
     if (!m || m[1] !== me.tenant.id || !/^[A-Za-z0-9._-]+$/.test(m[2])) {
-      return json(res, 400, { ok: false, error: "无法读取该媒体附件（不属于当前租户或文件已失效），请重新上传" });
+      return rejectChat(400, { ok: false, error: "无法读取该媒体附件（不属于当前租户或文件已失效），请重新上传" });
     }
   }
 
@@ -490,33 +505,33 @@ async function handleChat(req, res, me, body) {
     let bi = -1;
     if (typeof branchFrom === "number") bi = branchFrom;
     else bi = messages.findIndex((m) => m && m.ts === String(branchFrom));
-    if (bi < 0 || bi >= messages.length) return json(res, 400, { ok: false, error: "分岔位置无效" });
-    if (!messages[bi] || messages[bi].role !== "assistant") return json(res, 400, { ok: false, error: "只能对助手回复分岔" });
+    if (bi < 0 || bi >= messages.length) return rejectChat(400, { ok: false, error: "分岔位置无效" });
+    if (!messages[bi] || messages[bi].role !== "assistant") return rejectChat(400, { ok: false, error: "只能对助手回复分岔" });
     // 保留该 assistant 之前的全部历史（含它对应的用户问题），丢弃该 assistant 及其后
     const hist = messages.slice(0, bi);
     let qi = -1;
     for (let i = hist.length - 1; i >= 0; i--) if (hist[i].role === "user") { qi = i; break; }
-    if (qi < 0) return json(res, 400, { ok: false, error: "没有找到对应的问题" });
+    if (qi < 0) return rejectChat(400, { ok: false, error: "没有找到对应的问题" });
     question = String(hist[qi].text || "").trim();
-    if (!question) return json(res, 400, { ok: false, error: "问题为空" });
+    if (!question) return rejectChat(400, { ok: false, error: "问题为空" });
     messages = hist;
   } else if (regenerate) {
-    if (!messages.length) return json(res, 400, { ok: false, error: "没有可重新生成的内容" });
+    if (!messages.length) return rejectChat(400, { ok: false, error: "没有可重新生成的内容" });
     const last = messages[messages.length - 1];
     if (last.role === "assistant") {
       let qi = -1;
       for (let i = messages.length - 2; i >= 0; i--) {
         if (messages[i].role === "user") { qi = i; break; }
       }
-      if (qi < 0) return json(res, 400, { ok: false, error: "没有找到对应的问题" });
+      if (qi < 0) return rejectChat(400, { ok: false, error: "没有找到对应的问题" });
       question = String(messages[qi].text || "").trim();
-      if (!question) return json(res, 400, { ok: false, error: "问题为空" });
+      if (!question) return rejectChat(400, { ok: false, error: "问题为空" });
       messages = messages.slice(0, messages.length - 1);
     } else if (last.role === "user") {
       question = String(last.text || "").trim();
-      if (!question) return json(res, 400, { ok: false, error: "问题为空" });
+      if (!question) return rejectChat(400, { ok: false, error: "问题为空" });
     } else {
-      return json(res, 400, { ok: false, error: "无法重新生成" });
+      return rejectChat(400, { ok: false, error: "无法重新生成" });
     }
   } else {
     const um = { role: "user", text: question, ts: new Date().toISOString() };
@@ -530,7 +545,7 @@ async function handleChat(req, res, me, body) {
   let preKey = null;
   try { preKey = await keys.decryptApiKey(uid); } catch (e) { /* 交给 runDshForUser 再报 */ }
   if (!preKey || !String(preKey).trim()) {
-    return json(res, 409, { ok: false, needKey: true, error: "还没保存你的 PT key（BYOK）。请先到「设置」页保存 key，再开始对话。" });
+    return rejectChat(409, { ok: false, needKey: true, error: "还没保存你的 PT key（BYOK）。请先到「设置」页保存 key，再开始对话。" });
   }
 
   // 先把用户问题落库（停止/失败也不丢问题）
@@ -608,14 +623,25 @@ async function handleChat(req, res, me, body) {
     "- 错误码 GA_NOT_CONFIGURED：表示平台侧 GA4 连接配置缺失（如 GA_CLIENT_ID / GA_CLIENT_SECRET / GA_REDIRECT_URI / GA_TOKEN_ENCRYPTION_KEY 等环境变量未配置），属于系统级配置问题，不是用户自己能解决的。请如实说明这是系统侧配置缺失，建议用户联系管理员处理；不要引导用户去点击「GA4 授权」（点了也会失败）。";
 
   // ===== 流式（SSE）：先切响应头，后续增量用 sse() 逐段下发 =====
-  res.writeHead(200, {
+  if (taskRun && taskRun.runId && !res.headersSent) res.setHeader("X-Agent-Run-Id", taskRun.runId);
+  if (!res.headersSent) res.writeHead(200, {
     "Content-Type": "text/event-stream; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
   });
-  res.flushHeaders();
-  const sse = (obj) => { try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (e) {} };
+  if (!res.headersSent) res.flushHeaders();
+  const sse = (obj) => {
+    if (taskRun && taskRun.emit) {
+      if (obj.connecting) void taskRun.emit("connecting", { phase: "model" });
+      else if (obj.delta) void taskRun.emit("delta", { text: obj.delta });
+      else if (obj.step) void taskRun.emit("step", { step: obj.step });
+      else if (obj.artifact) void taskRun.emit("artifact", { artifact: obj.artifact });
+      else if (obj.done) { taskRun.stopped = obj.stopped === true; taskRun.outcome = { ok: obj.ok !== false, stopped: taskRun.stopped, needKey: obj.needKey === true }; taskRun.finalPayload = obj; }
+      return;
+    }
+    try { res.write("data: " + JSON.stringify(obj) + "\n\n"); } catch (e) {}
+  };
 
   // 任务B：请求已受理，先推一帧「正在建立模型连接」，让前端区分「连接中」与「思考中」。
   // 每次请求都发一次（热连接下会立刻被后续 delta 覆盖，用户几乎无感）。
@@ -653,7 +679,13 @@ async function handleChat(req, res, me, body) {
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
     timeoutMs: taskTimeoutMs,
-    onSpawn: (job) => { runningJobs.set(uid, job); },
+    onSpawn: (job) => {
+      runningJobs.set(uid, job);
+      if (taskRun && taskRun.signal) {
+        if (taskRun.signal.aborted) { if (typeof job.abort === "function") job.abort(); else job.kill(); }
+        else taskRun.signal.addEventListener("abort", () => { if (typeof job.abort === "function") job.abort(); else job.kill(); }, { once: true });
+      }
+    },
     onDelta: (delta) => { sse({ delta }); },
     onStep: (step) => { sse({ step }); },
     onArtifact: (a) => { sse({ artifact: a }); },   // Agent 写了可预览文件：立刻让前端弹面板（提前量）
@@ -714,7 +746,7 @@ async function handleChat(req, res, me, body) {
   // 兜底：runDshForUser 内部因 key 来源缺失 / 无 key 失败
   if (!r.ok && (r.code === tenantMod.NO_API_KEY_CODE || r.code === tenantMod.NO_KEY_SOURCE_CODE)) {
     sse({ done: true, ok: false, needKey: true, error: r.error, messages });
-    return res.end();
+    return taskRun ? undefined : res.end();
   }
 
   // 停止 / 超时中断：问题已保存，没跑完的回答丢弃不保存。
@@ -731,7 +763,7 @@ async function handleChat(req, res, me, body) {
       artifacts: Array.isArray(r.artifacts) ? r.artifacts : [],
       messages: cur ? cur.messages : messages,
     });
-    return res.end();
+    return taskRun ? undefined : res.end();
   }
 
   if (!r.ok) {
@@ -742,7 +774,7 @@ async function handleChat(req, res, me, body) {
     const saved = messages.concat([{ role: "assistant", text: errText, ts: new Date().toISOString() }]);
     await conversations.saveMessages(uid, conversationId, saved);
     sse({ done: true, ok: false, reply: errText, messages: saved, error: r.error, turns: saved.filter((m) => m.role === "assistant").length });
-    return res.end();
+    return taskRun ? undefined : res.end();
   }
 
   // 成功（dry-run 或真实 DSH 输出）
@@ -779,7 +811,7 @@ async function handleChat(req, res, me, body) {
     turns: saved.filter((m) => m.role === "assistant").length,
     ...(DRY_RUN_CHAT ? { dryRun: true, tenantId: r.tenantId, workspace: r.cwd, userId: r.userId, keySha256: r.keySha256 } : {}),
   });
-  return res.end();
+  return taskRun ? undefined : res.end();
 }
 
 /** 反向代理：把看板藏到业务壳后面。 */
@@ -1080,6 +1112,69 @@ async function handle(req, res) {
   if (await handleMemberRoutes(req, res, auth, me)) return;
   if (await handleAuthAccountsRoutes(req, res, auth, me)) return;
 
+  // ---- T03 durable run read/cancel API; identity is always taken from the session ----
+  const runIdentity = { userId: me.user.id, tenantId: me.tenant.id };
+  if (p === "/api/runs" && req.method === "GET") {
+    const u = new URL(req.url, "http://127.0.0.1:" + PORT);
+    const limit = Number(u.searchParams.get("limit") || 100);
+    try { return json(res, 200, { ok: true, ...(await taskStore.listRuns(runIdentity, { limit })) }); }
+    catch (e) { return json(res, e.statusCode || 400, { ok: false, code: e.code || "INVALID_REQUEST", error: e.message }); }
+  }
+  const runMatch = p.match(/^\/api\/runs\/([^/]+)(?:\/(events|cancel))?$/);
+  if (runMatch && req.method === "GET" && !runMatch[2]) {
+    try { return json(res, 200, { ok: true, run: await taskStore.getRun(runIdentity, decodeURIComponent(runMatch[1])) }); }
+    catch (e) { return json(res, e.statusCode || 404, { ok: false, code: e.code || "NOT_FOUND", error: "任务不存在或无权访问" }); }
+  }
+  if (runMatch && runMatch[2] === "events" && req.method === "GET") {
+    const runId = decodeURIComponent(runMatch[1]);
+    const u = new URL(req.url, "http://127.0.0.1:" + PORT);
+    const after = Number(req.headers["last-event-id"] || u.searchParams.get("after") || 0);
+    const limit = Number(u.searchParams.get("limit") || 500);
+    const wantsStream = u.searchParams.get("stream") === "1" || String(req.headers.accept || "").includes("text/event-stream");
+    try {
+      if (!Number.isSafeInteger(after) || after < 0 || !Number.isInteger(limit) || limit < 1 || limit > 500) return json(res, 400, { ok: false, error: "无效事件游标或分页大小" });
+      await taskStore.getRun(runIdentity, runId); // ownership and existence must be established before SSE headers
+      if (!wantsStream) return json(res, 200, { ok: true, ...(await taskStore.eventsAfter(runIdentity, runId, { after, limit })) });
+      // Subscribe before reading the durable prefix; buffer live events while replaying to close the gap.
+      let replaying = true, closed = false, last = after;
+      const pending = [];
+      res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+      res.flushHeaders();
+      const send = (event) => {
+        if (closed || event.seq <= last) return;
+        last = event.seq;
+        res.write("id: " + event.seq + "\nevent: run\ndata: " + JSON.stringify(event) + "\n\n");
+        if (event.type === "done") { closed = true; unsubscribe(); res.end(); }
+      };
+      const unsubscribe = taskExecution.subscribe(runId, (event) => { if (replaying) pending.push(event); else send(event); });
+      res.on("close", () => { closed = true; unsubscribe(); }); // disconnect only detaches this observer
+      try {
+        let cursor = after, more = true;
+        while (more && !closed) {
+          const page = await taskStore.eventsAfter(runIdentity, runId, { after: cursor, limit: Math.min(500, limit) });
+          for (const event of page.events) send(event);
+          cursor = page.nextCursor; more = page.hasMore;
+          if (!page.events.length) break;
+        }
+        replaying = false;
+        pending.sort((a, b) => a.seq - b.seq).forEach(send);
+        if (!closed) {
+          const current = await taskStore.getRun(runIdentity, runId);
+          if (["completed", "failed", "cancelled", "interrupted"].includes(current.state)) { closed = true; unsubscribe(); res.end(); }
+        }
+      } catch (e) {
+        closed = true; unsubscribe();
+        if (!res.headersSent) return json(res, e.statusCode || 404, { ok: false, code: e.code || "NOT_FOUND", error: "任务不存在或无权访问" });
+        res.end();
+      }
+      return;
+    } catch (e) { return json(res, e.statusCode || 404, { ok: false, code: e.code || "NOT_FOUND", error: "任务事件不存在或无权访问" }); }
+  }
+  if (runMatch && runMatch[2] === "cancel" && req.method === "POST") {
+    try { return json(res, 200, { ok: true, ...(await taskExecution.cancel(runIdentity, decodeURIComponent(runMatch[1]))) }); }
+    catch (e) { return json(res, e.statusCode || 404, { ok: false, code: e.code || "NOT_FOUND", error: "无法停止该任务" }); }
+  }
+
   // ---- M1：工具清单 / 工具执行 / 工具调用日志（按 workspace 隔离）----
   const workspaceIdFor = (m) => "ws_" + (m && m.tenant ? m.tenant.id : "");
   if (p === "/api/tools" && req.method === "GET") {
@@ -1207,6 +1302,13 @@ async function handle(req, res) {
   // ---- 停止当前用户正在跑的 DSH ----
   if (p === "/api/chat/stop" && req.method === "POST") {
     const uid = me.user.id;
+    const runId = runningChatRuns.get(uid);
+    if (runId) {
+      try {
+        const result = await taskExecution.cancel({ userId: uid, tenantId: me.tenant.id }, runId);
+        return json(res, 200, { ok: true, stopped: result.stopped, runId });
+      } catch (e) { return json(res, 409, { ok: false, stopped: false, error: "停止任务未能确认", code: e.code || "CANCEL_FAILED" }); }
+    }
     const job = runningJobs.get(uid);
     if (!job) return json(res, 200, { ok: true, stopped: false, error: "当前没有正在运行的任务" });
     job.kill(); // 杀掉子进程；杀完由 handleChat 里的 close 事件回报 stopped=true，未完成回答丢弃
@@ -1536,17 +1638,153 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
     try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
 
     const uid = me.user.id;
-    // 并发控制：同一用户同一时刻只允许一个生成中的对话（同步 check-and-set，无 await，原子）
-    if (runningJobs.has(uid)) {
+    const idempotencyKey = String(req.headers["idempotency-key"] || body.idempotencyKey || crypto.randomUUID());
+    const conversationId = String(body.conversationId || "").trim();
+    if (!conversationId) return json(res, 400, { ok: false, error: "缺少 conversationId" });
+    if (idempotencyKey.length > 256 || !idempotencyKey.trim()) return json(res, 400, { ok: false, error: "无效幂等键" });
+    // T04 尚未接入前继续按用户串行；同一幂等键的重试可取回原 run。
+    if (runningJobs.has(uid) && runningChatRequests.get(uid) !== idempotencyKey) {
       return json(res, 409, { ok: false, busy: true, error: "上一个还在跑，请先停止或等它结束" });
     }
-    runningJobs.set(uid, null); // claim 占位（还没真正 spawn）
+    const ownsChatLock = !runningJobs.has(uid);
+    if (ownsChatLock) {
+      runningJobs.set(uid, null);
+      runningChatRequests.set(uid, idempotencyKey);
+    }
+    let releaseExecution;
+    let executionReady;
+    const executionResult = new Promise((resolve) => { releaseExecution = resolve; });
+    const ready = new Promise((resolve) => { executionReady = resolve; });
+    const runIdentity = { userId: uid, tenantId: me.tenant.id };
     try {
-      return await handleChat(req, res, me, body);
+      const bufferedEvents = [];
+      let streamReady = false, streamClosed = false, streamTail = Promise.resolve(), chatTaskRun = null;
+      const writeLegacyEvent = async (event) => {
+        if (streamClosed || res.writableEnded) return;
+        const p = event.payload || {};
+        if (event.type === "queued") res.write("data: {\"queued\":true}\n\n");
+        else if (event.type === "connecting") res.write("data: {\"connecting\":true}\n\n");
+        else if (event.type === "delta") res.write("data: " + JSON.stringify({ delta: p.text || "" }) + "\n\n");
+        else if (event.type === "step") res.write("data: " + JSON.stringify({ step: p.step }) + "\n\n");
+        else if (event.type === "artifact") res.write("data: " + JSON.stringify({ artifact: p.artifact }) + "\n\n");
+        else if (event.type === "done") {
+          const current = await taskStore.getRun(runIdentity, event.runId);
+          const conversation = await conversations.get(uid, current.conversationId);
+          const messages = conversation ? conversation.messages : [];
+          const outcome = chatTaskRun && chatTaskRun.finalPayload;
+          const stopped = current.state === "cancelled";
+          const lastAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+          const donePayload = Object.assign({
+            done: true, ok: current.state === "completed", stopped,
+            stopReason: stopped ? "user" : undefined, messages,
+            reply: lastAssistant && lastAssistant.text,
+            turns: messages.filter((message) => message.role === "assistant").length,
+          }, outcome || {});
+          res.write("data: " + JSON.stringify(donePayload) + "\n\n");
+          streamClosed = true;
+          res.end();
+        }
+      };
+      const queueLegacyEvent = (event) => {
+        if (!streamReady) { bufferedEvents.push(event); return; }
+        streamTail = streamTail.then(() => writeLegacyEvent(event)).catch(() => { if (!res.writableEnded) res.end(); });
+      };
+      const submission = await taskExecution.submit(runIdentity, {
+        conversationId,
+        idempotencyKey,
+        request: { bodySha256: phase1Contracts.fingerprint(body), operation: "chat" },
+      }, { kind: "chat" }, {
+        executor: async ({ signal, emit }) => {
+          const taskRun = { runId: null, signal, emit, stopped: false };
+          executionReady(taskRun);
+          return executionResult;
+        },
+        onEvent: queueLegacyEvent,
+      });
+      if (submission.replayed) {
+        if (ownsChatLock) { runningJobs.delete(uid); runningChatRequests.delete(uid); }
+        const runId = submission.run.runId;
+        let replaying = true, closed = false, last = 0;
+        const pending = [];
+        res.setHeader("X-Agent-Run-Id", runId);
+        res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+        res.flushHeaders();
+        const finishReplay = async (event) => {
+          if (closed || event.seq <= last) return;
+          last = event.seq;
+          const p = event.payload || {};
+          if (event.type === "connecting") res.write("data: {\"connecting\":true}\n\n");
+          else if (event.type === "delta") res.write("data: " + JSON.stringify({ delta: p.text || "" }) + "\n\n");
+          else if (event.type === "step") res.write("data: " + JSON.stringify({ step: p.step }) + "\n\n");
+          else if (event.type === "artifact") res.write("data: " + JSON.stringify({ artifact: p.artifact }) + "\n\n");
+          else if (event.type === "done") {
+            const current = await taskStore.getRun(runIdentity, runId);
+            const convNow = await conversations.get(uid, submission.run.conversationId);
+            const messagesNow = convNow ? convNow.messages : [];
+            const stopped = current.state === "cancelled";
+            const lastAssistant = [...messagesNow].reverse().find((m) => m.role === "assistant");
+            res.write("data: " + JSON.stringify({ done: true, ok: current.state === "completed", stopped, stopReason: stopped ? "user" : undefined, messages: messagesNow, reply: lastAssistant && lastAssistant.text, turns: messagesNow.filter((m) => m.role === "assistant").length }) + "\n\n");
+            closed = true; unsubscribe(); res.end();
+          }
+        };
+        const unsubscribe = taskExecution.subscribe(runId, (event) => { if (replaying) pending.push(event); else void finishReplay(event); });
+        res.on("close", () => { closed = true; unsubscribe(); });
+        let cursor = 0, more = true;
+        while (more && !closed) {
+          const page = await taskStore.eventsAfter(runIdentity, runId, { after: cursor, limit: 500 });
+          for (const event of page.events) await finishReplay(event);
+          cursor = page.nextCursor; more = page.hasMore;
+          if (!page.events.length) break;
+        }
+        replaying = false;
+        pending.sort((a, b) => a.seq - b.seq);
+        for (const event of pending) await finishReplay(event);
+        return;
+      }
+      const runId = submission.run.runId;
+      runningChatRuns.set(uid, runId);
+      res.setHeader("X-Agent-Run-Id", runId);
+      res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", "Cache-Control": "no-cache, no-transform", Connection: "keep-alive", "X-Accel-Buffering": "no" });
+      res.flushHeaders();
+      streamReady = true;
+      bufferedEvents.sort((a, b) => a.seq - b.seq).forEach(queueLegacyEvent);
+      res.on("close", () => { streamClosed = true; }); // disconnect detaches only this response; run remains durable
+      const runChat = async () => {
+        try {
+          const taskRun = await Promise.race([
+            ready,
+            submission.execution.result.then(() => { throw Object.assign(new Error("Run settled before executor start"), { code: "RUN_NOT_STARTED" }); }),
+          ]);
+          chatTaskRun = taskRun;
+          taskRun.runId = runId;
+          await handleChat(req, res, me, body, taskRun);
+          releaseExecution(taskRun.outcome || { ok: true, stopped: taskRun.stopped });
+          await submission.execution.result;
+        } catch (error) {
+          releaseExecution({ ok: false, error: error.message });
+          // Never invent an HTTP terminal frame when durable terminal persistence failed.
+          // The client can reconnect to the run feed and observe recovery/reconciliation state.
+          if (!res.writableEnded) streamTail = streamTail.then(() => { if (!res.writableEnded) res.end(); });
+        } finally {
+          if (ownsChatLock) {
+            runningJobs.delete(uid);
+            runningChatRequests.delete(uid);
+            runningChatRuns.delete(uid);
+          }
+        }
+      };
+      void runChat();
+      return;
+    } catch (error) {
+      if (!res.headersSent) return json(res, error.statusCode || 400, { ok: false, code: error.code || "CHAT_SUBMISSION_FAILED", error: error.statusCode === 404 ? "对话不存在或不属于你" : "任务提交失败，请重试" });
+      if (!res.writableEnded) res.end();
+      return;
     } finally {
-      // handleChat 返回即代表本次运行已结束（成功/停止/失败/提前退出），一律清掉占位，
-      // 否则会残留导致该用户永远「上一个还在跑」。
-      runningJobs.delete(uid);
+      if (ownsChatLock && !runningChatRuns.has(uid)) {
+        runningJobs.delete(uid);
+        runningChatRequests.delete(uid);
+        runningChatRuns.delete(uid);
+      }
     }
   }
 
@@ -1571,6 +1809,7 @@ async function gracefulShutdown() {
   log.info("shutdown_start", {});
   console.log("[业务壳] 优雅停机：关闭 PGlite…");
   try {
+    if (taskScheduler) await taskScheduler.close();
     if (auth && auth.close) await auth.close();
     log.info("shutdown_complete", {});
   } catch (e) {
@@ -1665,6 +1904,18 @@ async function main() {
   conversations = await convMod.initConversations(auth.db);
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
+  taskStore = createTaskStore(auth.db);
+  taskScheduler = createSessionScheduler({
+    perUserLimit: Number(process.env.PT_RUNS_PER_USER || 2),
+    globalLimit: Number(process.env.PT_RUNS_GLOBAL || 8),
+  });
+  taskExecution = createRunExecutionService({
+    store: taskStore,
+    scheduler: taskScheduler,
+    executor: async () => { throw Object.assign(new Error("No task executor was supplied"), { code: "EXECUTOR_REQUIRED" }); },
+  });
+  const recoveredRuns = await taskStore.recoverAllInterrupted();
+  if (recoveredRuns.length) log.info("agent_runs_recovered", { count: recoveredRuns.length });
 
   // 任务A：启动保活心跳（扫描「仍存活的常驻进程租户」，逐个发心跳），防空闲回收导致的首字延迟。
   startHeartbeat();

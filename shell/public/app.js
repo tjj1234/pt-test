@@ -813,7 +813,7 @@ async function runChat(payload) {
   try {
     const r = await fetch("/api/chat", {
       method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+      headers: { "Content-Type": "application/json", "Idempotency-Key": (window.crypto && crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + "-" + Math.random().toString(36).slice(2))) }, body: JSON.stringify(payload),
     });
     const ct = (r.headers.get("content-type") || "");
 
@@ -866,6 +866,7 @@ async function runChat(payload) {
             if (!viewing()) { markUnread(targetId); await refreshList(); return; }
             if (obj.stopped) { renderChat(obj.messages); showStoppedBar(obj.stopReason); cm.textContent = stoppedChipText(obj.stopReason); }
             else if (obj.ok) { renderChat(obj.messages); cm.textContent = "第 " + obj.turns + " 轮 · 常驻 agent 会话续接"; }
+            else if (obj.needKey) { needKeyBubble(); cm.textContent = ""; }
             else { if (Array.isArray(obj.messages)) renderChat(obj.messages); else bubbleSys("执行失败：" + (obj.error || "")); cm.textContent = ""; }
             await refreshList();
           }

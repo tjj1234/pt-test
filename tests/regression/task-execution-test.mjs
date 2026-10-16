@@ -10,7 +10,7 @@ const { createTaskStore } = require('../../shell/tasks/store.cjs');
 const { createSessionScheduler } = require('../../shell/runtime/session-scheduler.cjs');
 const { createRunExecutionService } = require('../../shell/tasks/execution.cjs');
 
-test('run execution persists ordered events, deduplicates before execution, and settles cancellation', async (t) => {
+test('run execution persists ordered events, deduplicates before execution, and settles cancellation', { timeout: 15000 }, async (t) => {
   assert.equal(Object.keys(process.env).some((key) => key.startsWith('PT_PG_') && process.env[key]), false, 'No external PG configuration allowed');
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'northstar-run-execution-'));
   let storage;
@@ -42,6 +42,18 @@ test('run execution persists ordered events, deduplicates before execution, and 
     assert.deepEqual(persisted.events.map((event) => event.seq), [1, 2, 3, 4, 5, 6, 7]);
     assert.deepEqual(persisted.events.filter((event) => event.type === 'delta').map((event) => event.payload.text), ['A', 'B']);
     assert.equal((await store.getRun(identity, first.run.runId)).state, 'completed');
+    const replayedEvents = [];
+    const replayWithListener = await service.submit(identity, input, {}, { onEvent: (event) => replayedEvents.push(event.seq) });
+    assert.equal(replayWithListener.replayed, true);
+    assert.deepEqual(replayedEvents, [1, 2, 3, 4, 5, 6, 7], 'each new subscriber receives the full durable prefix');
+
+    const finalized = await service.submit(identity, { ...input, idempotencyKey: 'request-finalize' }, {}, {
+      executor: async () => ({ ok: true }),
+      finalize: async (_result, { emit }) => { await emit('usage', { totalTokens: 1 }); return { ok: true }; },
+    });
+    await finalized.execution.result;
+    const finalizedEvents = (await store.eventsAfter(identity, finalized.run.runId)).events;
+    assert.deepEqual(finalizedEvents.slice(-3).map((event) => event.type), ['usage', 'state', 'done'], 'finalizer events are durable before terminal events');
 
     const cancelInput = { ...input, idempotencyKey: 'request-2' };
     let started;
@@ -82,6 +94,50 @@ test('run execution persists ordered events, deduplicates before execution, and 
     const lateCancel = await cancelPending;
     assert.equal(lateCancel.stopped, false);
     assert.equal(lateCancel.run.state, 'completed');
+
+    // Adversarial scheduler race: queued cancellation's CAS overlaps queue promotion.
+    const raceScheduler = createSessionScheduler({ perUserLimit: 2, globalLimit: 1 });
+    t.after(() => raceScheduler.close());
+    const secondConv = await storage.repositories.conversations.create(identity.userId);
+    let releaseFirst, firstStarted, secondStarted, allowCancelCas;
+    const firstStartedPromise = new Promise((resolve) => { firstStarted = resolve; });
+    const secondStartedPromise = new Promise((resolve) => { secondStarted = resolve; });
+    const casPaused = new Promise((resolve) => { allowCancelCas = resolve; });
+    let cancelAtCas;
+    const cancelAtCasPromise = new Promise((resolve) => { cancelAtCas = resolve; });
+    let raceFirst = true;
+    const racingStore = Object.create(store);
+    let racingRunId;
+    racingStore.transition = async (...args) => {
+      if (args[1] === racingRunId && args[2] === 'cancelled') { cancelAtCas(); await casPaused; }
+      return store.transition(...args);
+    };
+    const racingService = createRunExecutionService({ store: racingStore, scheduler: raceScheduler, executor: ({ run, signal }) => {
+      if (raceFirst) { raceFirst = false; firstStarted(); return new Promise((resolve) => { releaseFirst = resolve; }); }
+      secondStarted();
+      return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    } });
+    const firstRace = await racingService.submit(identity, { ...input, idempotencyKey: 'cancel-race-first' });
+    await firstStartedPromise;
+    const secondRace = await racingService.submit(identity, { ...input, conversationId: secondConv.id, idempotencyKey: 'cancel-race-second' });
+    racingRunId = secondRace.run.runId;
+    const cancelRace = racingService.cancel(identity, racingRunId);
+    await cancelAtCasPromise;
+    releaseFirst({ ok: true });
+    await secondStartedPromise;
+    allowCancelCas();
+    const raceResult = await cancelRace;
+    assert.equal(raceResult.stopped, true, 'cancel retries against promoted running revision and aborts the executor');
+    assert.equal(raceResult.run.state, 'cancelled');
+    await firstRace.execution.result;
+
+    const closedScheduler = createSessionScheduler({ perUserLimit: 1, globalLimit: 1 });
+    await closedScheduler.close();
+    const rejectedService = createRunExecutionService({ store, scheduler: closedScheduler, executor: async () => ({ ok: true }) });
+    await assert.rejects(rejectedService.submit(identity, { ...input, idempotencyKey: 'request-scheduler-rejected' }), { code: 'SCHEDULER_CLOSED' });
+    const rejectedRuns = await store.listRuns(identity, { limit: 100 });
+    const rejectedRun = rejectedRuns.runs.find((item) => item.state === 'failed' && item.conversationId === conv.id);
+    assert.ok(rejectedRun, 'scheduler rejection leaves no permanently queued run');
   } finally {
     if (storage) await storage.close();
     fs.rmSync(dir, { recursive: true, force: true });

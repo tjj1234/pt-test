@@ -40,6 +40,15 @@ test('independent: external intent survives restart and does not create a replac
  assert.deepEqual(await s.getRun(f.a,r.runId),recovered);assert.equal((await s.createRun(f.a,f.input())).run.runId,r.runId);
  assert.equal((await f.storage.adapter.query('SELECT count(*)::int AS n FROM agent_runs')).rows[0].n,1);
 });
+test('independent: startup recovery interrupts abandoned work and preserves user confirmation state',async t=>{
+ const f=await fixture(t),s=f.store();
+ const queued=(await s.createRun(f.a,f.input('queued-recovery'))).run;
+ let running=(await s.createRun(f.a,f.input('running-recovery'))).run;running=await s.transition(f.a,running.runId,'running',running.revision);
+ let awaiting=(await s.createRun(f.a,f.input('awaiting-recovery'))).run;awaiting=await s.transition(f.a,awaiting.runId,'running',awaiting.revision);awaiting=await s.transition(f.a,awaiting.runId,'awaiting_confirmation',awaiting.revision);
+ const recovered=await s.recoverAllInterrupted();assert.equal(recovered.length,2);
+ assert.equal((await s.getRun(f.a,queued.runId)).state,'interrupted');assert.equal((await s.getRun(f.a,running.runId)).state,'interrupted');
+ assert.equal((await s.getRun(f.a,awaiting.runId)).state,'awaiting_confirmation','restart must retain the user decision boundary');
+});
 test('independent: event IDs are globally unique and failures preserve next sequence',async t=>{
  const f=await fixture(t),s=f.store();const r=(await s.createRun(f.a,f.input())).run;const r2=(await s.createRun(f.a,f.input('second'))).run;const id=randomUUID();
  await s.appendEvent(f.a,r.runId,{eventId:id,type:'usage',payload:{tokens:null}});

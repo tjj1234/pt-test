@@ -14,7 +14,7 @@ const TRANSITIONS = Object.freeze({
   cancelling: ["cancelled", "completed", "failed", "interrupted"],
   completed: [], failed: [], cancelled: [], interrupted: [],
 });
-const EVENT_TYPES = Object.freeze(["queued", "connecting", "delta", "tool.started", "tool.finished", "attachment.status", "artifact.ready", "usage", "state", "done", "error"]);
+const EVENT_TYPES = Object.freeze(["queued", "connecting", "delta", "step", "artifact", "tool.started", "tool.finished", "attachment.status", "artifact.ready", "usage", "state", "done", "error"]);
 const text = (x) => typeof x === "string" && x.trim().length > 0;
 const object = (x) => x !== null && typeof x === "object" && !Array.isArray(x) && Object.getPrototypeOf(x) === Object.prototype;
 const integer = (x) => Number.isSafeInteger(x) && x >= 0;

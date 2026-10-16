@@ -36,7 +36,7 @@ test('independent integration: upgrade denies legacy password sessions/routes; c
     const preload = path.join(tmp, 'verified-identity-fixture.cjs');
     fs.writeFileSync(preload, `const Module=require('node:module'); const load=Module._load; const crypto=require('node:crypto');
 Module._load=function(name,parent,isMain){ const loaded=load.apply(this,arguments); if(parent?.filename.endsWith('auth-google-routes.cjs') && name==='./auth-google.cjs') return {...loaded,createGoogleAuth:async({db})=>({begin:async()=>({authorizationUrl:'https://accounts.google.com/o/oauth2/v2/auth?state=fixture-state'}),callback:async()=>{const user=(await db.query("SELECT id,username,email,role,tenant_id FROM users WHERE username=$1",['legacy-review'])).rows[0]; const token=crypto.randomBytes(32).toString('base64url');const expiresAt=new Date(Date.now()+60000).toISOString();await db.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)',[user.id,crypto.createHash('sha256').update(token).digest('hex'),expiresAt]);return {ok:true,user,token,expiresAt};}})}; return loaded;};`);
-    const env = { PATH: process.env.PATH, HOME: tmp, PT_DB_DIR: dbDir, PT_MASTER_KEY_FILE: path.join(tmp, 'key'), PT_LOG_DIR: path.join(tmp, 'logs'), PT_SHELL_PORT: String(port), PT_LISTEN_HOST: '127.0.0.1', PT_TEST_SHUTDOWN_TOKEN: stopToken, GOOGLE_CLIENT_ID: 'fixture-client', GOOGLE_CLIENT_SECRET: 'fixture-secret', GOOGLE_REDIRECT_URI: origin + '/api/auth/google/callback' };
+    const env = { PATH: process.env.PATH, HOME: tmp, PT_DB_DIR: dbDir, PT_MASTER_KEY_FILE: path.join(tmp, 'key'), PT_LOG_DIR: path.join(tmp, 'logs'), PT_SHELL_PORT: String(port), PT_LISTEN_HOST: '127.0.0.1', PT_TEST_SHUTDOWN_TOKEN: stopToken, PT_KEY_LIVE_VERIFY: '0', PT_CHAT_DRYRUN: '1', GOOGLE_CLIENT_ID: 'fixture-client', GOOGLE_CLIENT_SECRET: 'fixture-secret', GOOGLE_REDIRECT_URI: origin + '/api/auth/google/callback' };
     child = spawn(process.execPath, ['--require', preload, 'shell/server.cjs', '--port', String(port)], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; child.stdout.on('data', (b) => output += b); child.stderr.on('data', (b) => output += b);
     let ready = false;
@@ -67,6 +67,39 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     const me = await fetch(origin + '/api/auth/me', { headers: { Cookie: session.split(';')[0] } });
     assert.equal(me.status, 200);
     assert.equal((await me.json()).user.id, registered.user.id);
+    const authCookie = session.split(';')[0];
+    const keySaved = await fetch(origin + '/api/auth/key', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'fixture-pt-key' }) });
+    assert.equal(keySaved.status, 200);
+    const createdConversation = await fetch(origin + '/api/conversations', { method: 'POST', headers: { Cookie: authCookie } });
+    assert.equal(createdConversation.status, 200);
+    const conversationId = (await createdConversation.json()).id;
+    const chatBody = { conversationId, message: 'durable run integration' };
+    const chatHeaders = { Cookie: authCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-run-1' };
+    const chat = await fetch(origin + '/api/chat', { method: 'POST', headers: chatHeaders, body: JSON.stringify(chatBody) });
+    assert.equal(chat.status, 200);
+    assert.match(chat.headers.get('content-type') || '', /text\/event-stream/);
+    const runId = chat.headers.get('x-agent-run-id');
+    assert.ok(runId, 'chat response identifies its durable run');
+    const chatFrames = await chat.text();
+    assert.match(chatFrames, /\"done\":true/);
+    let run;
+    for (let i = 0; i < 30; i++) {
+      const response = await fetch(origin + '/api/runs/' + runId, { headers: { Cookie: authCookie } });
+      run = (await response.json()).run;
+      if (run && ['completed', 'failed', 'cancelled'].includes(run.state)) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    assert.equal(run.state, 'completed');
+    const runEvents = await fetch(origin + '/api/runs/' + runId + '/events', { headers: { Cookie: authCookie } });
+    const eventPage = await runEvents.json();
+    assert.ok(eventPage.events.some((event) => event.type === 'delta'));
+    assert.equal(eventPage.events.at(-1).type, 'done');
+    const replay = await fetch(origin + '/api/chat', { method: 'POST', headers: chatHeaders, body: JSON.stringify(chatBody) });
+    assert.equal(replay.status, 200);
+    assert.equal(replay.headers.get('x-agent-run-id'), runId, 'idempotent retry returns the original run');
+    assert.match(await replay.text(), /\"done\":true/);
+    const history = await fetch(origin + '/api/conversations/' + conversationId, { headers: { Cookie: authCookie } });
+    assert.equal((await history.json()).conversation.messages.filter((message) => message.role === 'user').length, 1, 'idempotent retry does not append a duplicate user turn');
     fs.writeFileSync(path.join(runtimeDirs[1], 'metadata.json'), 'broken-fixture-json');
     const failedProvision = await fetch(origin + '/api/auth/google/callback?state=fixture-state&code=fixture-code', { headers: { Cookie: binding.split(';')[0], Origin: 'https://accounts.google.com' }, redirect: 'manual' });
     assert.equal(failedProvision.headers.get('location'), '/login?error=google_auth');

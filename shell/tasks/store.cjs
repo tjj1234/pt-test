@@ -143,7 +143,7 @@ function createTaskStore(db, opts = {}) {
   async function recoverInterrupted(identity) {
     c.assertContract("identity", identity);
     return db.transaction(async (tx) => {
-      const rows = (await tx.query("SELECT * FROM agent_runs WHERE user_id=$1 AND tenant_id=$2 AND state IN ('running','cancelling','waiting_external') ORDER BY run_id FOR UPDATE", [identity.userId, identity.tenantId])).rows;
+      const rows = (await tx.query("SELECT * FROM agent_runs WHERE user_id=$1 AND tenant_id=$2 AND state IN ('queued','running','cancelling','waiting_external') ORDER BY run_id FOR UPDATE", [identity.userId, identity.tenantId])).rows;
       const recovered = [];
       for (const row of rows) {
         if (row.reconciliation === "needs_reconciliation" && ["unknown", "pending_query"].includes(row.external_state)) { recovered.push(decode(row)); continue; }
@@ -156,6 +156,12 @@ function createTaskStore(db, opts = {}) {
       return recovered;
     });
   }
-  return { createRun, getRun, listRuns, eventsAfter, appendEvent, transition, recordExternalIntent, recordExternalTaskId, recoverInterrupted };
+  async function recoverAllInterrupted() {
+    const identities = await db.query("SELECT DISTINCT user_id,tenant_id FROM agent_runs WHERE state IN ('queued','running','cancelling','waiting_external') ORDER BY tenant_id,user_id");
+    const recovered = [];
+    for (const row of identities.rows) recovered.push(...await recoverInterrupted({ userId: row.user_id, tenantId: row.tenant_id }));
+    return recovered;
+  }
+  return { createRun, getRun, listRuns, eventsAfter, appendEvent, transition, recordExternalIntent, recordExternalTaskId, recoverInterrupted, recoverAllInterrupted };
 }
 module.exports = { createTaskStore };

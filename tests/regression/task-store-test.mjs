@@ -91,7 +91,7 @@ test('persistent task store: ownership, atomic claims, event order, revisions an
     assert.equal((await store.createRun(a, input())).run.runId, id, 'claim survives restart');
     await store.recoverInterrupted(a);
     assert.equal((await store.getRun(a, id)).state, 'interrupted');
-    assert.equal((await store.getRun(a, second.runId)).state, 'queued');
+    assert.equal((await store.getRun(a, second.runId)).state, 'interrupted', 'queued work without a live worker is interrupted during restart recovery');
     const unknownRecovered = await store.getRun(a, ext.runId);
     assert.equal(unknownRecovered.externalState, 'unknown');
     assert.equal(unknownRecovered.state, 'waiting_external');
