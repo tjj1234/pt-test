@@ -299,6 +299,8 @@
             <button class="composer-add-btn media" id="mediaBtn" type="button" title="上传音视频（mp4 / webm / mov / mp3 / wav / m4a，单文件 ≤50MB），发送后气泡里可直接播放"><span class="ico" data-ico="music"></span></button>
             <!-- 已附加的音视频（.mp4/.mp3/…）：发送时随 media 数组一起提交，气泡里渲染成播放器 -->
             <div class="media-list" id="mediaList" hidden></div>
+            <details id="sourcePanel" hidden><summary>资料检索与引用</summary><p>最多显示100条资料；本次可选8条。历史附件每次最多接入8条，刷新可继续。删除会停止受影响的运行并清除旧模型上下文，历史记录保留。</p><div id="sourceList"></div><input id="sourceQuery" maxlength="256" placeholder="输入要检索的原文或关键词"><button id="sourceSearch" type="button">检索</button><p id="sourceStatus" role="status"></p><div id="sourceResults"></div></details>
+            <div id="sourceCitationChips"></div>
             <textarea id="ta" rows="1" placeholder="输入问题，或用 @引用数据面板内容… (Enter 发送 / Shift+Enter 换行)"></textarea>
             <div class="foot-bar">
               <div class="model-switcher" id="modelSwitcher">
@@ -310,6 +312,7 @@
                 </button>
                 <div class="model-menu" id="modelMenu" hidden></div>
               </div>
+              <button id="sourceBtn" type="button" title="检索已上传资料并引用">资料检索</button>
               <button class="send" id="send" title="发送"><span class="ico" data-ico="send"></span></button>
               <button class="stop" id="stop" hidden title="停止"><span class="ico" data-ico="close"></span></button>
             </div>

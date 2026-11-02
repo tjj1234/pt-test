@@ -1,12 +1,12 @@
 # 2026-11-02产品链验收现场
-结论：推理与CSV分析Excel结果两条本地产品链已验收；Context R4主审阻断。六包交卷不等于六条产品链交付，未宣布完整重构完成。最终接入决定由主Agent负责；机械脚本可并行，不拆分整体判断。
+结论：推理、CSV分析Excel结果与资料检索删除三条本地产品链已验收；Context R4主审阻断。六包交卷不等于六条产品链交付，未宣布完整重构完成。最终接入决定由主Agent负责；机械脚本可并行，不拆分整体判断。
 
 | 顺序 | 产品链/交卷 | 当前主审与接入状态 | 证据/提交 |
 |---|---|---|---|
 | 1 | 推理选择 | LOCAL_CHAIN_CLOSED；真实Chromium→偏好→持久Run→原生SDK→可见结果→刷新；无真实付费provider | 6c5a4cc；[本地验收](evidence/REASONING-PRODUCT-LOCAL-ACCEPTANCE-20261102.md) |
 | 2 | Context R4 | BLOCKED_FOR_INTEGRATION；原测试通过但主审8项失败；自动/手动真实压缩入口未证明；未接Runner | [主审](evidence/GEMINI-CONTEXT-R4-MAIN-REVIEW-20261102.md)、context-chain-checks-20261102.json |
 | 3 | CSV分析Excel结果 | LOCAL_CHAIN_CLOSED；主审修复后接原生工具、宿主worker、owned下载、历史与真实浏览器；任意结构化文档工具仍未关闭 | [本地验收](evidence/XLSX-RESULT-PRODUCT-LOCAL-ACCEPTANCE-20261102.md)、xlsx-chain-checks-20261102.json；0638d8f |
-| 4 | 跨资料检索 | 已收交卷，待主审与跨资料/删除联动接线 | SOURCE-RETRIEVAL任务包与候选 |
+| 4 | 跨资料检索 | LOCAL_CHAIN_CLOSED；浏览器检索引用、持久Run、删除取消在途Run及温/冷上下文失效；不包含PDF/OCR | [本地验收](evidence/SOURCE-PRODUCT-LOCAL-ACCEPTANCE-20261102.md)、retrieval-chain-checks-20261102.json |
 | 5 | 记忆来源/范围 | 已收交卷，待主审与持久化/召回/撤销接线 | MEMORY-PROVENANCE任务包与候选 |
 | 6 | 音视频调查 | 已收调查报告；报告明确原生媒体输入有缺口，不是音视频理解功能交付；待独立核实及最小宿主方案 | AV-NATIVE-AUDIT任务包 |
 | 7 | Skill loader调查 | 已收调查报告；报告明确缺发布/禁用/版本pin宿主接线，不是PM Skill产品交付 | SKILL-LOADER-AUDIT任务包 |

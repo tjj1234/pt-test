@@ -4,19 +4,19 @@
   "status": "MECHANICAL_PASS",
   "acceptanceDecision": "MAIN_AGENT_REQUIRED",
   "scope": "local-controlled-fixtures; no paid provider or target deployment",
-  "baseCommit": "f186f340bed0ecb9acae4edd505cd01f6b4000b8",
-  "generatedAt": "2026-11-02T03:07:53.641Z",
+  "baseCommit": "de7a895d441a90a757ee263689717ac3e88d29cd",
+  "generatedAt": "2026-11-02T04:19:16.260Z",
   "sources": {
-    "scripts/northstar-chain-checks.mjs": "cce8d030768d6edfa1e448439f5697542bf97d04eb27ad51c6c107478edd13b7",
+    "scripts/northstar-chain-checks.mjs": "7a4862f38f43d7c0de1758be46fb418e8e94722d4f4907829d3103e1cd48365d",
     "shell/exports/conversation-docx.cjs": "8f334a1f94850a1a19cc5046b09ebe46afcb4c2728adb171861005b39c8b9af5",
     "shell/exports/document-export-worker.cjs": "bde0f2bf94cc724759714682ded4dc001021deba041e2733fffcaa0421d2ff30",
     "shell/exports/portable-xlsx-candidate.cjs": "3190dcdadff89bf10688b34982a246517360b7aa6e921c696a851e77d69a3905",
     "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
     "shell/persistent-runner.mjs": "6bf339cb524202649ea1200307a00d23b618942741d39b0f4ccddcdffd06ec1d",
-    "shell/public/app.js": "2c5d182ac7a7db28020eb5557cf71cab2aa9b3282eba93a73e4e6b11ea7a579d",
+    "shell/public/app.js": "33d29e3aadf0814ce674c4182b3cd6c5554810966419b8612f75c8edc898660b",
     "shell/runtime/artifacts.cjs": "a5267f689379ac1b7fc3e50fede44e7aa2948d58081284b686ac44ddd951c76f",
     "shell/runtime/csv-run-artifact.cjs": "83c9439a02fd7f0a401f22abdc960406ab29b695bf8dcca538d267b2077a1a1f",
-    "shell/server.cjs": "31a4ac90776185b436323ea169f5b145acc8febe9f971fad2b56ec2c7901a117",
+    "shell/server.cjs": "1394456b515c2d04b026b7a9815b4d39f2f07a28242fcf8e905688254988290d",
     "shell/tasks/csv-run-handler.cjs": "bbf6b2d9e41bee43cf84125db6137e19970a8148a7bef583c1030ec75431a337",
     "shell/tasks/csv-tool-definition.cjs": "06243b7ce10a44302020dad4eba5c8517d6e646d60d811fba4246ccb7aec4be4",
     "tests/probes/portable-xlsx-candidate-probe.mjs": "7c0493db81361c67e8c39bbd43e180e82c812c7180584fec4a540605eed532aa",
@@ -24,7 +24,7 @@
     "tests/regression/artifacts-test.mjs": "476d1931a80d3a3d9909afc49439ff6adc6f2f851a97d4d025611d11e787bacf",
     "tests/regression/conversation-docx-export-test.mjs": "5a6820a982e1db2941cef78394ae826cb9479f0f384b36bddd005a87d7ebdfeb",
     "tests/regression/csv-xlsx-export-test.mjs": "8c84c277ba8f4474c253ad3743eecc332a655519423333bd6afb3af9fa7c9621",
-    "tests/regression/f2-csv-http-sdk-integration-test.mjs": "892ed6df6fb8891c00a24a239533d5371ab8f635df1e213e9a5174cbfc3129d6",
+    "tests/regression/f2-csv-http-sdk-integration-test.mjs": "212ae6034c2fe8ca6d2cbed8985205bc0c6c06773b29cd6f979c7334156cfe63",
     "tests/regression/f2-csv-run-artifact-test.mjs": "e49e781d64b1f2866de1776a31f662e52440c8852502b234ac30f290f7778eed",
     "tests/regression/f2-csv-run-handler-test.mjs": "7727ac017389de20ee1b833abc1131ab635e222a6fae5b1e200c31859b2e9b71",
     "tests/regression/office-http-sdk-integration-test.mjs": "7133c2b87d7ffe41a3c5ef4606c598252e4f18c2eb36e0ffc4f53fcbf862bda9",
@@ -47,24 +47,7 @@
       "timedOut": false,
       "durationMs": 61,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-probe.txt",
-      "logSha256": "88d9115fe4e2238bb9feeca787addced5c394ba57df6e942b5957db43e793ca8"
-    },
-    {
-      "id": "http-sdk",
-      "command": [
-        "node",
-        "--test",
-        "tests/regression/xlsx-http-sdk-integration-test.mjs",
-        "tests/regression/f2-csv-http-sdk-integration-test.mjs",
-        "tests/regression/office-http-sdk-integration-test.mjs"
-      ],
-      "browser": true,
-      "exitCode": 0,
-      "signal": null,
-      "timedOut": false,
-      "durationMs": 4985,
-      "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-http-sdk.txt",
-      "logSha256": "d77b56059ffb39db9b3e810e2dfc6e255b5c1d90a73c863753f033b38b9e9347"
+      "logSha256": "ff5fb8cc3c652632c43b88a3f77d7a26051b38adb4dadfb5ccb21c4165a1a2ae"
     },
     {
       "id": "unit-review",
@@ -84,9 +67,26 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 6087,
+      "durationMs": 6141,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-unit-review.txt",
-      "logSha256": "e6c96a3b6af02c260b3060489563cd0bdb4e01f7c737f56385b1dfd5b6eb7c0d"
+      "logSha256": "94f1dcb4f26f8583a8dd9325466fe245bed60ba69a95c4da54a0a6d39231c2c2"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/xlsx-http-sdk-integration-test.mjs",
+        "tests/regression/f2-csv-http-sdk-integration-test.mjs",
+        "tests/regression/office-http-sdk-integration-test.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 8301,
+      "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-http-sdk.txt",
+      "logSha256": "63ed2686dc216872487a579a44e4c89ed6301d143bff9a67d84cda43df40a6e4"
     }
   ]
 }

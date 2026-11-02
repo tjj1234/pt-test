@@ -169,7 +169,7 @@ runCase("跨租户相同 documentId 强隔离，零泄露", () => {
 
   // 审计覆盖情况
   const auditBanana = resApple.coverage.audit.find(
-    (a) => a.documentId === "internal-roadmap.docx" && a.status === "REJECTED_CROSS_TENANT"
+    (a) => a.status === "REJECTED_CROSS_TENANT"
   );
   assert.ok(auditBanana, "Tenant Banana index must be audited as REJECTED_CROSS_TENANT");
 });

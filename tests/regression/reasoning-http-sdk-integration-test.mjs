@@ -85,7 +85,7 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
    fs.mkdirSync(path.join(root,'.playwright-cli'),{recursive:true});
    const script=path.join(root,'.playwright-cli',session+'-driver.js');fs.writeFileSync(script,'async page => ('+driver+')(page,'+JSON.stringify(config)+')');
    try{
-    cli('open');const result=cli('run-code','--filename='+script);assert.match(result,/BROWSER_LOCAL_CHAIN_PASS/,result);
+    cli('open');const result=cli('--raw','run-code','--filename='+script);assert.equal(JSON.parse(result).status,'BROWSER_LOCAL_CHAIN_PASS');
     assert.equal(calls().at(-1).reasoningEffort,'high');
     assert.equal((await json('/api/models?conversationId='+conversationId)).reasoningEffort,null);
     console.log('BROWSER_LOCAL_CHAIN_PASS: real browser UI -> durable Run -> native SDK -> reload; zero paid calls');

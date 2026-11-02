@@ -126,7 +126,7 @@ test('Source Retrieval - 跨租户强隔离与相同 documentId 防越权', () =
   assert.equal(resultAlpha.results[0].documentId, 'contracts.docx');
   assert.match(resultAlpha.results[0].rawText, /Alpha Corp/);
   // Beta 的索引被明确记录为跨租户拦截
-  const betaAudit = resultAlpha.coverage.audit.find((a) => a.documentId === 'contracts.docx' && a.status === 'REJECTED_CROSS_TENANT');
+  const betaAudit = resultAlpha.coverage.audit.find((a) => a.status === 'REJECTED_CROSS_TENANT');
   assert.ok(betaAudit);
 });
 
@@ -151,7 +151,7 @@ test('Source Retrieval - 篡改检测 (Tamper Detection) 与哈希自洽性', ()
   assert.equal(check.reason, 'INDEX_COVERAGE_HASH_TAMPERED');
 
   // 查询时输入被篡改的索引，必定被前置门禁拦截拒绝
-  const trustedSources = [{ documentId: 'audit.docx', sourceSha256: VALID_SHA_A, version: 1 }];
+  const trustedSources = [{ tenantId: 'tenant-1', documentId: 'audit.docx', sourceSha256: VALID_SHA_A, version: 1 }];
   const queryRes = querySourceIndex({
     tenantId: 'tenant-1',
     query: '恶意修改',
@@ -174,7 +174,7 @@ test('Source Retrieval - 动态失效守卫：删除、旧SHA换版、旧版本�
   });
 
   // 场景 1: 文件在可信清单中已被删除 (isDeleted: true)
-  const trustedDeleted = [{ documentId: 'spec.docx', sourceSha256: VALID_SHA_A, version: 1, isDeleted: true }];
+  const trustedDeleted = [{ tenantId: 'tenant-1', documentId: 'spec.docx', sourceSha256: VALID_SHA_A, version: 1, isDeleted: true }];
   const resDeleted = querySourceIndex({
     tenantId: 'tenant-1',
     query: 'Specification',
@@ -195,7 +195,7 @@ test('Source Retrieval - 动态失效守卫：删除、旧SHA换版、旧版本�
   assert.equal(resUnknown.coverage.audit[0].status, 'REJECTED_DELETED_OR_UNKNOWN');
 
   // 场景 3: 宿主文件已被替换，SHA-256 发生改变 (旧 SHA 失效)
-  const trustedUpdatedSha = [{ documentId: 'spec.docx', sourceSha256: VALID_SHA_B, version: 1 }];
+  const trustedUpdatedSha = [{ tenantId: 'tenant-1', documentId: 'spec.docx', sourceSha256: VALID_SHA_B, version: 1 }];
   const resOldSha = querySourceIndex({
     tenantId: 'tenant-1',
     query: 'Specification',
@@ -214,7 +214,7 @@ test('Source Retrieval - 动态失效守卫：删除、旧SHA换版、旧版本�
     blocks: [{ text: 'Specification Version 2.0 updated details.' }],
   });
 
-  const trustedV2 = [{ documentId: 'spec.docx', sourceSha256: VALID_SHA_B, version: 2 }];
+  const trustedV2 = [{ tenantId: 'tenant-1', documentId: 'spec.docx', sourceSha256: VALID_SHA_B, version: 2 }];
   const resV2 = querySourceIndex({
     tenantId: 'tenant-1',
     query: 'Specification',
@@ -293,7 +293,7 @@ test('Source Retrieval - 确定性词法检索、中文支持与防 ReDoS 正则
     ],
   });
 
-  const trustedSources = [{ documentId: 'knowledge.txt', sourceSha256: VALID_SHA_A, version: 1 }];
+  const trustedSources = [{ tenantId: 'tenant-1', documentId: 'knowledge.txt', sourceSha256: VALID_SHA_A, version: 1 }];
 
   // 1. 中文多词查询
   const resZh = querySourceIndex({

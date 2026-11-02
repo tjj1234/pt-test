@@ -740,6 +740,7 @@ function renderMessage(m, opts) {
     dl.textContent = "附带 " + m.documents.length + " 个文档（正文已作为回答的参考上下文）";
     bub.appendChild(dl);
   }
+  if(m.sourceCitations?.length){const note=document.createElement("div");note.className="bubdocs";note.textContent="附带 "+m.sourceCitations.length+" 条资料引用（随请求核验）";bub.appendChild(note);}
   // 输出侧：渲染 assistant 返回的媒体（图片/视频 URL）——字段形状与基座 media.route 对齐
   // （当前按 { type:"image"|"video", url } 约定；字段名待基座确认，集中在 chat-media.js 提取）
   if (m.media && window.renderMediaInto) window.renderMediaInto(bub, m.media);
@@ -967,6 +968,7 @@ async function openConversation(id, opts) {
   const current = () => loadSequence === conversationLoadSequence && isViewing(id);
   const force = !!(opts && opts.force);
   state.activeId = id;
+  clearSourceCitations();
   syncConversationBusy();
   delete state.unread[id];   // 点进来了，未读标记就没用了
   // 不管这条对话之前是不是已激活，都必须切回对话视图：
@@ -1421,6 +1423,7 @@ async function ask(msg) {
   }
   ta.value = ""; ta.style.height = "auto";
   const payload = { conversationId: state.activeId, message: msg };
+  if(pendingSourceCitations.length)payload.sourceCitations=pendingSourceCitations.map(({label,...item})=>item);
   // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
   if (currentPanel) payload.context = { panel: currentPanel, panelLabel: TITLES[currentPanel] || currentPanel };
   if (pendingImage) payload.image = pendingImage;
@@ -1453,6 +1456,7 @@ async function ask(msg) {
   clearPendingImage();
   clearPendingDocs();
   clearPendingMedia();
+  clearSourceCitations();
   await runChat(payload);
 }
 
@@ -2357,6 +2361,40 @@ if (searchResults) document.addEventListener("click", (e) => {
  */
 /** 模型 id -> 显式能力与 runtime 状态；未知信息一律 fail-closed。 */
 const modelCaps = new Map();
+let sourceRecords = [], pendingSourceCitations = [];
+function renderSourceCitationChips() {
+  const root=$("#sourceCitationChips");if(!root)return;root.replaceChildren();
+  for(const item of pendingSourceCitations){const chip=document.createElement('button');chip.type='button';chip.textContent=item.label+' ×';chip.addEventListener('click',()=>{pendingSourceCitations=pendingSourceCitations.filter(value=>value!==item);renderSourceCitationChips();});root.appendChild(chip);}
+}
+function clearSourceCitations(){pendingSourceCitations=[];renderSourceCitationChips();}
+function sourceLocation(hit){const loc=hit.locator||{};return loc.cell?`${loc.sheetName||loc.sheet} ! ${loc.cell}`:loc.slide?`幻灯片${loc.slide} 段落${loc.paragraph}`:loc.row?`CSV 行${loc.row} 列${loc.column}`:`提取块${hit.blockIndex}（不是页码）`;}
+async function loadSources(){
+ const list=$("#sourceList"),status=$("#sourceStatus");if(!list)return;
+ try{const response=await fetch('/api/sources'+(state.activeId?'?conversationId='+encodeURIComponent(state.activeId):''),{credentials:'same-origin'});const value=await response.json();if(!response.ok||!value.ok)throw Error();sourceRecords=value.sources;list.replaceChildren();
+  for(const source of sourceRecords){const row=document.createElement('div'),label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.value=source.id;check.checked=!source.deleted&&sourceRecords.indexOf(source)<8;check.disabled=source.deleted;label.appendChild(check);label.appendChild(document.createTextNode(source.name+' · v'+source.version));row.appendChild(label);
+   const remove=document.createElement('button');remove.type='button';remove.textContent=source.pendingCleanup?'重试删除':'删除';remove.addEventListener('click',async()=>{
+    if(!confirm('删除此资料并停止受影响的运行？历史记录保留，但旧模型上下文不再使用。'))return;remove.disabled=true;
+    try{const response=await fetch('/api/sources/'+source.id,{method:'DELETE',credentials:'same-origin'});const result=await response.json();if(!response.ok||!result.ok)throw Error();status.textContent='资料已删除，相关索引与模型上下文已失效。';}
+    catch{status.textContent='资料已停止使用，但可能仍待清理；请重试删除。';}
+    pendingSourceCitations=pendingSourceCitations.filter(item=>item.sourceRef!==source.sourceRef);renderSourceCitationChips();$("#sourceResults").replaceChildren();await loadSources();if(state.activeId)await openConversation(state.activeId,{force:true});
+   });row.appendChild(remove);list.appendChild(row);
+  }
+ }catch{status.textContent='资料目录无法读取，请重试。';}
+}
+const sourceButton=$("#sourceBtn"),sourceSearch=$("#sourceSearch");
+if(sourceButton)sourceButton.addEventListener('click',()=>{const panel=$("#sourcePanel");panel.hidden=false;panel.open=true;void loadSources();});
+if(sourceSearch)sourceSearch.addEventListener('click',async()=>{
+ const status=$("#sourceStatus"),results=$("#sourceResults");const ids=Array.from($("#sourceList").querySelectorAll('input:checked')).map(input=>input.value);
+ if(!ids.length||ids.length>8){status.textContent='请选择1至8条资料。';return;}sourceSearch.disabled=true;
+ try{const response=await fetch('/api/sources/search',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({sourceIds:ids,query:$("#sourceQuery").value})});const data=await response.json();if(!response.ok||!data.ok)throw Error();results.replaceChildren();
+  status.textContent=`找到${data.totalMatches}处，展示${data.returnedCount}处。`+(data.truncated||data.sourceCoverage?.some(item=>item.truncated)?'覆盖或结果有截断；未展示部分不作完整结论。':'');
+  for(const hit of data.results){const card=document.createElement('div'),text=document.createElement('p'),label=document.createElement('small'),cite=document.createElement('button');const source=sourceRecords.find(item=>item.sourceRef===hit.documentId);text.textContent=hit.excerpt;label.textContent=(source?.name||'资料')+' · '+sourceLocation(hit)+' · SHA '+hit.sourceSha256.slice(0,12);cite.type='button';cite.textContent='引用此处';cite.addEventListener('click',()=>{
+   if(pendingSourceCitations.length>=8){status.textContent='一次最多引用8处。';return;}
+   if(!pendingSourceCitations.some(item=>item.sourceRef===hit.documentId&&item.blockIndex===hit.blockIndex))pendingSourceCitations.push({sourceRef:hit.documentId,sourceSha256:hit.sourceSha256,version:hit.documentVersion,blockIndex:hit.blockIndex,textSha256:hit.textSha256,label:(source?.name||'资料')+' '+sourceLocation(hit)});renderSourceCitationChips();
+  });card.appendChild(label);card.appendChild(text);card.appendChild(cite);results.appendChild(card);}
+ }catch{status.textContent='检索失败或资料已变化，请刷新资料目录后重试。';}finally{sourceSearch.disabled=false;}
+});
+
 let lastAcceptedModelSelection = "AUTO";
 let modelLoadSequence = 0;
 let modelSelectionSequence = 0;

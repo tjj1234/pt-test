@@ -1,0 +1,95 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/f2-http-sdk-JPTkpA/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✖ offline HTTP csv Run traverses tenant/adapter/SDK, downloads and reopens its artifact (5305.383ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/office-http-sdk-5V83x0/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✖ same-version Office upload reaches native DSH, completes its Run, exports Word and reopens history (5141.579916ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/f2-http-sdk-sEbbMQ/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✖ offline HTTP xlsx Run traverses tenant/adapter/SDK, downloads and reopens its artifact (5130.554708ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 5380.703
+
+✖ failing tests:
+
+test at tests/regression/f2-csv-http-sdk-integration-test.mjs:51:1
+✖ offline HTTP csv Run traverses tenant/adapter/SDK, downloads and reopens its artifact (5305.383ms)
+  Error: ENOENT: no such file or directory, scandir '/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/f2-http-sdk-JPTkpA/runtime/_tmp'
+      at Object.readdirSync (node:fs:1569:26)
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/f2-csv-http-sdk-integration-test.mjs:121:105)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'scandir',
+    path: '/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/f2-http-sdk-JPTkpA/runtime/_tmp'
+  }
+
+test at tests/regression/office-http-sdk-integration-test.mjs:4:1
+✖ same-version Office upload reaches native DSH, completes its Run, exports Word and reopens history (5141.579916ms)
+  AssertionError [ERR_ASSERTION]: id: 1
+  data: {"queued":true}
+
+  id: 5
+  data: {"done":true,"ok":false,"stopped":false,"messages":[],"turns":0,"code":"DOCUMENT_CONTEXT_FAILED","error":"文档读取、解析或上下文额度校验失败，请检查文件后重试。"}
+
+    保活心跳：未开启（PT_HEARTBEAT_ENABLED != 1）
+  ================================================================
+    北极星 · 业务壳（形态 B · 多租户 · 对话窗口化）
+  ================================================================
+
+    ★ 这就是产品对外的唯一入口（DSH 本身不开端口）
+        http://127.0.0.1:53994   （监听 127.0.0.1）
+    登录：Google OAuth 未配置；登录暂不可用
+
+    —— 隔离边界（多租户）——
+      DSH_HOME      = /private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/office-http-sdk-5V83x0/runtime/dsh-home
+      技能播种源    = /private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/office-http-sdk-5V83x0/runtime/workspace
+      租户工作区根  = /private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/office-http-sdk-5V83x0/runtime/workspaces（每租户一个独立目录）
+      看板后端      = 127.0.0.1:8095（藏在 /dashboard 后面）
+      DSH 入口      = /Users/mmdn/Downloads/pt项目/shell/node_modules/@deepseek-ai/dsh/lib/bin.js
+
+    ★ 设置页（存 PT key / BYOK）：http://127.0.0.1:53994/settings
+    ★ 探活端点：/healthz（供监控/负载均衡探活）
+    ★ 日志：结构化 JSON 行 → /private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/office-http-sdk-5V83x0/logs（按天切割，零泄露）
+    ★ 身份库已就绪：Google 身份／会话落库（/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/office-http-sdk-5V83x0/db），重启不丢
+    ★ 限流已启用（chat 限流 35/分）
+    ★ 并发：同一用户同一时刻只允许一个生成中的对话；不同用户并行
+    ★ TRUST_PROXY=关 · 看板租户透传=关（B 方案共享演示数据兜底）
+
+
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/office-http-sdk-integration-test.mjs:49:44)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'id: 1\ndata: {"queued":true}\n\nid: 5\ndata: {"done":true,"ok":false,"stopped":false,"messages":[],"turns":0,"code":"DOCUMENT_CONTEXT_FAILED","error":"文档读取、解析或上下文额度校验失败，请检查文件后重试。"}\n\n',
+    expected: /OFFICE_CHAIN_OK/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+test at tests/regression/f2-csv-http-sdk-integration-test.mjs:51:1
+✖ offline HTTP xlsx Run traverses tenant/adapter/SDK, downloads and reopens its artifact (5130.554708ms)
+  Error: ENOENT: no such file or directory, scandir '/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/f2-http-sdk-sEbbMQ/runtime/_tmp'
+      at Object.readdirSync (node:fs:1569:26)
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/f2-csv-http-sdk-integration-test.mjs:121:105)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    errno: -2,
+    code: 'ENOENT',
+    syscall: 'scandir',
+    path: '/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/f2-http-sdk-sEbbMQ/runtime/_tmp'
+  }

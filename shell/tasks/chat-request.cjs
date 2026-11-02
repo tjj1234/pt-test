@@ -24,7 +24,7 @@ function tenantUuid(value) { return typeof value === "string" && /^[0-9a-f-]{36}
 
 function normalizeChatRequest(input, tenantId) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Chat body must be an object");
-  const allowedInput = new Set(["conversationId", "idempotencyKey", "message", "image", "documents", "csvSelections", "media", "taskType", "context", "branchFrom", "regenerate"]);
+  const allowedInput = new Set(["conversationId", "idempotencyKey", "message", "image", "documents", "csvSelections", "sourceCitations", "media", "taskType", "context", "branchFrom", "regenerate"]);
   if (Object.keys(input).some((key) => !allowedInput.has(key))) throw fail("Chat body contains unsupported fields");
   if (!tenantUuid(tenantId)) throw fail("tenantId is invalid");
   const uploadRef = (value) => {
@@ -64,6 +64,13 @@ function normalizeChatRequest(input, tenantId) {
         headerRow: item.headerRow, startRow: item.startRow, column: item.column };
     });
   }
+  if (input.sourceCitations !== undefined) {
+    if (!Array.isArray(input.sourceCitations) || input.sourceCitations.length>8) throw fail('sourceCitations is invalid');
+    body.sourceCitations=input.sourceCitations.map(item=>{
+      if(!item||typeof item!=='object'||Array.isArray(item)||Object.keys(item).sort().join(',')!=='blockIndex,sourceRef,sourceSha256,textSha256,version'||!uploadRef(item.sourceRef)||!Number.isSafeInteger(item.version)||item.version<1||!Number.isSafeInteger(item.blockIndex)||item.blockIndex<1||item.blockIndex>5000||!/^[a-f0-9]{64}$/.test(item.sourceSha256)||!/^[a-f0-9]{64}$/.test(item.textSha256))throw fail('sourceCitations is invalid');
+      return {sourceRef:item.sourceRef,sourceSha256:item.sourceSha256,version:item.version,blockIndex:item.blockIndex,textSha256:item.textSha256};
+    });
+  }
   if (input.media !== undefined) {
     if (!Array.isArray(input.media) || input.media.length > 32) throw fail("media is invalid");
     body.media = input.media.map((item) => {
@@ -99,7 +106,7 @@ function normalizeChatRequest(input, tenantId) {
 }
 
 function attachmentRefs(body) {
-  const refs = [body.image, ...(Array.isArray(body.documents) ? body.documents : []), ...(Array.isArray(body.media) ? body.media.map((item) => item?.url) : [])].filter(Boolean);
+  const refs = [body.image, ...(Array.isArray(body.documents) ? body.documents : []), ...(Array.isArray(body.sourceCitations)?body.sourceCitations.map(item=>item.sourceRef):[]), ...(Array.isArray(body.media) ? body.media.map((item) => item?.url) : [])].filter(Boolean);
   return [...new Set(refs)];
 }
 

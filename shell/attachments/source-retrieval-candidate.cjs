@@ -24,6 +24,7 @@
  */
 
 const { createHash } = require('node:crypto');
+const {isDeepStrictEqual}=require('node:util');
 
 // 资源上限常量 (DoS 防御与前置拦截)
 const LIMITS = Object.freeze({
@@ -68,7 +69,9 @@ function deepFreeze(obj) {
 function isDenseArray(arr) {
   if (!Array.isArray(arr)) return false;
   // 检查是否为稀疏数组 (sparse array)
-  return Object.keys(arr).length === arr.length;
+  if (arr.length>LIMITS.MAX_BLOCKS_PER_DOC)return false;
+  for(let i=0;i<arr.length;i++)if(!Object.hasOwn(arr,i))return false;
+  return true;
 }
 
 /**
@@ -105,6 +108,7 @@ function normalizeLocator(rawLocator, format, blockIndex) {
   }
 
   if (format === 'xlsx') {
+    if(!rawLocator||!Number.isSafeInteger(rawLocator.sheet)||rawLocator.sheet<1||typeof rawLocator.cell!=='string'||!/^[A-Z]{1,3}[1-9][0-9]{0,6}$/.test(rawLocator.cell))throw fail('LOCATOR_INVALID','XLSX requires a real sheet/cell locator');
     if (!rawLocator || typeof rawLocator !== 'object') {
       return { kind: 'sheet-cell-raw-value', sheet: 1, cell: `R${blockIndex}C1` };
     }
@@ -119,6 +123,7 @@ function normalizeLocator(rawLocator, format, blockIndex) {
   }
 
   if (format === 'pptx') {
+    if(!rawLocator||!Number.isSafeInteger(rawLocator.slide)||rawLocator.slide<1||!Number.isSafeInteger(rawLocator.paragraph)||rawLocator.paragraph<1)throw fail('LOCATOR_INVALID','PPTX requires a real slide/paragraph locator');
     if (!rawLocator || typeof rawLocator !== 'object') {
       return { kind: 'slide-paragraph-text-only', slide: 1, paragraph: blockIndex };
     }
@@ -130,6 +135,7 @@ function normalizeLocator(rawLocator, format, blockIndex) {
   }
 
   if (format === 'csv') {
+    if(!rawLocator||!Number.isSafeInteger(rawLocator.row)||rawLocator.row<1||!Number.isSafeInteger(rawLocator.column)||rawLocator.column<1)throw fail('LOCATOR_INVALID','CSV requires a real row/column locator');
     if (!rawLocator || typeof rawLocator !== 'object') {
       return { kind: 'csv-cell', row: blockIndex, column: 1 };
     }
@@ -188,6 +194,7 @@ function buildSourceIndex({
   }
 
   // 2. 块数组密集与上限校验 (Reject-before-Scan)
+  if(Array.isArray(blocks)&&blocks.length>LIMITS.MAX_BLOCKS_PER_DOC)throw fail('INDEX_BLOCK_LIMIT_EXCEEDED','Too many blocks');
   if (!isDenseArray(blocks)) {
     throw fail('INDEX_BLOCKS_INVALID', 'Blocks must be a dense array');
   }
@@ -303,24 +310,13 @@ function buildSourceIndex({
  * 校验来源索引的完整性与自洽性 (recompute verification)
  */
 function verifyIndexIntegrity(indexRecord) {
-  if (!indexRecord || typeof indexRecord !== 'object') return false;
-  if (indexRecord.schemaVersion !== 1) return false;
-  if (!REGEX.TENANT_ID.test(indexRecord.tenantId)) return false;
-  if (!REGEX.DOCUMENT_ID.test(indexRecord.documentId)) return false;
-  if (!REGEX.SHA256_HEX.test(indexRecord.sourceSha256)) return false;
-  if (!Number.isSafeInteger(indexRecord.documentVersion) || indexRecord.documentVersion < 1) return false;
-  if (!Array.isArray(indexRecord.blocks)) return false;
+  try {
+    if(!indexRecord||indexRecord.schemaVersion!==1||!Array.isArray(indexRecord.blocks)||indexRecord.blocks.length>LIMITS.MAX_BLOCKS_PER_DOC)return false;
+    const rebuilt=buildSourceIndex({tenantId:indexRecord.tenantId,documentId:indexRecord.documentId,sourceSha256:indexRecord.sourceSha256,version:indexRecord.documentVersion,format:indexRecord.format,
+      blocks:indexRecord.blocks.map(block=>({index:block.blockIndex,text:block.text,locator:block.locator}))});
+    return isDeepStrictEqual(indexRecord,rebuilt);
+  }catch{return false;}
 
-  const expectedCoverageHash = computeCoverageHash({
-    tenantId: indexRecord.tenantId,
-    documentId: indexRecord.documentId,
-    sourceSha256: indexRecord.sourceSha256,
-    version: indexRecord.documentVersion,
-    format: indexRecord.format,
-    blocks: indexRecord.blocks,
-  });
-
-  return expectedCoverageHash === indexRecord.summary?.coverageHash;
 }
 
 /**
@@ -349,6 +345,8 @@ function invalidateSource({ index, reason, target } = {}) {
 
   // 3. 若提供了宿主当前目标状态对比
   if (target) {
+    if(typeof target.tenantId!=='string'||typeof target.documentId!=='string'||typeof target.sourceSha256!=='string'||!REGEX.SHA256_HEX.test(target.sourceSha256)||!Number.isSafeInteger(target.version)||target.version<1)return {valid:false,reason:'TARGET_SPEC_INVALID'};
+    if(target.coverageHash!==undefined&&target.coverageHash!==index.summary.coverageHash)return {valid:false,reason:'EXTRACTION_CHANGED'};
     if (typeof target !== 'object') {
       return { valid: false, reason: 'TARGET_SPEC_INVALID' };
     }
@@ -442,6 +440,7 @@ function querySourceIndex({
   if (typeof query !== 'string') {
     throw fail('QUERY_TEXT_INVALID', 'Query must be a string');
   }
+  if(query.length>LIMITS.MAX_QUERY_CHARS)throw fail('QUERY_TOO_LONG','Query exceeds character limit');
   const cleanQuery = query.trim();
   if (cleanQuery.length === 0) {
     throw fail('QUERY_EMPTY', 'Query text cannot be empty');
@@ -461,6 +460,8 @@ function querySourceIndex({
 
   // 2. 规范化可信源清单 (trustedSources)
   // 支持按 tenantId + documentId 多租户联合索引及纯 documentId 检索
+  if((trustedSources instanceof Map?trustedSources.size:Array.isArray(trustedSources)?trustedSources.length:0)>LIMITS.MAX_DOCUMENTS)throw fail('QUERY_TRUSTED_SOURCES_INVALID','Too many trusted sources');
+  if(!options||typeof options!=='object'||Array.isArray(options)||Object.keys(options).some(key=>!['maxResults','formatFilter'].includes(key))||(options.maxResults!==undefined&&(!Number.isSafeInteger(options.maxResults)||options.maxResults<1||options.maxResults>LIMITS.MAX_RESULTS_LIMIT)))throw fail('QUERY_OPTIONS_INVALID','Invalid search limits');
   const trustedMap = new Map();
   if (trustedSources instanceof Map) {
     for (const [k, v] of trustedSources.entries()) trustedMap.set(k, v);
@@ -490,6 +491,7 @@ function querySourceIndex({
   const lowerQuery = cleanQuery.toLowerCase();
 
   const candidates = [];
+  let totalMatches = 0;
   let evaluatedDocsCount = 0;
   let admittedDocsCount = 0;
   let rejectedDocsCount = 0;
@@ -502,7 +504,7 @@ function querySourceIndex({
     // 门禁 A: 租户强隔离
     if (!idx || idx.tenantId !== normTenantId) {
       rejectedDocsCount++;
-      coverageAudit.push({ documentId: idx?.documentId, status: 'REJECTED_CROSS_TENANT' });
+      coverageAudit.push({ status: 'REJECTED_CROSS_TENANT' });
       continue;
     }
 
@@ -580,6 +582,7 @@ function querySourceIndex({
 
       const excerpt = createExcerpt(block.text, primaryMatchIndex, primaryMatchLen);
 
+      totalMatches++;
       candidates.push({
         documentId: idx.documentId,
         documentVersion: idx.documentVersion,
@@ -598,9 +601,8 @@ function querySourceIndex({
         rawText: block.text,
       });
 
-      if (candidates.length >= LIMITS.MAX_MATCHES) {
-        break; // 限制全局最大匹配候选，防爆内存
-      }
+      candidates.sort((a,b)=>b.score-a.score||a.documentId.localeCompare(b.documentId)||a.blockIndex-b.blockIndex);
+      if(candidates.length>maxResults)candidates.pop();
     }
   }
 
@@ -612,7 +614,6 @@ function querySourceIndex({
     return a.blockIndex - b.blockIndex;
   });
 
-  const totalMatches = candidates.length;
   const returnedResults = candidates.slice(0, maxResults);
   const truncated = totalMatches > maxResults;
 

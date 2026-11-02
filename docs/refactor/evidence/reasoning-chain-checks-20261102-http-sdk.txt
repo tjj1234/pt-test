@@ -1,8 +1,8 @@
-[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-bkjhSd/key
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-OuwCAq/key
 B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
 B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
 BROWSER_LOCAL_CHAIN_PASS: real browser UI -> durable Run -> native SDK -> reload; zero paid calls
-✔ reasoning metadata and preference reach durable Runs, native requests and reopened history (4645.79225ms)
+✔ reasoning metadata and preference reach durable Runs, native requests and reopened history (4502.877291ms)
 ℹ tests 1
 ℹ suites 0
 ℹ pass 1
@@ -10,4 +10,4 @@ BROWSER_LOCAL_CHAIN_PASS: real browser UI -> durable Run -> native SDK -> reload
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 4689.003334
+ℹ duration_ms 4541.158709

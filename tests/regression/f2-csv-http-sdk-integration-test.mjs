@@ -165,7 +165,7 @@ return value;};`);
       const driver=fs.readFileSync(path.join(root,'tests/probes/xlsx-browser-driver-20261102.js'),'utf8').trim();
       fs.mkdirSync(path.join(root,'.playwright-cli'),{recursive:true});const script=path.join(root,'.playwright-cli',session+'-driver.js');
       fs.writeFileSync(script,'async page => ('+driver+')(page,'+JSON.stringify({baseURL:origin,cookie:cookies[0].slice(11),screenshot:path.join(root,'docs/refactor/evidence/xlsx-browser-20261102.png')})+')');
-      try{cli('open');const result=cli('run-code','--filename='+script);assert.match(result,/XLSX_BROWSER_CHAIN_PASS/,result);}
+      try{cli('open');const result=cli('--raw','run-code','--filename='+script);assert.equal(JSON.parse(result).status,'XLSX_BROWSER_CHAIN_PASS');}
       finally{try{cli('close');}catch{}fs.rmSync(script,{force:true});}
     }
 

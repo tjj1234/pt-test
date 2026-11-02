@@ -23,7 +23,11 @@ if(option('--verify-report')){
     {id:'probe',args:['tests/probes/portable-xlsx-candidate-probe.mjs']},
     {id:'http-sdk',args:['--test','tests/regression/xlsx-http-sdk-integration-test.mjs','tests/regression/f2-csv-http-sdk-integration-test.mjs','tests/regression/office-http-sdk-integration-test.mjs'],browser:args.includes('--browser'),browserEnvironment:'NORTHSTAR_XLSX_BROWSER'},
   ]},
-  retrieval:candidate('shell/attachments/source-retrieval-candidate.cjs','source-retrieval-candidate'),
+  retrieval:{sources:['shell/attachments/source-retrieval-candidate.cjs','shell/attachments/source-store.cjs','shell/attachments/source-search-worker.cjs','shell/attachments/text-decode.cjs','shell/tasks/chat-request.cjs','shell/conversations.cjs','shell/server.cjs','shell/public/app.js','shell/public/index.html','shell/public/styles.css','shell/db-migrations/025_document_sources.sql','tests/probes/source-browser-driver-20261102.js'],checks:[
+   {id:'unit-review',args:['--test',...['source-retrieval-candidate','source-retrieval-main-review','source-store-revocation','chat-request-attachments','conversation-model-preference','storage-upgrade'].map(name=>'tests/regression/'+name+'-test.mjs')]},
+   {id:'probe',args:['tests/probes/source-retrieval-candidate-probe.mjs']},
+   {id:'http-sdk',args:['--test','tests/regression/source-http-sdk-integration-test.mjs'],browser:args.includes('--browser'),browserEnvironment:'NORTHSTAR_SOURCE_BROWSER'},
+  ]},
   memory:candidate('shell/memory/provenance-candidate.cjs','memory-provenance-candidate'),
   av:{sources:[],checks:[{id:'audit',args:['tests/probes/av-native-capability-audit-20261101.mjs']}]},
   skill:{sources:[],checks:[{id:'audit',args:['tests/probes/skill-loader-native-audit-20261101.mjs']}]},
