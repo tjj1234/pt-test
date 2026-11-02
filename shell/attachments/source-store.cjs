@@ -71,7 +71,7 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
    const name=pending.row.source_ref.split('/').at(-1);let root,tenant,returnMissing=false;
    try{root=pinDirectory(fs.realpathSync(uploadsRoot));tenant=root.openDirectory(identity.tenantId);tenant.unlinkFile(name);}catch(error){if(error.code!=='ENOENT'){try{fs.lstatSync(path.join(uploadsRoot,identity.tenantId,name));}catch(missing){if(missing.code==='ENOENT')returnMissing=true;else throw error;}if(!returnMissing)throw error;}}finally{tenant?.close();root?.close();}
    await db.transaction(async tx=>{
-    for(const conversation of pending.conversations)await tx.query('UPDATE conversations SET source_context_start=jsonb_array_length(messages),source_revocation_pending=FALSE WHERE id=$1 AND user_id=$2',[conversation.id,identity.userId]);
+    for(const conversation of pending.conversations)await tx.query('UPDATE conversations SET source_context_start=jsonb_array_length(messages),native_session_id=NULL,native_session_key_sha256=NULL,source_revocation_pending=FALSE WHERE id=$1 AND user_id=$2',[conversation.id,identity.userId]);
     await tx.query('UPDATE document_sources SET cleanup_complete=TRUE WHERE source_id=$1',[id]);
    });
   }catch{throw fail('SOURCE_REVOCATION_PENDING');}

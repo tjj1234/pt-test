@@ -740,6 +740,7 @@ function renderMessage(m, opts) {
     dl.textContent = "附带 " + m.documents.length + " 个文档（正文已作为回答的参考上下文）";
     bub.appendChild(dl);
   }
+  if(m.context?.compactions>0){const note=document.createElement('div');note.className='bubdocs';note.textContent='已压缩上下文，后续对话使用保存的摘要。';bub.appendChild(note);}
   if(m.sourceCitations?.length){const note=document.createElement("div");note.className="bubdocs";note.textContent="附带 "+m.sourceCitations.length+" 条资料引用（随请求核验）";bub.appendChild(note);}
   // 输出侧：渲染 assistant 返回的媒体（图片/视频 URL）——字段形状与基座 media.route 对齐
   // （当前按 { type:"image"|"video", url } 约定；字段名待基座确认，集中在 chat-media.js 提取）
@@ -941,9 +942,11 @@ function openMenu(c, anchor) {
   expJ.addEventListener("click", () => { closeMenu(); exportConversation(c, "json"); });
   const expW = document.createElement("button"); expW.textContent = "导出 Word";
   expW.addEventListener("click", () => { closeMenu(); exportConversation(c, "docx"); });
+  const compact=document.createElement('button');compact.textContent='压缩上下文';compact.disabled=c.archived||chatRunsByConversation.has(c.id);
+  compact.addEventListener('click',async()=>{closeMenu();if(c.id!==state.activeId||state.loadedId!==c.id)await openConversation(c.id);if(!modelContextReady||chatRunsByConversation.has(c.id))return composerNotice('请等待当前模型或运行就绪。','err');await runChat({conversationId:c.id,message:'/compact'});});
   const del = document.createElement("button"); del.className = "danger"; del.textContent = "删除";
   del.addEventListener("click", () => { closeMenu(); deleteConversation(c); });
-  pop.appendChild(ren); pop.appendChild(arc); pop.appendChild(expM); pop.appendChild(expJ); pop.appendChild(expW); pop.appendChild(del);
+  pop.appendChild(ren); pop.appendChild(arc); pop.appendChild(expM); pop.appendChild(expJ); pop.appendChild(expW);pop.appendChild(compact); pop.appendChild(del);
   document.body.appendChild(pop);
   const r = anchor.getBoundingClientRect();
   pop.style.top = (r.bottom + 4) + "px";

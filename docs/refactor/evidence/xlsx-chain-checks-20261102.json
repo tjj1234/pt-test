@@ -4,23 +4,28 @@
   "status": "MECHANICAL_PASS",
   "acceptanceDecision": "MAIN_AGENT_REQUIRED",
   "scope": "local-controlled-fixtures; no paid provider or target deployment",
-  "baseCommit": "cc08ea23bc01f96051943ec3056e6fcdaac90e81",
-  "generatedAt": "2026-11-02T07:15:42.047Z",
+  "baseCommit": "b337b36833886c6a114def14844a99fa1b5dc244",
+  "generatedAt": "2026-11-02T08:03:16.072Z",
   "sources": {
-    "scripts/northstar-chain-checks.mjs": "223521ade193798512c653e1f6731f4ef5cc9bc65ea2d8c1030e1b5c80af1bcb",
-    "shell/attachments/source-store.cjs": "d2775a9041fe43007d48315021cad27a8dcbdf98bdb63e6c8310256e57a3b08a",
+    "scripts/northstar-chain-checks.mjs": "37f97b406124b3dd370e14157ec2d40bfb5a8c81ca7d8552d1c39f999c117659",
+    "shell/attachments/source-store.cjs": "03dcf706ea1d6ccfc9ac95359c3ec568e21e77917867f31023032b39a0d28686",
     "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
     "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/db-migrations/027_native_context_session.sql": "92ad6cdab29af8b41754dd02916ad1c2376a59d405aa34a0974aa1efc6bb88cb",
     "shell/exports/conversation-docx.cjs": "8f334a1f94850a1a19cc5046b09ebe46afcb4c2728adb171861005b39c8b9af5",
     "shell/exports/document-export-worker.cjs": "bde0f2bf94cc724759714682ded4dc001021deba041e2733fffcaa0421d2ff30",
     "shell/exports/portable-xlsx-candidate.cjs": "3190dcdadff89bf10688b34982a246517360b7aa6e921c696a851e77d69a3905",
-    "shell/memory/provenance-store.cjs": "a1516d84911adfb4ba7ba45e15cd14d1c6faf43e5a82f642fa54f2fbf97876c3",
+    "shell/memory/provenance-store.cjs": "c5ed87bddefcf11c238f8fc2e6ba453f9bdb4ab7e5b5c7c7c86d5a5180f45134",
     "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
-    "shell/persistent-runner.mjs": "6bf339cb524202649ea1200307a00d23b618942741d39b0f4ccddcdffd06ec1d",
-    "shell/public/app.js": "f3c2ba1ec309a4d2b13d7433b642b0f1adcb0831bf39405705c2f87195957082",
+    "shell/persistent-runner.mjs": "18a55a4a358f2495d39ca6a9db1e78cad15f83054ce33345e5f641aa27bb40cd",
+    "shell/public/app.js": "aa5d5a6ed0580e5f886df0f9142f78dff1c631eb9f73b8d3acfe650b097f4936",
     "shell/runtime/artifacts.cjs": "a5267f689379ac1b7fc3e50fede44e7aa2948d58081284b686ac44ddd951c76f",
     "shell/runtime/csv-run-artifact.cjs": "83c9439a02fd7f0a401f22abdc960406ab29b695bf8dcca538d267b2077a1a1f",
-    "shell/server.cjs": "2317872058ef3d4d170fdd6ba87611f18e483879385e1412ce0cf4f53ad63177",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "546a1409bb6dfb574ecb9c0a71482a52714e58ed40d3909b1f2f74dd0b75a701",
+    "shell/runtime/run-budget-csv.json": "9f5419dfad11192227620e080cbafc20bc7075294ff00d9b19f85b78bd6c6db9",
+    "shell/runtime/run-budget-media.json": "29771b1acb1eac781d551745e063a86172abcca4d758f72cff50793be60b4287",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/server.cjs": "c5580cd9ce2dc3dbaa3b8ba078c5b46cebd37a280ab158291270950fd51a97f9",
     "shell/tasks/csv-run-handler.cjs": "bbf6b2d9e41bee43cf84125db6137e19970a8148a7bef583c1030ec75431a337",
     "shell/tasks/csv-tool-definition.cjs": "06243b7ce10a44302020dad4eba5c8517d6e646d60d811fba4246ccb7aec4be4",
     "tests/probes/portable-xlsx-candidate-probe.mjs": "7c0493db81361c67e8c39bbd43e180e82c812c7180584fec4a540605eed532aa",
@@ -28,7 +33,7 @@
     "tests/regression/artifacts-test.mjs": "476d1931a80d3a3d9909afc49439ff6adc6f2f851a97d4d025611d11e787bacf",
     "tests/regression/conversation-docx-export-test.mjs": "5a6820a982e1db2941cef78394ae826cb9479f0f384b36bddd005a87d7ebdfeb",
     "tests/regression/csv-xlsx-export-test.mjs": "8c84c277ba8f4474c253ad3743eecc332a655519423333bd6afb3af9fa7c9621",
-    "tests/regression/f2-csv-http-sdk-integration-test.mjs": "212ae6034c2fe8ca6d2cbed8985205bc0c6c06773b29cd6f979c7334156cfe63",
+    "tests/regression/f2-csv-http-sdk-integration-test.mjs": "338a3517fd06b17608832a54ca126c707cb330c6ff890f13b8776f7e9a46dbc0",
     "tests/regression/f2-csv-run-artifact-test.mjs": "e49e781d64b1f2866de1776a31f662e52440c8852502b234ac30f290f7778eed",
     "tests/regression/f2-csv-run-handler-test.mjs": "7727ac017389de20ee1b833abc1131ab635e222a6fae5b1e200c31859b2e9b71",
     "tests/regression/office-http-sdk-integration-test.mjs": "7133c2b87d7ffe41a3c5ef4606c598252e4f18c2eb36e0ffc4f53fcbf862bda9",
@@ -49,9 +54,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 307,
+      "durationMs": 128,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-probe.txt",
-      "logSha256": "badc42d26b7744cec0a0c6a8f8faf2565ca8931277976ac0074346907601077f"
+      "logSha256": "09d3fac4b9a50a78be5dce6c12899af9d0df3a03374071bceca5d707c07bf1cf"
     },
     {
       "id": "unit-review",
@@ -71,9 +76,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 6542,
+      "durationMs": 6199,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-unit-review.txt",
-      "logSha256": "293673df1c7a867d72db82d6cc4c4e02891de6cbe8a7aa69105882be3f4b1ef0"
+      "logSha256": "d2f0ce50ed21761b622d9a4c57fde6fc3ed6e3f52a738af48a78d7d29910f7d0"
     },
     {
       "id": "http-sdk",
@@ -88,9 +93,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 17559,
+      "durationMs": 15871,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-http-sdk.txt",
-      "logSha256": "d43f20b90fe9f204c134c4b52fc224f6f4da2f75bedbf25cde16a6db7e8dbae7"
+      "logSha256": "2489878807eb817a1800463da8329d4a344d54dc0817cca7870c13414bf9e456"
     }
   ]
 }

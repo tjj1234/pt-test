@@ -5,6 +5,7 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { LlmError } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import {installNativeContextGateR4} from './dsh-native-context-r4-candidate.mjs';
 import {nativeImageMessage} from './native-image-message.mjs';
 
 const require = createRequire(import.meta.url);
@@ -36,6 +37,12 @@ const RUNNER_FAILURE_MESSAGES = Object.freeze({
   RUN_COST_LIMIT: "Run stopped because the configured cost limit was reached",
   RUN_CLOCK_UNKNOWN: "Run stopped because the runtime budget clock became unavailable",
   RUN_BUDGET_CONFIG_INVALID: "Run budget configuration is missing or unreadable or invalid",
+  NATIVE_SESSION_UNAVAILABLE: 'Saved context is unavailable; retry to rebuild from retained history',
+  RUN_CONTEXT_UNAVAILABLE: 'Native context compaction is unavailable',
+  RUN_OUTPUT_LIMIT: 'Model request exceeds the configured output limit',
+  RUN_NOT_BOUND: 'Model request no longer belongs to the active Run',
+  INTENT_AUDIT_FAILED: 'Model intent could not be recorded',
+  MISSING_INTENT_RECORDER: 'Durable model intent recording is unavailable',
   RUN_INTERRUPTED: "Run was interrupted because the runner process is shutting down",
   NATIVE_IMAGE_MODEL_UNSUPPORTED: "The selected model route has no verified image input capability",
 });
@@ -61,8 +68,8 @@ function safeBudgetSummary(active) {
     status: active.configured === true ? "configured" : "unconfigured",
     limits: active.limits && typeof active.limits === "object" ? {
       ...Object.fromEntries(
-      ["maxDurationMs", "maxModelCalls", "maxToolCalls", "maxToolCallsPerKey", "maxRetries", "maxOutputTokens"]
-        .filter((key) => Number.isSafeInteger(active.limits[key]) && (["maxRetries", "maxToolCalls", "maxToolCallsPerKey"].includes(key) ? active.limits[key] >= 0 : active.limits[key] > 0))
+      ["maxDurationMs", "maxModelCalls", "maxToolCalls", "maxToolCallsPerKey", "maxRetries", "maxOutputTokens", "contextModelCalls"]
+        .filter((key) => Number.isSafeInteger(active.limits[key]) && (["maxRetries", "maxToolCalls", "maxToolCallsPerKey", "contextModelCalls"].includes(key) ? active.limits[key] >= 0 : active.limits[key] > 0))
         .map((key) => [key, active.limits[key]]),
       ),
       ...(active.limits.maxCost && Number.isFinite(active.limits.maxCost.amount) && active.limits.maxCost.amount >= 0 &&
@@ -92,7 +99,7 @@ function loadRunBudgetPolicy(profile = "default") {
   catch {
     throw Object.assign(new Error("Run budget configuration is missing or unreadable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
   }
-  const supported = new Set(["maxDurationMs", "maxModelCalls", "maxToolCalls", "maxToolCallsPerKey", "maxRetries", "maxOutputTokens", "maxCost", "allowedTools", "allowedMediaTaskTypes"]);
+  const supported = new Set(["maxDurationMs", "maxModelCalls", "maxToolCalls", "maxToolCallsPerKey", "maxRetries", "maxOutputTokens", "maxCost", "allowedTools", "allowedMediaTaskTypes", "contextModelCalls"]);
   let limits = {};
   if (text !== null) {
     try { limits = JSON.parse(text); } catch {
@@ -122,7 +129,7 @@ function loadRunBudgetPolicy(profile = "default") {
         continue;
       }
       const tooLong = key === "maxDurationMs" && value > MAX_TIMER_DELAY_MS;
-      const zeroAllowed = ["maxRetries", "maxToolCalls", "maxToolCallsPerKey"].includes(key) && value === 0;
+      const zeroAllowed = ["maxRetries", "maxToolCalls", "maxToolCallsPerKey", "contextModelCalls"].includes(key) && value === 0;
       if (!Number.isSafeInteger(value) || (value <= 0 && !zeroAllowed) || tooLong) {
         throw Object.assign(new Error("Run budget limit is outside its supported range"), { code: "RUN_BUDGET_CONFIG_INVALID" });
       }
@@ -131,13 +138,14 @@ function loadRunBudgetPolicy(profile = "default") {
   if (mediaTask) {
     // This host-selected profile scopes a single explicitly granted task.
     // Count limits remain the existing Run guard, never a monetary promise.
-    if (limits.maxDurationMs !== 180000 || limits.maxOutputTokens !== 512 || limits.maxModelCalls !== 2 || limits.maxToolCalls !== 1 || limits.maxToolCallsPerKey !== 1 || limits.maxRetries !== 0 ||
+    if (limits.maxDurationMs !== 180000 || limits.maxOutputTokens !== 512 || limits.maxModelCalls !== 3 || limits.contextModelCalls !== 1 || limits.maxToolCalls !== 1 || limits.maxToolCallsPerKey !== 1 || limits.maxRetries !== 0 ||
         limits.maxCost !== undefined || limits.allowedTools?.length !== 1 || limits.allowedTools[0] !== "media_route") {
       throw Object.assign(new Error("Controlled media policy is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
     }
     limits.allowedMediaTaskTypes = [mediaTask];
   }
-  const { maxOutputTokens, allowedTools, allowedMediaTaskTypes, ...budgetLimits } = limits;
+  const { maxOutputTokens, allowedTools, allowedMediaTaskTypes, contextModelCalls=0, ...budgetLimits } = limits;
+  if(contextModelCalls&&(contextModelCalls>1||contextModelCalls>=(budgetLimits.maxModelCalls||0)))throw budgetAdmissionError('RUN_BUDGET_CONFIG_INVALID');
   if (allowedMediaTaskTypes && (!allowedTools || !allowedTools.includes("media_route"))) {
     throw Object.assign(new Error("Media task scope requires the media tool"), { code: "RUN_BUDGET_CONFIG_INVALID" });
   }
@@ -145,7 +153,7 @@ function loadRunBudgetPolicy(profile = "default") {
     allowedTools: allowedTools === undefined ? null : Object.freeze([...allowedTools]),
     allowedMediaTaskTypes: allowedMediaTaskTypes === undefined ? null : Object.freeze([...allowedMediaTaskTypes]),
   };
-  try { return { limits: budgetLimits, maxOutputTokens, toolPolicy, budget: createRunBudget({ limits: budgetLimits }), configured: true }; }
+  try { return { limits: {...budgetLimits,...(contextModelCalls?{contextModelCalls}:{})}, contextModelCalls, maxOutputTokens, toolPolicy, budget: createRunBudget({ limits: budgetLimits }), configured: true }; }
   catch {
     throw Object.assign(new Error("Run budget configuration is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
   }
@@ -191,7 +199,7 @@ const MEDIA_NO_LINK_NOTE =
 const name = "persistent-runner";
 const inject = ["agentDefaultModel", "agents", "sessions", "attachments"];
 const RPC_PROTOCOL_VERSION = 1;
-const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1"]);
+const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1", "native-context-v1"]);
 const CONTROL_ERROR_MESSAGES = Object.freeze({
   RUNNER_SETUP_FAILED: "Persistent runner setup failed",
   RUNNER_QUEUE_FAILED: "Parent command could not be processed",
@@ -239,29 +247,30 @@ function summarize(events, firstSeq) {
 }
 
 async function guardNativeToolExecution(active, execution, next) {
+  const deny=code=>{if(active)active.policyDenied=code;return budgetAdmissionError(code);};
   if (!active?.agent || execution?.agent !== active.agent || !execution?.signal || typeof execution.signal.aborted !== 'boolean') {
-    throw budgetAdmissionError('RUN_TOOL_CONTEXT_INVALID');
+    throw deny('RUN_TOOL_CONTEXT_INVALID');
   }
   // Warm agents span multiple Runs. Agent identity alone cannot authorize a
   // delayed call from an earlier Run; require the current native tool/call log.
   const rootCallId = execution.rootCallId || execution.callId;
   if (!rootCallId || !active.stepNames?.has(rootCallId) ||
       (rootCallId === execution.callId && active.stepNames.get(rootCallId) !== execution.name)) {
-    throw budgetAdmissionError('RUN_TOOL_CONTEXT_INVALID');
+    throw deny('RUN_TOOL_CONTEXT_INVALID');
   }
-  if (active.expired) throw budgetAdmissionError('RUN_DURATION_LIMIT');
+  if (active.expired) throw deny('RUN_DURATION_LIMIT');
   if (active.cancelRequested || execution.signal.aborted) throw new LlmError('Run tool request was cancelled', 'RUN_CANCELLED');
-  if (!active.budget || active.configured !== true) throw budgetAdmissionError('RUN_BUDGET_CONFIG_INVALID');
+  if (!active.budget || active.configured !== true) throw deny('RUN_BUDGET_CONFIG_INVALID');
   // Existing host tool wrappers own their admission and durable RPC. Never
   // debit them twice. All other dispatches must pass the native tool policy.
   if (HOST_RUN_TOOL_NAMES.has(execution.name)) return next();
   if (!NATIVE_RUN_TOOL_NAMES.has(execution.name) || !Array.isArray(active.toolPolicy?.allowedTools) || !active.toolPolicy.allowedTools.includes(execution.name)) {
-    throw budgetAdmissionError('RUN_TOOL_NOT_ALLOWED');
+    throw deny('RUN_TOOL_NOT_ALLOWED');
   }
   const admission = active.budget.admit({type: 'tool', key: canonicalToolKey(execution.name, execution.arguments)});
   if (!admission.allowed) {
     if (admission.code === 'RUN_DURATION_LIMIT') active.expire?.();
-    throw budgetAdmissionError(admission.code);
+    throw deny(admission.code);
   }
   try { return await next(); }
   finally { admission.settle(); }
@@ -282,6 +291,16 @@ function apply(ctx) {
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
     const pendingToolRequests = new Map(); // requestId -> { sessionId, resolve, reject }
     const activeTurns = new Map(); // sessionId -> isolated turn context
+    const nativeContextGate=installNativeContextGateR4(ctx,{
+      getActiveTurn:nativeId=>{const turn=activeTurns.get(String(nativeId).replace(/^session-/,''));return turn?{sessionId:nativeId,runId:turn.runId,tenantId:turn.tenantId,budget:{admit:operation=>{if(turn.auxiliaryAdmissions>=turn.contextModelCalls)return {allowed:false,code:'RUN_MODEL_CALL_LIMIT'};const admission=turn.budget.admit(operation);if(admission.allowed)turn.auxiliaryAdmissions++;return admission;}},cancelRequested:turn.cancelRequested,expired:turn.expired,maxOutputTokens:turn.maxOutputTokens}:null;},
+      onAuxiliaryDispatch:binding=>{const active=activeTurns.get(String(binding.sessionId).replace(/^session-/,''));if(active?.runId!==binding.runId)throw budgetAdmissionError('RUN_NOT_BOUND');active.auxiliaryDispatches++;},
+      getChatTicket:request=>{const active=activeTurns.get(String(request.sessionId).replace(/^session-/,''));const ticket=active?.chatTicket;if(active)active.chatTicket=null;return ticket;},
+      recordModelIntent:async intent=>{
+        const sid=String(intent.sessionId).replace(/^session-/,'');const active=activeTurns.get(sid);
+        if(!active?.recordModelIntents)throw budgetAdmissionError('MISSING_INTENT_RECORDER');
+        await requestParentTool(sid,'northstar.model_request_intent',{provider:intent.provider,model:intent.model,purpose:'compaction',turn:active.requestTurn||0,step:active.requestStep||0,maxTokens:intent.maxTokens||null});
+      },
+    });
     const sessionQueues = new Map(); // sessionId -> FIFO task/close chain
     let shutdownRequested = false;
     let shutdownPromise = null;
@@ -296,20 +315,21 @@ function apply(ctx) {
         ...definition,
         async execute(...args) {
           const active = activeTurns.get(sessionId);
+          const deny=code=>{if(active)active.policyDenied=code;return budgetAdmissionError(code);};
           if (!active?.budget || active.configured !== true) {
-            throw budgetAdmissionError("RUN_BUDGET_CONFIG_INVALID", "Run tool budget is unavailable");
+            throw deny("RUN_BUDGET_CONFIG_INVALID", "Run tool budget is unavailable");
           }
           if (active.toolPolicy?.allowedTools && !active.toolPolicy.allowedTools.includes(name)) {
-            throw budgetAdmissionError("RUN_TOOL_NOT_ALLOWED", "Run tool is outside the configured scope");
+            throw deny("RUN_TOOL_NOT_ALLOWED", "Run tool is outside the configured scope");
           }
           if (name === "media_route" && active.toolPolicy?.allowedMediaTaskTypes &&
               !active.toolPolicy.allowedMediaTaskTypes.includes(args[0]?.taskType)) {
-            throw budgetAdmissionError("RUN_MEDIA_TASK_NOT_ALLOWED", "Run media task is outside the configured scope");
+            throw deny("RUN_MEDIA_TASK_NOT_ALLOWED", "Run media task is outside the configured scope");
           }
           const admission = active.budget.admit({ type: "tool", key: canonicalToolKey(name, args[0]) });
           if (!admission.allowed) {
             if (admission.code === "RUN_DURATION_LIMIT") active.expire?.();
-            throw budgetAdmissionError(admission.code, "Run tool admission was denied by the configured budget");
+            throw deny(admission.code, "Run tool admission was denied by the configured budget");
           }
           try { return await execute.apply(this, args); }
           finally { admission.settle(); }
@@ -354,6 +374,7 @@ function apply(ctx) {
       const sid = sessionKey.get(session);
       if (!sid) return;
       const turn = activeTurns.get(sid);
+      if(event.type==='compaction/end'&&turn&&!event.data?.error)turn.compactions++;
       if (event.type === "assistant/chunk") {
         const chunk = event.data?.chunk;
         if (chunk?.type === "text-delta" && chunk.text) {
@@ -431,6 +452,9 @@ function apply(ctx) {
           || typeof cmd.tenantId !== "string" || !cmd.tenantId.trim()
           || (cmd.model != null && typeof cmd.model !== "string")
           || (cmd.reasoningEffort !== undefined && (typeof cmd.reasoningEffort !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(cmd.reasoningEffort)))
+          || (cmd.resume!==undefined&&typeof cmd.resume!=='boolean')
+          || (cmd.compact!==undefined&&typeof cmd.compact!=='boolean')
+          || (cmd.runId!==undefined&&(typeof cmd.runId!=='string'||!cmd.runId.trim()||cmd.runId.length>128))
           || (cmd.recordModelIntents !== undefined && typeof cmd.recordModelIntents !== "boolean")
           || (cmd.budgetProfile !== undefined && cmd.budgetProfile !== "csv" && !/^media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
         emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
@@ -445,6 +469,11 @@ function apply(ctx) {
       const t0 = Date.now();
       const turn = {
         sessionId: sid,
+        runId:typeof cmd.runId==='string'&&cmd.runId.trim()?cmd.runId:crypto.randomUUID(),
+        compactions:0,
+        auxiliaryDispatches:0,
+        auxiliaryAdmissions:0,
+        primaryModelCalls:0,
         recordModelIntents: cmd.recordModelIntents === true,
         tenantId: String(cmd.tenantId || "").trim(),
         mediaRouteResults: [],
@@ -462,6 +491,12 @@ function apply(ctx) {
       let durationTimer = null;
       let activeBudget = null;
       let firstSeq = null;
+      const collectTurnUsage=()=>{
+        const events=rec?.agent?.session?.events||[],evidence=collectResponseUsage(events,firstSeq??0);
+        const recorded=events.filter(event=>event.seq>=(firstSeq??0)&&event.type==='compaction/summary'&&event.data?.llmStreamCall===true).length;
+        if(turn.auxiliaryDispatches>recorded){evidence.unrecordedAuxiliaryCalls=turn.auxiliaryDispatches-recorded;evidence.coverage='partial';evidence.totalSemantics='unknown';if(evidence.usage)evidence.usage=Object.fromEntries(Object.keys(evidence.usage).map(key=>[key,null]));}
+        return evidence;
+      };
       activeTurns.set(sid, turn);
       try {
         const defaults = defaultModel.currentSelection();
@@ -475,6 +510,7 @@ function apply(ctx) {
         activeBudget = {
           budget: policy?.budget || null,
           configured: policy?.configured === true,
+          contextModelCalls:policy?.contextModelCalls||0,
           limits: policy?.limits || {},
           toolPolicy: policy?.toolPolicy || null,
           maxOutputTokens: Number.isSafeInteger(policy?.maxOutputTokens) ? policy.maxOutputTokens : null,
@@ -504,7 +540,7 @@ function apply(ctx) {
         if (!rec) {
           const provider = selection.current.provider;
           const model = selection.current.model;
-          const { agent } = await agents.create({
+          const creationOptions={
             sessionId: SessionId("session-" + sid),
             meta: { cwd: process.cwd() },
             agentOptions: { provider, model, ...(activeBudget.maxOutputTokens ? { maxTokens: activeBudget.maxOutputTokens } : {}) },
@@ -519,11 +555,14 @@ function apply(ctx) {
                 if (!active?.budget || active.configured !== true) {
                   throw budgetAdmissionError("RUN_BUDGET_CONFIG_INVALID", "Run model budget is unavailable");
                 }
+                if(active.policyDenied)throw budgetAdmissionError(active.policyDenied);
+                if(active.contextModelCalls&&active.primaryModelCalls>=active.limits.maxModelCalls-active.contextModelCalls)throw budgetAdmissionError('RUN_MODEL_CALL_LIMIT');
                 const admission = active.budget.admit({ type: "model" });
                 if (!admission.allowed) {
                   if (admission.code === "RUN_DURATION_LIMIT") active.expire?.();
                   throw budgetAdmissionError(admission.code, "Run model request was denied by the configured budget");
                 }
+                active.primaryModelCalls++;
                 try {
                   const config = { ...await next() };
                   if(active.requiresImage){
@@ -542,6 +581,9 @@ function apply(ctx) {
                       maxTokens: Number.isSafeInteger(config.maxTokens) ? config.maxTokens : null,
                     });
                   }
+                  if(activeTurns.get(sid)!==active||active.cancelRequested||active.expired||_payload.signal?.aborted)throw budgetAdmissionError('RUN_CANCELLED');
+                  active.requestTurn=_payload.turn;active.requestStep=_payload.step;
+                  active.chatTicket=nativeContextGate.ticketManager.issueTicket({sessionId:'session-'+sid,runId:active.runId,provider:config.provider,model:config.model,budgetAdmission:admission});
                   admission.settle();
                   return config;
                 } catch (error) {
@@ -852,7 +894,8 @@ function apply(ctx) {
                 },
               });
             },
-          });
+          };
+          let handle;try{handle=cmd.resume===true?await agents.resume({...creationOptions,resumeSessionId:creationOptions.sessionId}):await agents.create(creationOptions);}catch(error){if(cmd.resume===true)throw budgetAdmissionError('NATIVE_SESSION_UNAVAILABLE');throw error;}const {agent}=handle;
           await agent.whenIdle();
           rec = { agent, modelSelection: selection };
           agentMap.set(sid, rec);
@@ -876,6 +919,15 @@ function apply(ctx) {
           emit({ type: "done", sessionId: sid, ok: false, code: shutdown ? "RUN_INTERRUPTED" : "RUN_CANCELLED", error: shutdown ? RUNNER_FAILURE_MESSAGES.RUN_INTERRUPTED : "Run was cancelled by the parent request", text: "", canceled: !shutdown, reason: shutdown ? "shutdown" : "user", usage: usageEvidence.usage, usageEvidence, modelIdentity: collectModelIdentity(agent.session.events, firstSeq), budget: safeBudgetSummary(activeBudget), ms: Date.now() - t0 });
           return;
         }
+        if(cmd.compact===true){
+          const compaction=ctx.get('compaction');if(!compaction)throw budgetAdmissionError('RUN_CONTEXT_UNAVAILABLE');
+          turn.preflightController ||= new AbortController();
+          const result=await compaction.compactNow(agent,turn.preflightController.signal);
+          await sessions.flush(agent.session);
+          const usageEvidence=collectTurnUsage();
+          emit({type:'done',sessionId:sid,ok:true,text:result?'上下文已压缩，摘要已保存，可继续对话。':'当前没有可压缩的历史。',usage:usageEvidence.usage,usageEvidence,modelIdentity:collectModelIdentity(agent.session.events,firstSeq),context:{kind:'dsh-native-context-v1',compactions:result?1:0,manual:true,resumed:cmd.resume===true},budget:safeBudgetSummary(activeBudget),ms:Date.now()-t0});
+          return;
+        }
         const userMessage = await nativeImageMessage({attachments:ctx.get('attachments'),
           text:task + "\n\n[系统提示] " + MEDIA_NO_LINK_NOTE, images:cmd.inputImages ?? []});
         turn.newNativeImageCount=userMessage.content.filter(block=>block.type==='image').length;
@@ -885,6 +937,7 @@ function apply(ctx) {
         await agent.whenIdle();
         await sessions.flush(agent.session);
         const outcome = summarize(agent.session.events, firstSeq);
+        outcome.usageEvidence=collectTurnUsage();outcome.usage=outcome.usageEvidence.usage;
         rejectToolRequests(sid, "TASK_FINISHED", "DSH task finished before the parent response arrived");
         const stopRequested = activeBudget.expired || turn.cancelOrigin === "user" || ["user", "parent"].includes(outcome.reason?.kind);
         let failure = null;
@@ -895,6 +948,7 @@ function apply(ctx) {
         } else if (turn.cancelOrigin === "user" || ["user", "parent"].includes(outcome.reason?.kind)) {
           const by = turn.cancelOrigin === "user" ? "parent request" : outcome.reason.kind;
           failure = { code: "RUN_CANCELLED", message: "Agent turn was cancelled (" + by + ")" };
+        } else if(turn.policyDenied){failure={code:turn.policyDenied,message:RUNNER_FAILURE_MESSAGES[turn.policyDenied]||'Run tool admission was denied'};
         } else if (RUNNER_FAILURE_MESSAGES[outcome.reason?.error?.code]) {
           const code = outcome.reason.error.code;
           failure = { code, message: RUNNER_FAILURE_MESSAGES[code] };
@@ -924,6 +978,7 @@ function apply(ctx) {
           usage: outcome.usageEvidence.usage,
           usageEvidence: outcome.usageEvidence,
           modelIdentity: outcome.modelIdentity,
+          context:{kind:'dsh-native-context-v1',compactions:turn.compactions,manual:false,resumed:cmd.resume===true},
           imageInput: {kind:'dsh-native-images-v1',newImageCount:turn.newNativeImageCount||0,
             capabilityChecked:turn.nativeImageCapabilityChecked===true},
           budget: safeBudgetSummary(activeBudget),
@@ -935,7 +990,7 @@ function apply(ctx) {
         });
       } catch (e) {
         rejectToolRequests(sid, "TASK_FAILED", "DSH task ended before the parent response arrived");
-        const usageEvidence = firstSeq == null ? collectResponseUsage([], 0) : collectResponseUsage(rec?.agent?.session?.events || [], firstSeq);
+        const usageEvidence = firstSeq == null ? collectResponseUsage([], 0) : collectTurnUsage();
         const code = activeBudget?.expired ? "RUN_DURATION_LIMIT" : turn.cancelOrigin === "shutdown" ? "RUN_INTERRUPTED" : turn.cancelOrigin === "user" ? "RUN_CANCELLED" : (RUNNER_FAILURE_MESSAGES[e?.code] ? e.code : "RUN_TASK_FAILED");
         const error = activeBudget?.expired ? RUNNER_FAILURE_MESSAGES.RUN_DURATION_LIMIT
           : turn.cancelOrigin === "shutdown" ? RUNNER_FAILURE_MESSAGES.RUN_INTERRUPTED

@@ -67,6 +67,7 @@ test('same persistent session keeps zero-tool Run closed and accepts a later exp
     ['shell/tasks/budget.cjs', 'budget.cjs'],
     ['shell/runtime/usage.cjs', 'usage.cjs'],
     ['shell/runtime/native-image-message.mjs', 'native-image-message.mjs'],
+    ['shell/runtime/dsh-native-context-r4-candidate.mjs', 'dsh-native-context-r4-candidate.mjs'],
     ['business/media/presets.cjs', 'presets.cjs'],
     ['business/attribution/ga-connector/executor.js', 'ga-query-executor.cjs'],
   ]) fs.copyFileSync(path.join(root, source), path.join(profile, target));

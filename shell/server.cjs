@@ -998,6 +998,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
 
   // ⑤ 分岔 / 重新生成：重置该对话的 DSH session（丢弃旧轨迹），下一问冷启动、只重放截断后的历史
   if (hasBranch || regenerate) {
+    await auth.db.query('UPDATE conversations SET native_session_id=NULL,native_session_key_sha256=NULL WHERE id=$1 AND user_id=$2',[conversationId,uid]);
     try { tenantMod.closeDshSession(conversationId); } catch (e) { /* 忽略 */ }
   }
 
@@ -1088,6 +1089,9 @@ async function handleChat(req, res, me, body, taskRun = null) {
     reasoningEffort: taskRun?.modelSelection?.reasoningEffort,
     budgetProfile: controlledMediaGrant ? `media:${controlledMediaGrant.taskType}`
       : taskRun && Array.isArray(lastUser?.csvSelections) && lastUser.csvSelections.length === 1 ? "csv" : undefined,
+    runId:taskRun?.runId,
+    compact:question==='/compact',
+    nativeSession:!hasBranch&&!regenerate?await (async()=>{const row=(await auth.db.query('SELECT native_session_id,native_session_key_sha256 FROM conversations WHERE id=$1 AND user_id=$2',[conversationId,uid])).rows[0];return row?.native_session_id?{sessionId:row.native_session_id,keySha256:row.native_session_key_sha256}:null;})():null,
     recordModelIntents: Boolean(modelIntentHandler),
     timeoutMs: taskTimeoutMs,
     onToolRequest: request => request.name === MODEL_INTENT_RPC && modelIntentHandler
@@ -1219,6 +1223,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
   const persistBudgetUsage = async () => {
     if (!taskRun?.runId || !taskRun.emit || !r?.budget || typeof r.budget !== "object") return;
     await taskRun.emit("usage", buildRunBudgetUsage(r.budget));
+    if(r.usageEvidence?.unrecordedAuxiliaryCalls)await taskRun.emit('state',{action:'context_usage_incomplete',unrecordedAuxiliaryCalls:r.usageEvidence.unrecordedAuxiliaryCalls});
   };
 
   // responseModel is reported by a provider stream chunk only when the locked
@@ -1235,6 +1240,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     sse({ done: true, ok: false, needKey: true, error: r.error, messages });
     return taskRun ? undefined : res.end();
   }
+  if(r.code==='NATIVE_SESSION_UNAVAILABLE'){await auth.db.query('UPDATE conversations SET native_session_id=NULL,native_session_key_sha256=NULL WHERE id=$1 AND user_id=$2',[conversationId,uid]);tenantMod.closeDshSession(conversationId);}
   await persistBudgetUsage();
   await persistModelIdentity();
 
@@ -1304,9 +1310,14 @@ async function handleChat(req, res, me, body, taskRun = null) {
     ...hostArtifacts.entries(),
   ]).values()];
   const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps,
+    ...(r.context?{context:r.context}:{}),
     modelSelection: {requestedModelId, resolvedModelId:selectedModel, reasoningEffort:reasoningEffort ?? null},
     ...(taskRun?.runId ? { runId: taskRun.runId } : {}), ...(media ? { media } : {}), ...(report ? { report } : {}), ...(artifacts.length ? { artifacts } : {}) }]);
   await persistConversationMessages(saved);
+  if(r.ok&&typeof r.nativeSessionId==='string'&&/^[A-Za-z0-9_-]{1,160}$/.test(r.nativeSessionId)&&/^[a-f0-9]{64}$/.test(r.keySha256||'')){
+    await auth.db.query('UPDATE conversations SET native_session_id=$1,native_session_key_sha256=$2 WHERE id=$3 AND user_id=$4 AND source_context_start=$5 AND source_revocation_pending=FALSE AND memory_revocation_pending=FALSE',[r.nativeSessionId,r.keySha256,conversationId,uid,sourceContextStart]);
+  }
+  if(r.context?.compactions&&taskRun)await taskRun.emit('state',{action:'context_compacted',...r.context});
 
   if (!DRY_RUN_CHAT && routed.task==='textChat' && requestedModelId !== modelCatalog.AUTO_ID && taskRun?.runId && !mediaResultRequired) {
     try {
