@@ -1408,6 +1408,12 @@ async function ask(msg) {
     const id = await newConversation();
     if (!id) return;
   }
+  // Preserve the unsent text/attachments while a model or effort save is pending.
+  // runChat also guards dispatch, but that is after optimistic rendering below.
+  if (!modelContextReady) {
+    composerNotice("正在同步当前对话的模型，请稍后发送。", "err");
+    return;
+  }
   const csvSelections = pendingDocs.filter(d => d.csvSelection).map(d => d.csvSelection);
   if (csvSelections.length > 1) {
     composerNotice("一次只能确认一个 CSV 分析范围，请移除多余选择后再发送", "err");
@@ -1770,6 +1776,7 @@ let noticeTimer = null;
 function composerNotice(msg, kind) {
   msg = String(msg == null ? "" : msg);
   if (!composerNoticeEl) { if (typeof alert === "function") alert(msg); return; }
+  if (!msg) { composerNoticeEl.hidden = true; const slot = composerNoticeEl.querySelector(".cn-text"); if (slot) slot.textContent = ""; return; }
   composerNoticeEl.hidden = false;
   composerNoticeEl.className = "composer-notice" + (kind === "ok" ? " ok" : "");
   composerNoticeEl.innerHTML =

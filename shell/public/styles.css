@@ -206,14 +206,14 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 }
 .conv-item:hover .conv-dot{display:none}
 
-.conv-menu{
-  position:absolute;top:5px;right:4px;
+.conv-item > button.conv-menu{
+  position:absolute;top:5px;right:4px;padding:0;margin:0;
   width:22px;height:22px;border:0;border-radius:5px;
   background:transparent;color:#b8b8b8;
   cursor:pointer;font-size:13px;line-height:1;display:none;
 }
-.conv-item:hover .conv-menu,.conv-item.on .conv-menu{display:block}
-.conv-menu:hover{background:#f0f0f0;color:#1a1a1a}
+.conv-item:hover > button.conv-menu,.conv-item.on > button.conv-menu{display:block}
+.conv-item > button.conv-menu:hover{background:#f0f0f0;color:#1a1a1a}
 .conv-menu-pop{
   position:fixed;z-index:50;background:#fff;border:1px solid #e8e8e8;
   border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,.1);
@@ -409,6 +409,7 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
   max-width:780px;margin:8px auto 0;display:flex;align-items:flex-start;gap:6px;
   font-size:12.5px;line-height:1.5;color:var(--bad);
 }
+.composer-notice[hidden]{display:none}
 .composer-notice .ico{width:14px;height:14px;flex-shrink:0;margin-top:2px}
 .composer-notice.ok{color:var(--ok)}
 

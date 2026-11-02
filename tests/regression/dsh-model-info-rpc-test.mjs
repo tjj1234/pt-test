@@ -112,4 +112,17 @@ test('metadata RPC is isolated, bounded, cancellable and never enters paid heart
   assert.equal((await runtime.describeModel({...input, tenantId:'never-spawn', signal:preCanceled.signal})).code, 'MODEL_INFO_CANCELED');
   assert.equal(children.length, count);
   assert.equal((await runtime.describeModel({...input, model:'a'.repeat(257)})).code, 'MODEL_INFO_INVALID');
+  readyNextChild=false;
+  const oldRun=runtime.run({...spec('old-run','old-runner'),model:'reasoner',reasoningEffort:'high'});
+  const oldChild=children.at(-1);
+  oldChild.send({type:'ready',capabilities:['task-v1','tool-rpc-v1','abort-v1']});
+  assert.equal((await oldRun).code,'DSH_REASONING_UNSUPPORTED');
+  assert.equal(oldChild.messages.some(frame=>frame.type==='task'),false,'old runner cannot silently ignore effort');
+  readyNextChild=false;
+  const oldMetadata=runtime.describeModel({...input,tenantId:'old-metadata'});
+  const oldMetadataChild=children.at(-1);
+  oldMetadataChild.send({type:'ready',capabilities:['task-v1','tool-rpc-v1','abort-v1']});
+  assert.equal((await oldMetadata).code,'MODEL_INFO_UNSUPPORTED');
+  assert.equal(oldMetadataChild.messages.some(frame=>frame.type==='describe_model'),false);
+
 });

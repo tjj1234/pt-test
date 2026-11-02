@@ -1122,3 +1122,7 @@ r18草案SHAadce48980852b8b27b51158b99da9d3f66a772c043e390cad2434611053672eb保�
 
 ### 2026-11-02：用户授权立即保险commit/push，独立于功能验收
 用户要求不等待推理链收口，先保全两周未提交工作到tjj1234/pt-test远程新分支。执行分支backup/northstar-wip-20261102-safety，原HEAD b09b1e13720cd16cd7538999d4c63386920b367c；Gemini R3候选与所有共享未提交源码一起进入WIP保险快照，不混称已验收功能提交。现有源码/文档/测试/历史发布物/wb copy副本保留；浏览器临时痕迹、Python缓存和既有忽略的私钥/数据库/runtime/依赖不上传。详见INSURANCE-SNAPSHOT-20261102.md。此条在提交前写入，实际commit与远程成功以Git记录及push后ls-remote核对为准；不提前宣称成功。不merge main、不部署。
+
+### 2026-11-02：第一条产品链本地验收关闭，准备独立功能提交
+从已推送保险dae46d5创建feature/northstar-integration-20261102，保险分支不动。推理核心接线已在保险中；本轮新增真实浏览器脚本和通用northstar-chain-checks机械入口、旧Runner能力拒绝回归、最终UI修正。实际浏览器暴露更多按钮被.nav button覆盖遮住会话标题，已修CSS；保存档位时保留未发送输入，清空提示不再显示空红色警告。最终源码统一验证boundaries13/13、真实app.js DOM57/57、HTTP+真实Chromium/原生DSH SDK同链1/1，开始/结束源码hash无漂移。没有付费provider。主Agent批准LOCAL_CHAIN_CLOSED，报告REASONING-PRODUCT-LOCAL-ACCEPTANCE-20261102.md；不是生产/全量交付。活动归档仍旧r19，不修改其历史文件或假装新源码可部署。
+复跑入口node scripts/northstar-chain-checks.mjs --chain reasoning --browser；输出固定JSON与完整文本日志，source绑定可verify-report。脚本覆盖其他六包机械入口，最多两个独立测试进程；是否接入仍由主Agent统一判断。Gemini批次文档的原有未提交交付汇总保持保留，第一条功能提交不混入其改动。

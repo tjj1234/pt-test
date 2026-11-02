@@ -290,6 +290,11 @@ modelFetchOverride=(url,opts)=>{effortBody=JSON.parse(opts.body);return save.pro
 effortEl.value='low';effortEl.dispatchEvent({type:'change'});
 ok('档位保存绑定当前会话与模型',effortBody?.conversationId==='reasoning-a'&&effortBody?.model==='deepseek-v4-pro'&&effortBody?.reasoningEffort==='low');
 ok('档位未保存前阻止发送',run('modelContextReady')===false);
+const beforeUnsent=chatCalls;
+run('ta.value="retain pending message";');
+await run('ask("retain pending message")');
+ok('档位保存期间保留未发送文本',run('ta.value')==='retain pending message'&&chatCalls===beforeUnsent);
+
 save.resolve({ok:true,json:async()=>({ok:true,reasoningEffort:'low'})});await new Promise(r=>setTimeout(r,0));
 ok('保存成功后采用已确认档位',run('reasoningEffort')==='low'&&run('modelContextReady')===true);
 modelFetchOverride=async()=>({ok:false,json:async()=>({ok:false})});

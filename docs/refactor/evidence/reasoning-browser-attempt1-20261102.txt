@@ -1,0 +1,31 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-v8iWli/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✖ reasoning metadata and preference reach durable Runs, native requests and reopened history (3403.520333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3443.19025
+
+✖ failing tests:
+
+test at tests/regression/reasoning-http-sdk-integration-test.mjs:4:1
+✖ reasoning metadata and preference reach durable Runs, native requests and reopened history (3403.520333ms)
+  AssertionError [ERR_ASSERTION]: ### Error
+  Error: File access denied: /private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-v8iWli/browser-driver.js is outside allowed roots. Allowed roots: /Users/mmdn/Downloads/pt项目/.playwright-cli, /Users/mmdn/Downloads/pt项目
+  
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/reasoning-http-sdk-integration-test.mjs:87:74)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '### Error\nError: File access denied: /private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-v8iWli/browser-driver.js is outside allowed roots. Allowed roots: /Users/mmdn/Downloads/pt项目/.playwright-cli, /Users/mmdn/Downloads/pt项目\n',
+    expected: /BROWSER_LOCAL_CHAIN_PASS/,
+    operator: 'match',
+    diff: 'simple'
+  }

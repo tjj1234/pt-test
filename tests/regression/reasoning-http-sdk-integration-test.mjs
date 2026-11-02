@@ -1,7 +1,7 @@
-import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn} from 'node:child_process';import {createServer} from 'node:net';import {createRequire} from 'node:module';
+import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn,execFileSync} from 'node:child_process';import {createServer} from 'node:net';import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),shellRequire=createRequire(new URL('../../shell/package.json',import.meta.url));
 const {createStorage}=require('../../shell/storage/index.cjs');const root=path.resolve('.'),sha=x=>crypto.createHash('sha256').update(x).digest('hex');
-test('reasoning metadata and preference reach durable Runs, native requests and reopened history',{timeout:40000},async()=>{
+test('reasoning metadata and preference reach durable Runs, native requests and reopened history',{timeout:90000},async()=>{
  const temp=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'reasoning-http-sdk-')),runtime=path.join(temp,'runtime'),dataDir=path.join(temp,'db'),masterKeyFile=path.join(temp,'key'),trace=path.join(temp,'trace'),pid=path.join(temp,'pid');
  let storage,child,logs='';
  try{
@@ -29,7 +29,7 @@ ctx.llm.registerAdapter(['powertokens'],new Adapter());fs.writeFileSync(${JSON.s
 if(parent?.filename.endsWith('/server.cjs')&&name==='./models/dsh-configured-catalog.cjs')return {...value,configuredModels:()=>['fixture-office','fixture-plain']};
 if(parent?.filename.endsWith('/server.cjs')&&name==='./model-catalog.cjs')return {...value,getCatalog:async opts=>{
 const {normalizePtRecord}=require(${JSON.stringify(path.join(root,'shell/models/capabilities.cjs'))});const scopeId=value.resolveScopeId(opts),at=new Date().toISOString(),prior=value.readScopedCache(scopeId);
-const models=['fixture-office','fixture-plain'].map(id=>normalizePtRecord({id,supported_tasks:['textChat','imageUnderstanding'],supported_endpoint_types:['openai-response'],input_modalities:['text','image'],output_modalities:['text']},{scopeId,observedAt:at,sourceVersion:'fixture',permission:true,localPolicy:{enabled:true,source:'fixture',version:'1',tasks:['textChat']},adaptations:{textChat:{adapterId:'fixture',version:'1',endpoint:'openai-chat-completions',source:'fixture'}},verifications:prior?.models.find(m=>m.id===id)?.verifications||{}}));
+const models=['fixture-office','fixture-plain'].map(id=>normalizePtRecord({id,supported_tasks:['textChat','imageUnderstanding'],supported_endpoint_types:['openai-response'],input_modalities:['text','image'],output_modalities:['text']},{scopeId,observedAt:at,sourceVersion:'fixture',permission:true,localPolicy:{enabled:true,source:'fixture',version:'1',tasks:['textChat']},adaptations:{textChat:{adapterId:'fixture',version:'1',endpoint:'openai-chat-completions',source:'fixture'}},verifications:prior?.models.find(m=>m.id===id)?.verifications||{}})).map(model=>({...model,chat:model.tasks.textChat.value,kind:'chat',capabilityStatus:'supported',runtimeStatus:model.states.textChat.verified?'verified':'adapted_unverified'}));
 value.writeScopedCache(scopeId,{scopeId,models,lastSuccessfulAt:at,lastCompleteAt:null,nextSyncAt:null,syncFailureCount:0});
 return {models,scopeId,availability:{status:'available',modelIds:models.map(m=>m.id)},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts)};return value;};`);
@@ -76,6 +76,21 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
   assert.equal((await json('/api/models?conversationId='+conversationId)).reasoningEffort,'low');
   assert.equal((await req('/api/chat',{method:'POST',body:{conversationId,message:'Cannot forge snapshot',reasoningEffort:'high'}})).status,400);
   assert.equal(calls().length,3);
+  if(process.env.NORTHSTAR_REASONING_BROWSER==='1'){
+   const session='r'+crypto.randomBytes(4).toString('hex');
+   const cli=(...args)=>execFileSync('playwright-cli',['-s='+session,...args],{cwd:root,env:{...process.env,TMPDIR:'/private/tmp'},encoding:'utf8',timeout:45000,maxBuffer:2*1024*1024});
+   const driver=fs.readFileSync(path.join(root,'tests/probes/reasoning-browser-driver-20261102.js'),'utf8').trim();
+   const screenshot=path.join(root,'docs/refactor/evidence/reasoning-browser-20261102.png');
+   const config={baseURL:'http://127.0.0.1:'+port,cookie:cookies[0].slice('pt_session='.length),screenshot};
+   fs.mkdirSync(path.join(root,'.playwright-cli'),{recursive:true});
+   const script=path.join(root,'.playwright-cli',session+'-driver.js');fs.writeFileSync(script,'async page => ('+driver+')(page,'+JSON.stringify(config)+')');
+   try{
+    cli('open');const result=cli('run-code','--filename='+script);assert.match(result,/BROWSER_LOCAL_CHAIN_PASS/,result);
+    assert.equal(calls().at(-1).reasoningEffort,'high');
+    assert.equal((await json('/api/models?conversationId='+conversationId)).reasoningEffort,null);
+    console.log('BROWSER_LOCAL_CHAIN_PASS: real browser UI -> durable Run -> native SDK -> reload; zero paid calls');
+   }finally{try{cli('close');}catch{}fs.rmSync(script,{force:true});}
+  }
 
  }finally{
   if(child&&child.exitCode===null){const end=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await end;}
