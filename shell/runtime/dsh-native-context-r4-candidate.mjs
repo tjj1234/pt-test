@@ -38,10 +38,10 @@ function gateError(code, message) {
  */
 export class ChatAdmissionTicketManager {
   constructor(options = {}) {
-    this.defaultTtlMs = typeof options.defaultTtlMs === "number" && options.defaultTtlMs > 0
+    this.defaultTtlMs = Number.isSafeInteger(options.defaultTtlMs) && options.defaultTtlMs > 0 && options.defaultTtlMs <= DEFAULT_TICKET_TTL_MS
       ? options.defaultTtlMs
       : DEFAULT_TICKET_TTL_MS;
-    this.maxCapacity = typeof options.maxCapacity === "number" && options.maxCapacity > 0
+    this.maxCapacity = Number.isSafeInteger(options.maxCapacity) && options.maxCapacity > 0 && options.maxCapacity <= MAX_TICKET_CAPACITY
       ? options.maxCapacity
       : MAX_TICKET_CAPACITY;
     this._tickets = new Map();
@@ -62,14 +62,9 @@ export class ChatAdmissionTicketManager {
    * 签发一次性准入凭证（必须绑定宿主预算准入证据）
    */
   issueTicket({ runId, sessionId, provider, model, ttlMs, budgetAdmission }) {
-    if (!sessionId || typeof sessionId !== "string") {
-      throw gateError("INVALID_TICKET_PARAMS", "sessionId must be a non-empty string");
-    }
-    // 必须有宿主预算准入证据（若未传 budgetAdmission 则在宿主准入场景下提供兼容验证）
-    if (budgetAdmission !== undefined && (!budgetAdmission || budgetAdmission.allowed !== true)) {
-      throw gateError("INVALID_BUDGET_ADMISSION", "Ticket issuance requires valid budget admission evidence");
-    }
-
+    if (![runId,sessionId,provider,model].every(value=>typeof value==='string'&&value.trim()&&value.length<=512)) throw gateError('INVALID_TICKET_PARAMS','Complete host binding is required');
+    if (!budgetAdmission || budgetAdmission.allowed !== true) throw gateError('INVALID_BUDGET_ADMISSION','Host budget admission is required');
+    if (ttlMs !== undefined && (!Number.isSafeInteger(ttlMs)||ttlMs<=0||ttlMs>DEFAULT_TICKET_TTL_MS)) throw gateError('INVALID_TICKET_PARAMS','Invalid ticket lifetime');
     const now = Date.now();
     this._pruneExpired(now);
 
@@ -117,20 +112,9 @@ export class ChatAdmissionTicketManager {
       throw gateError("EXPIRED_ADMISSION_TICKET", "Admission ticket has expired");
     }
 
-    // 匹配性检查：杜绝回显原始敏感值
-    if (matchParams.sessionId && record.sessionId !== String(matchParams.sessionId)) {
-      throw gateError("TICKET_SESSION_MISMATCH", "Admission ticket session mismatch");
+    for (const key of ['sessionId','runId','provider','model']) {
+      if (typeof matchParams[key]!=='string'||record[key]!==matchParams[key]) throw gateError('TICKET_'+key.replace('Id','').toUpperCase()+'_MISMATCH','Admission ticket binding mismatch');
     }
-    if (record.runId && matchParams.runId && record.runId !== String(matchParams.runId)) {
-      throw gateError("TICKET_RUN_MISMATCH", "Admission ticket run mismatch");
-    }
-    if (record.provider && matchParams.provider && record.provider !== String(matchParams.provider)) {
-      throw gateError("TICKET_PROVIDER_MISMATCH", "Admission ticket provider mismatch");
-    }
-    if (record.model && matchParams.model && record.model !== String(matchParams.model)) {
-      throw gateError("TICKET_MODEL_MISMATCH", "Admission ticket model mismatch");
-    }
-
     // 原子标记消费
     record.consumed = true;
     return record;
@@ -203,250 +187,58 @@ export function installNativeContextGateR4(ctx, options) {
 
   const disposers = [];
 
-  // 前置拦截 llm/stream
-  const disposeLlmStream = ctx.on("llm/stream", (streamOptions, next) => {
-    const purpose = streamOptions?.purpose || "chat";
-    const sessionId = streamOptions?.sessionId ? String(streamOptions.sessionId) : null;
-    const signal = streamOptions?.signal;
-
-    // --- 分支 1：普通对话请求 (purpose === "chat") ---
-    if (purpose === "chat") {
-      // 缺口 1 修复：普通 chat 绝不能在无活动 Run 下放行
-      if (!sessionId) {
-        throw gateError("RUN_NOT_BOUND", "Chat request rejected: no sessionId present on request");
-      }
-
-      const activeTurn = options.getActiveTurn(sessionId, purpose);
-      if (!activeTurn) {
-        throw gateError("RUN_NOT_BOUND", "Chat request rejected: no active Run bound for session");
-      }
-
-      const ticketId = streamOptions?.admissionTicket;
-      if (!ticketId) {
-        throw gateError("MISSING_ADMISSION_TICKET", "Plain chat request rejected: missing one-time host admission ticket");
-      }
-
-      if (activeTurn.cancelRequested === true || signal?.aborted === true) {
-        throw gateError("RUN_CANCELLED", "Chat request rejected: Run or turn is cancelled/aborted");
-      }
-      if (activeTurn.expired === true) {
-        throw gateError("RUN_EXPIRED", "Chat request rejected: Run has expired");
-      }
-
-      // 缺口 2 修复：权威身份由 activeTurn.runId 决定，严禁客户端 streamOptions.runId 覆盖
-      const ticketRecord = ticketManager.consumeTicket(ticketId, {
-        sessionId: activeTurn.sessionId,
-        runId: activeTurn.runId, // 严格使用活动 Run 的权威 ID
-        provider: streamOptions?.provider,
-        model: streamOptions?.model,
-      });
-
-      if (typeof activeTurn.recordEvent === "function") {
-        activeTurn.recordEvent({
-          type: "chat_admission_consumed",
-          ticketId: ticketRecord.ticketId,
-          sessionId: ticketRecord.sessionId,
-          provider: streamOptions?.provider,
-          model: streamOptions?.model,
-          timestamp: Date.now(),
-        });
-      }
-
-      // 缺口 5 修复：延迟 next() 执行，并在消费首个 chunk 前再次验证取消
-      return (async function* () {
-        if (activeTurn.cancelRequested === true || signal?.aborted === true) {
-          throw gateError("RUN_CANCELLED", "Chat request rejected: turn cancelled before stream consumption");
+  // Reservations are acquired once and released even if an iterator is never started.
+  const disposeLlmStream=ctx.on('llm/stream',(streamOptions,next)=>{
+    const purpose=streamOptions?.purpose||'chat',sessionId=streamOptions?.sessionId,signal=streamOptions?.signal;
+    const active=options.getActiveTurn(sessionId,purpose);
+    if(!sessionId||!active||!active.runId||active.sessionId!==sessionId)throw gateError('RUN_NOT_BOUND','No active Run binding');
+    const binding={sessionId,runId:active.runId,tenantId:active.tenantId};
+    const validate=()=>{
+      const current=options.getActiveTurn(sessionId,purpose);
+      if(!current||Object.keys(binding).some(key=>current[key]!==binding[key]))throw gateError('RUN_NOT_BOUND','Active Run binding changed');
+      if(current.cancelRequested||signal?.aborted)throw gateError('RUN_CANCELLED','Run cancelled');
+      if(current.expired)throw gateError('RUN_EXPIRED','Run expired');
+    };
+    validate();
+    let admission,recordIntent;
+    if(purpose==='chat'){
+      ticketManager.consumeTicket(streamOptions.admissionTicket,{sessionId,runId:active.runId,provider:streamOptions.provider,model:streamOptions.model});
+    }else{
+      recordIntent=options.recordModelIntent||active.recordModelIntent;
+      if(typeof recordIntent!=='function')throw gateError('MISSING_INTENT_RECORDER','Durable intent recorder required');
+      if(typeof active.budget?.admit!=='function')throw gateError('RUN_BUDGET_CONFIG_INVALID','Budget unavailable');
+      admission=active.budget.admit({type:'model',purpose,model:streamOptions.model,provider:streamOptions.provider});
+      if(admission?.allowed!==true)throw gateError(admission?.code||'RUN_MODEL_CALL_LIMIT','Model budget denied');
+    }
+    let settled=false;
+    const settle=error=>{if(settled)return;settled=true;try{if(admission)admission.settle?.({error});else streamOptions.onSettle?.(error);}catch{}};
+    const generator=(async function*(){
+      let failure;
+      try{
+        validate();
+        if(Number.isSafeInteger(active.maxOutputTokens)&&active.maxOutputTokens>0){
+          const cap=Number.isSafeInteger(streamOptions.maxTokens)&&streamOptions.maxTokens>0?Math.min(active.maxOutputTokens,streamOptions.maxTokens):active.maxOutputTokens;
+          if(streamOptions.maxTokens!==cap){if(Object.isFrozen(streamOptions))throw gateError('RUN_OUTPUT_LIMIT','Request exceeds the output bound');streamOptions.maxTokens=cap;}
         }
-
-        let rawStream;
-        try {
-          rawStream = next();
-          if (rawStream != null && typeof rawStream.then === "function") {
-            rawStream = await rawStream;
-          }
-        } catch (err) {
-          if (typeof streamOptions?.onSettle === "function") {
-            try { streamOptions.onSettle(err); } catch {}
-          }
-          throw err;
+        if(recordIntent){
+          try{await recordIntent({...binding,purpose,provider:streamOptions.provider,model:streamOptions.model,maxTokens:streamOptions.maxTokens,timestamp:Date.now()});}
+          catch{throw gateError('INTENT_AUDIT_FAILED','Model intent recording failed');}
         }
-
-        let settled = false;
-        const doSettle = (err) => {
-          if (!settled) {
-            settled = true;
-            if (typeof streamOptions?.onSettle === "function") {
-              try { streamOptions.onSettle(err || undefined); } catch {}
-            }
-          }
-        };
-
-        try {
-          for await (const chunk of rawStream) {
-            if (signal?.aborted === true || activeTurn.cancelRequested === true) {
-              throw gateError("RUN_CANCELLED", "Chat stream aborted during consumption");
-            }
-            yield chunk;
-          }
-          doSettle(null);
-        } catch (err) {
-          doSettle(err);
-          throw err;
-        } finally {
-          doSettle(null);
-        }
-      })();
-    }
-
-    // --- 分支 2：辅助模型调用（如 purpose: "compaction"） ---
-    if (!sessionId) {
-      throw gateError(
-        "RUN_NOT_BOUND",
-        `Auxiliary model call with purpose "${purpose}" rejected: no sessionId present on request`
-      );
-    }
-
-    const activeTurn = options.getActiveTurn(sessionId, purpose);
-    if (!activeTurn) {
-      throw gateError(
-        "RUN_NOT_BOUND",
-        `Auxiliary model call with purpose "${purpose}" rejected: no active Run bound for session`
-      );
-    }
-
-    if (activeTurn.cancelRequested === true || signal?.aborted === true) {
-      throw gateError(
-        "RUN_CANCELLED",
-        `Auxiliary model call with purpose "${purpose}" rejected: turn or signal is cancelled/aborted`
-      );
-    }
-    if (activeTurn.expired === true) {
-      throw gateError(
-        "RUN_EXPIRED",
-        `Auxiliary model call with purpose "${purpose}" rejected: active Run has expired`
-      );
-    }
-
-    // 缺口 3 修复：必须提供持久模型意图记录器，缺失直接拒绝
-    const recordIntentFn = options.recordModelIntent || activeTurn.recordModelIntent;
-    if (typeof recordIntentFn !== "function") {
-      throw gateError(
-        "MISSING_INTENT_RECORDER",
-        `Auxiliary model call with purpose "${purpose}" rejected: durable model intent recorder is required`
-      );
-    }
-
-    const { budget, tenantId, runId } = activeTurn;
-    if (!budget || typeof budget.admit !== "function") {
-      throw gateError(
-        "RUN_BUDGET_CONFIG_INVALID",
-        `Active Run for session has invalid budget configuration`
-      );
-    }
-
-    // 执行预算准入
-    const admission = budget.admit({
-      type: "model",
-      purpose,
-      model: streamOptions.model,
-      provider: streamOptions.provider,
-    });
-
-    if (!admission.allowed) {
-      throw gateError(
-        admission.code || "RUN_MODEL_CALL_LIMIT",
-        `Auxiliary model call with purpose "${purpose}" denied by configured budget`
-      );
-    }
-
-    // 返回异步生成器，延迟底层 next()，并在各关键阶段双重核验取消状态
-    return (async function* () {
-      // 1. 异步持久化模型意图
-      try {
-        await recordIntentFn({
-          sessionId,
-          tenantId,
-          runId,
-          purpose,
-          provider: streamOptions.provider,
-          model: streamOptions.model,
-          timestamp: Date.now(),
-        });
-      } catch (intentErr) {
-        try { admission.settle?.({ error: intentErr }); } catch {}
-        throw gateError(
-          "INTENT_AUDIT_FAILED",
-          `Model intent recording failed: ${intentErr instanceof Error ? intentErr.message : String(intentErr)}`
-        );
-      }
-
-      // 缺口 4 修复：await 意图记录后重新核对取消、abort 与过期
-      if (activeTurn.cancelRequested === true || signal?.aborted === true) {
-        const cancelErr = gateError("RUN_CANCELLED", `Auxiliary model call cancelled while awaiting intent recording`);
-        try { admission.settle?.({ error: cancelErr }); } catch {}
-        throw cancelErr;
-      }
-      if (activeTurn.expired === true) {
-        const expireErr = gateError("RUN_EXPIRED", `Auxiliary model call expired while awaiting intent recording`);
-        try { admission.settle?.({ error: expireErr }); } catch {}
-        throw expireErr;
-      }
-
-      // 缺口 5 修复：在真正迭代前检查取消，杜绝消费前取消发生底层 dispatch
-      if (activeTurn.cancelRequested === true || signal?.aborted === true) {
-        const cancelErr = gateError("RUN_CANCELLED", `Auxiliary model call cancelled before stream consumption`);
-        try { admission.settle?.({ error: cancelErr }); } catch {}
-        throw cancelErr;
-      }
-
-      if (typeof activeTurn.recordEvent === "function") {
-        activeTurn.recordEvent({
-          type: "model_request_admitted",
-          purpose,
-          sessionId,
-          tenantId,
-          runId,
-          provider: streamOptions.provider,
-          model: streamOptions.model,
-          timestamp: Date.now(),
-        });
-      }
-
-      let rawStream;
-      try {
-        rawStream = next();
-        if (rawStream != null && typeof rawStream.then === "function") {
-          rawStream = await rawStream;
-        }
-      } catch (err) {
-        try { admission.settle?.({ error: err }); } catch {}
-        throw err;
-      }
-
-      let settled = false;
-      const doSettle = (err) => {
-        if (!settled) {
-          settled = true;
-          try { admission.settle?.({ error: err || undefined }); } catch {}
-        }
-      };
-
-      try {
-        for await (const chunk of rawStream) {
-          if (signal?.aborted === true || activeTurn.cancelRequested === true) {
-            throw gateError("RUN_CANCELLED", "Stream aborted during consumption");
-          }
-          yield chunk;
-        }
-        doSettle(null);
-      } catch (err) {
-        doSettle(err);
-        throw err;
-      } finally {
-        doSettle(null);
-      }
+        validate();
+        try{await active.recordEvent?.({type:purpose==='chat'?'chat_admission_consumed':'model_request_admitted',...binding,purpose,provider:streamOptions.provider,model:streamOptions.model,timestamp:Date.now()});}
+        catch{throw gateError('INTENT_AUDIT_FAILED','Model audit recording failed');}
+        validate();
+        const raw=await next();validate();
+        for await(const chunk of raw){validate();yield chunk;}
+      }catch(error){failure=error;throw error;}finally{settle(failure);}
     })();
-  }, { prepend: true });
+    return {
+      [Symbol.asyncIterator](){return this;},
+      next(value){return generator.next(value);},
+      async return(value){try{return await generator.return(value);}finally{settle();}},
+      async throw(error){try{return await generator.throw(error);}finally{settle(error);}},
+    };
+  },{prepend:true});
 
   disposers.push(disposeLlmStream);
 

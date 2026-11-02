@@ -22,7 +22,7 @@ test("Context Gate R4 - Review Blockers 1 & 2: Chat bound to authoritative activ
   let dispatched = 0;
 
   // 1. 无活动 Run 的 Chat 请求必须被直接拒绝 (关闭 blocker 1: chat-ticket-without-active-run)
-  const ticketWithoutRun = ticketManager.issueTicket({
+  const ticketWithoutRun = ticketManager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true},
     runId: "run-001",
     sessionId: "sess-no-run",
     provider: "p",
@@ -59,7 +59,7 @@ test("Context Gate R4 - Review Blockers 1 & 2: Chat bound to authoritative activ
     budget,
   };
 
-  const oldTicket = ticketManager.issueTicket({
+  const oldTicket = ticketManager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true},
     runId: "old-run-client-override",
     sessionId: "sess-bound",
     provider: "p",
@@ -186,7 +186,7 @@ test("Context Gate R4 - Secure Ticket Manager: Crypto random IDs, capacity limit
   const manager = new ChatAdmissionTicketManager({ defaultTtlMs: 100, maxCapacity: 5 });
 
   // 1. 生成加密随机 UUID
-  const t1 = manager.issueTicket({
+  const t1 = manager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true},
     sessionId: "s",
     runId: "r",
     provider: "p",
@@ -198,11 +198,11 @@ test("Context Gate R4 - Secure Ticket Manager: Crypto random IDs, capacity limit
 
   // 2. 容量上限防爆
   for (let i = 2; i <= 5; i++) {
-    manager.issueTicket({ sessionId: "s", runId: "r" });
+    manager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true}, sessionId: "s", runId: "r" });
   }
 
   assert.throws(() => {
-    manager.issueTicket({ sessionId: "s", runId: "r" });
+    manager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true}, sessionId: "s", runId: "r" });
   }, { code: "TICKET_CAPACITY_EXCEEDED" });
 
   // 3. 过期与自动修剪
@@ -210,11 +210,11 @@ test("Context Gate R4 - Secure Ticket Manager: Crypto random IDs, capacity limit
     setTimeout(() => {
       // 150ms 后 tickets 已过期，消费抛出 EXPIRED
       assert.throws(() => {
-        manager.consumeTicket(t1, { sessionId: "s", runId: "r" });
+        manager.consumeTicket(t1, { sessionId: "s", runId: "r",provider:"p",model:"m" });
       }, { code: "EXPIRED_ADMISSION_TICKET" });
 
       // 再次签发应自动清理过期项并成功签发
-      const tNew = manager.issueTicket({ sessionId: "s", runId: "r" });
+      const tNew = manager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true}, sessionId: "s", runId: "r" });
       assert.ok(tNew.startsWith("ticket_"));
       resolve();
     }, 120);
@@ -252,9 +252,9 @@ test("Context Gate R4 - Barrier-controlled overlapping concurrent sessions isola
   let s2Finished = false;
 
   const run1 = async () => {
-    const t1 = ticketManager.issueTicket({ sessionId: "s1", runId: "r1" });
+    const t1 = ticketManager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true}, sessionId: "s1", runId: "r1" });
     const stream = ctx.waterfall("llm/stream", {
-      purpose: "chat",
+      purpose: "chat",provider:"p",model:"m",
       sessionId: "s1",
       admissionTicket: t1,
     }, async () => {

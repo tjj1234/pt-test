@@ -49,5 +49,14 @@ await check('unconsumed-stream-return-releases-admission',async()=>{
  const s=await setup();try{const stream=s.stream();await stream.return();}finally{s.installed.dispose();}
  assert.equal(s.get().dispatches,0);assert.equal(s.get().settles,1);
 });
+await check('frozen-native-request-oversized-output-denied',async()=>{
+ const s=await setup();Object.freeze(s.options);let code;
+ try{for await(const item of s.stream()){};}catch(error){code=error.code;}finally{s.installed.dispose();}
+ assert.equal(code,'RUN_OUTPUT_LIMIT');assert.equal(s.get().dispatches,0);assert.equal(s.get().settles,1);
+});
+await check('ticket-consume-requires-all-binding-fields',()=>{
+ const manager=new ChatAdmissionTicketManager();const ticket=manager.issueTicket({sessionId:'s',runId:'r',provider:'p',model:'m',budgetAdmission:{allowed:true}});
+ assert.throws(()=>manager.consumeTicket(ticket,{sessionId:'s',runId:'r'}));
+});
 console.log(JSON.stringify({candidate,status:results.every(result=>result.passed)?'REVIEW_REGRESSIONS_PASS':'BLOCKED_FOR_INTEGRATION',providerCalls:0,checks:results},null,2));
 if(results.some(result=>!result.passed))process.exitCode=1;

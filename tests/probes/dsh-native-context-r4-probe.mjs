@@ -221,7 +221,7 @@ try {
 
   // --- 测试流程 2：普通 Chat 请求（带合法 Ticket）与原生压缩触发 ---
   console.log("\n[5/6] 执行普通对话与真实原生压缩触发序列...");
-  const chatTicket = ticketManager.issueTicket({
+  const chatTicket = ticketManager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true},
     sessionId: "native-session-r4",
     runId: "run-r4-authoritative",
     provider: "powertokens",
@@ -289,7 +289,7 @@ try {
 
   // 反例 1: 无活动 Run 的 Chat 请求
   await assert.rejects(async () => {
-    const ticketNoRun = ticketManager.issueTicket({ sessionId: "no-run-session", runId: "r" });
+    const ticketNoRun = ticketManager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true}, sessionId: "no-run-session", runId: "r" });
     const s = ctx.llm.stream({
       provider: "powertokens",
       model: "model-a-chat",
@@ -304,7 +304,7 @@ try {
 
   // 反例 2: 客户端自报 runId 覆盖活动 Run
   await assert.rejects(async () => {
-    const oldRunTicket = ticketManager.issueTicket({ sessionId: "native-session-r4", runId: "old-run-override" });
+    const oldRunTicket = ticketManager.issueTicket({ provider: "p", model: "m", budgetAdmission: {allowed:true}, sessionId: "native-session-r4", runId: "old-run-override" });
     const s = ctx.llm.stream({
       provider: "powertokens",
       model: "model-a-chat",
