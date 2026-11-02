@@ -229,7 +229,7 @@ console.log("\n[2] 合法文档：点选 / 拖拽都能上传");
   ok("预览通过后可确认", form.children[4].disabled === false);
   form.children[4].dispatch("click");
   ok("确认后保存来源哈希和范围", run("pendingDocs[2].csvSelection.sourceSha256") === "a".repeat(64));
-  run("state.busy = false; state.activeId = 'c1'; var __csvCap = null; runChat = function(p){ __csvCap = p; };");
+  run("state.busy = false; state.activeId = 'c1'; var __csvCap = null; modelContextReady = true; runChat = function(p){ __csvCap = p; };");
   await run("ask('计算已确认的 CSV 列之和')");
   ok("确认范围随聊天请求提交", run("Array.isArray(__csvCap?.csvSelections) && __csvCap.csvSelections[0]?.column === 1"));
 
@@ -300,7 +300,7 @@ console.log("\n[4] 发送：documents 随消息提交，发完清空");
   ok("上传后拿到 1 个 url", urls.length === 1);
 
   // 用桩替换 runChat，只截获 ask() 组装出来的 payload（避免真的走 SSE 流程）
-  run("state.busy = false; state.activeId = 'c1'; var __cap = null; runChat = function(p){ __cap = p; };");
+  run("state.busy = false; state.activeId = 'c1'; var __cap = null; modelContextReady = true; runChat = function(p){ __cap = p; };");
   await run("ask('这份文档说了什么？')");
   const body = run("__cap");
   ok("payload 带上 documents 数组", Array.isArray(body.documents) && body.documents.length === 1, JSON.stringify(body.documents));

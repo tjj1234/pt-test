@@ -539,7 +539,7 @@ console.log("\n[6] 发送：media 随消息提交，气泡里立刻有播放器"
   ctx.__F = mkFile("voice.mp3", 1024, "audio/mpeg");
   await run("uploadMediaFile(__F)");
   const url = run("pendingMedia[0].url");
-  run("state.busy = false; state.activeId = 'c1'; var __cap = null; runChat = function(p){ __cap = p; };");
+  run("state.busy = false; state.activeId = 'c1'; var __cap = null; modelContextReady = true; runChat = function(p){ __cap = p; };");
   run("(function(){ var c = document.querySelector('#chat'); c.children.length = 0; })()");
   await run("ask('帮我听听这段')");
   const body = run("__cap");
@@ -779,7 +779,7 @@ console.log("\n[9] 上传进度：大文件不再干等");
   const p3 = run("uploadMediaFile(__F)");
   await waitUploading();
   ok("确实处于上传中", run("mediaUploading()") === true);
-  run("state.busy = false; state.activeId = 'c1'; var __cap = null; runChat = function(p){ __cap = p; };");
+  run("state.busy = false; state.activeId = 'c1'; var __cap = null; modelContextReady = true; runChat = function(p){ __cap = p; };");
   await run("ask('传一半就发')");
   ok("上传中发送被拦下", run("__cap") === null, JSON.stringify(run("__cap")));
   ok("拦下时说明了原因", /正在上传/.test(noticeText()), noticeText());
@@ -829,7 +829,7 @@ console.log("\n[10] 预览：视频首帧 / 音频波形 / 时长");
     JSON.stringify(vCls));
 
   // 10b 封面要带进气泡，不然发出去先黑一块
-  run("state.busy = false; state.activeId = 'c1'; var __cap = null; runChat = function(p){ __cap = p; };");
+  run("state.busy = false; state.activeId = 'c1'; var __cap = null; modelContextReady = true; runChat = function(p){ __cap = p; };");
   run("(function(){ var c = document.querySelector('#chat'); c.children.length = 0; })()");
   await run("ask('看看这段')");
   ok("发给后端的 media 仍是严格 { type, url }",

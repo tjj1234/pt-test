@@ -1,0 +1,271 @@
+✔ active draft binds current sources and independently audits exact archive bytes (357.067708ms)
+
+[1] 上传入口与拖拽复用
+  ok   聊天输入区有文档上传按钮 #docBtn
+  ok   有隐藏的 #docInput 文件选择框
+  ok   accept 包含文本及DOCX
+  ok   #docInput 允许多选（documents 是数组）
+  ok   有提示条容器 #composerNotice
+  ok   拖拽逻辑仍只有一份（文档上传复用 attachDropZone，没重写）
+  ok   聊天输入区挂的是 handleComposerFile
+  ok   客户端扩展名白名单与后端一致
+  ok   客户端上限与后端默认一致（5MB）
+
+[2] 合法文档：点选 / 拖拽都能上传
+  ok   初始没有附加文档
+  ok   上传 a.txt 成功
+  ok   上传 b.md 成功
+  ok   上传 c.csv 成功
+  ok   上传 d.docx 成功
+  ok   四个文档都进了 pendingDocs
+  ok   存的是后端返回的 /uploads/<租户>/... URL
+  ok   上传成功后有回执提示
+  ok   胶囊列表渲染出 4 个
+  ok   CSV 显示显式列选择入口
+  ok   列选择表单含三个坐标输入
+  ok   预览展示列名、样本、判定类型
+  ok   预览通过后可确认
+  ok   确认后保存来源哈希和范围
+  ok   确认范围随聊天请求提交
+  ok   拖拽 .txt 进聊天框能上传（复用同一套 drop 逻辑）
+  ok   点「文档」按钮选文件能上传
+  ok   选完清空 input.value（同一文件可再选一次）
+
+[3] 非法文件：都要被拒绝且说清原因
+  ok   非文档扩展名被前端拒绝
+  ok   提示里说清了支持哪几类
+  ok   被拒后不进 pendingDocs
+  ok   被拒后没有真的发请求
+  ok   超过 5MB 被前端拒绝
+  ok   提示里给出上限和实测大小
+  ok   空文件被拒绝
+  ok   空文件提示清楚
+  ok   伪装成 .txt 的二进制被后端拒绝
+  ok   后端原因原样提示出来
+  ok   后端拒绝后不进 pendingDocs
+  ok   拖进来的非文本/非图片文件有提示
+  ok   拖进来的非法文件不进 pendingDocs
+  ok   也没被当成图片
+
+[4] 发送：documents 随消息提交，发完清空
+  ok   上传后拿到 1 个 url
+  ok   payload 带上 documents 数组
+  ok   documents 里是后端返回的 url（不是文件名/内容）
+  ok   message 正常带上
+  ok   发完清空 pendingDocs
+  ok   发完胶囊区收起
+  ok   没附加文档时不发 documents 字段
+
+[5] 图片路径不被文档逻辑抢走
+  ok   拖图片仍走图片上传
+  ok   拖图片不会进 pendingDocs
+
+[6] 后端：跨租户 / 失效文档 URL 不再静默跳过
+  ok   /api/chat 里有 documents 归属校验
+  ok   校验发生在写入消息之前（拦得住）
+  ok   能取到路径校验正则
+  ok   能取到文件名校验正则
+  ok   本租户文档 URL 通过校验
+  ok   跨租户文档 URL 被判为不合法
+  ok   路径穿越（../）被判为不合法
+  ok   带文件名非法字符的 URL 被判为不合法
+
+结果：58 通过，0 失败
+✔ tests/regression/ui-chat-doc-upload-frontend-test.mjs (3175.063708ms)
+
+[1] 上传入口
+  ok   聊天输入区有音视频上传按钮 #mediaBtn
+  ok   有隐藏的 #mediaInput 文件选择框
+  ok   accept 只收 video/* 与 audio/*
+  ok   #mediaInput 允许多选（media 是数组）
+  ok   有已附加音视频的胶囊容器 #mediaList
+  ok   拖拽逻辑仍只有一份（音视频复用 attachDropZone，没重写）
+  ok   点 #mediaBtn 会触发 #mediaInput 选择文件
+  ok   按钮 class 沿用 composer-add-btn 那套
+
+[2] 类型判定：MIME 优先，扩展名兜底
+  ok   video/mp4 → video
+  ok   audio/mpeg → audio
+  ok   MIME 为空时按扩展名判（.mov → video）
+  ok   MIME 为空时按扩展名判（.wav → audio）
+  ok   MIME 为空时按扩展名判（.m4a → audio）
+  ok   后端不认的格式（.mkv）前端也挡掉
+  ok   后端不认的格式（.flac）前端也挡掉
+  ok   MIME 与扩展名冲突时以 MIME 为准
+  ok   非音视频文件判不出来（返回空串）
+  ok   图片不会被误判成媒体
+  ok   normMediaType 只放行 video/audio
+
+[3] 合法音视频：上传 → pendingMedia → 胶囊
+  ok   初始没有附加媒体
+  ok   上传 mp4 成功
+  ok   视频回执提示写的是「视频」
+  ok   上传 mp3 成功
+  ok   音频回执提示写的是「音频」
+  ok   两次都请求了 /api/upload-media
+  ok   请求体是 { name, data, kind }，与 upload-doc 同形
+  ok   kind 按类型分别上报
+  ok   两个都进了 pendingMedia
+  ok   存的是后端返回的 /uploads/<租户>/... URL
+  ok   type 跟着后端返回走
+  ok   胶囊列表渲染出 2 个
+  ok   有媒体时胶囊区展开
+  ok   移除一个后只剩 1 个
+  ok   点「音视频」按钮多选能上传
+  ok   选完清空 input.value（同一文件可再选一次）
+  ok   拖 .mov 进聊天框能上传（复用同一套 drop 逻辑）
+  ok   拖进来的按 MIME 判成 video
+
+[4] 后端返回容错：给不给 type 都能渲染出对的播放器
+  ok   后端没给 type 时退回前端判定
+  ok   后端给脏 type 时不采信
+  ok   后端给合法 type 时以后端为准
+  ok   后端只给 kind 字段时也认
+
+[5] 非法文件：都要被拒绝且说清原因
+  ok   非音视频文件被前端拒绝
+  ok   提示里说清了只支持音视频
+  ok   被拒后不进 pendingMedia
+  ok   被拒后没有真的发请求
+  ok   图片不走媒体上传
+  ok   超过 50MB 被前端拒绝
+  ok   提示里给出上限和实测大小
+  ok   空文件被拒绝
+  ok   空文件提示清楚
+  ok   后端拒绝时返回 false
+  ok   后端原因原样提示出来
+  ok   后端拒绝后不进 pendingMedia
+  ok   网络异常时返回 false
+  ok   网络异常提示清楚
+  ok   网络异常后不留转圈胶囊
+
+[6] 发送：media 随消息提交，气泡里立刻有播放器
+  ok   payload 带上 media 数组
+  ok   media 元素是 { type, url } 两字段
+  ok   media 里是后端返回的 url
+  ok   media 的 type 是 audio
+  ok   message 正常带上
+  ok   发完清空 pendingMedia
+  ok   发完胶囊区收起
+  ok   用户气泡里渲染出了播放器节点
+  ok   是 <audio> 标签
+  ok   <audio> 带 bubmedia bubaudio 样式类
+  ok   <audio> src 是上传后的 URL
+  ok   <audio> 开了原生控件（controls）
+  ok   视频 media 的 type 是 video
+  ok   气泡里是 <video> 标签（复用已有分支，没被 audio 顶掉）
+  ok   <video> src 正确
+  ok   <video> 仍是 bubmedia bubvideo
+  ok   没附加媒体时不发 media 字段
+
+[7] chat-media.js：audio 分支与既有行为
+  ok   type=audio 渲染出 <audio>
+  ok   <audio> 类名 bubmedia bubaudio
+  ok   <audio> src 正确
+  ok   <audio> 开了 controls
+  ok   <audio> preload=metadata
+  ok   kind 字段 + 非数组入参也能渲成 <audio>
+  ok   video 分支没被改动
+  ok   image 与未知类型仍走 <img> 兜底
+  ok   音频加载失败时渲染兜底块
+  ok   兜底文案说「音频」而不是「图片」
+  ok   兜底块不显示可能带签名的 URL
+  ok   历史媒体拒绝危险协议和内嵌凭据
+  ok   视频封面也拒绝危险协议
+  ok   视频兜底文案仍是「视频」
+  ok   没 URL 的媒体项被跳过且不报错
+
+[8] 前后端白名单一致（后端改动未落盘时跳过）
+  ok   能取到后端魔数白名单
+  ok   前端扩展名兜底与后端魔数白名单一致
+  ok   前端 50MB 上限与后端默认值一致
+  ok   后端返回体里带 kind 字段
+  ok   前端能读后端返回的 kind
+  ok   后端 /api/chat 直接按对象取 url（与前端 media 形状一致）
+
+[9] 上传进度：大文件不再干等
+  ok   「上传中」这个中间态能被稳定观察到（不靠固定 sleep 赌时序）
+  ok   上传期间先出现「上传中」占位
+  ok   占位这条还没有 url（不能发出去）
+  ok   还没拿到响应前不会被标记成已完成
+  ok   大文件上传成功
+  ok   上传走的是 XHR 而不是 fetch
+  ok   收到了多条进度回调
+  ok   进度是递增的且最后一拍到 100%
+  ok   传完后 uploading 落回 false
+  ok   传完后才有 url
+  ok   传完后胶囊不再显示进度条
+  ok   大文件先给出预计耗时
+  ok   预告里写清了文件大小
+  ok   预告里提醒别关页面
+  ok   预告是开工前就给的，不是传完才补的
+  ok   小文件不做耗时预告
+  ok   确实处于上传中
+  ok   上传中发送被拦下
+  ok   拦下时说明了原因
+  ok   取消前确有 1 条在传
+  ok   取消后不再留在列表里
+  ok   取消后返回 false（不是当成成功）
+  ok   取消后没有悬挂的上传闸门
+  ok   上传失败返回 false
+  ok   失败后占位被撤掉（不留转圈胶囊）
+  ok   失败原因说清楚了
+
+[10] 预览：视频首帧 / 音频波形 / 时长
+  ok   视频读到了时长
+  ok   视频截到了首帧
+  ok   胶囊里出现了缩略图节点
+  ok   缩略图上带时长角标 0:42
+  ok   发给后端的 media 仍是严格 { type, url }
+  ok   气泡里的 <video> 带上了 poster
+  ok   音频读到了时长
+  ok   音频算出了波形（40 根柱子）
+  ok   波形做过归一化（峰值到 1，小声的音频不会是一条平线）
+  ok   胶囊里出现了波形节点
+  ok   波形画了 40 根柱子
+  ok   超过 20MB 的音频直接跳过波形计算
+  ok   小音频照常算波形
+  ok   音频没算出波形时也不报错
+  ok   拿不到时长时媒体仍然附加成功
+  ok   拿不到时长时 url 照常有效
+  ok   fmtClock(5) = 0:05
+  ok   fmtClock(83) = 1:23
+  ok   fmtClock(0) = 0:00
+  ok   fmtDuration(8) = 8 秒
+  ok   fmtDuration(80) = 1 分 20 秒
+
+结果：141 通过，0 失败
+✔ tests/regression/ui-chat-media-upload-test.mjs (8416.846708ms)
+✔ sessionStorage failure fails closed before sending a new chat POST (1.469584ms)
+✔ a stopped Run with uncertain upstream status gets the explicit AC03 warning (0.800208ms)
+✔ ambiguous chat POST retries once with the same idempotency key and exact body (0.752291ms)
+✔ page reload recovers uncertain submission by idempotency key using GET only (0.973ms)
+✔ refresh resumes remembered run using GET only; transient network exception retries without duplicate POST (0.43375ms)
+✔ resume HTTP 401 clears invalid remembered run without a new POST (0.295292ms)
+✔ resume HTTP 403 clears invalid remembered run without a new POST (0.268583ms)
+✔ resume HTTP 404 clears invalid remembered run without a new POST (0.30975ms)
+✔ temporary HTTP 429 retries durable replay rather than releasing the active request (0.386375ms)
+✔ temporary HTTP 503 retries durable replay rather than releasing the active request (0.374708ms)
+✔ conversation switch during replay terminal detail fetch cannot render the old conversation (0.375625ms)
+✔ late original SSE done artifacts from A do not alter the visible B artifact pane (0.342833ms)
+✔ failed historical image replay keeps conversation messages and shows attachment error outside history (0.3365ms)
+✔ failed Run keeps completed and failed tool steps in history before the transient error prompt (0.707958ms)
+✔ SSE needKey terminal event keeps its dedicated prompt without duplicate error bubble (0.394917ms)
+✔ terminal conversation detail network retries before forgetting durable run (0.367834ms)
+✔ terminal conversation detail 503 retries before forgetting durable run (0.28925ms)
+✔ an in-flight remembered run owns its conversation and blocks a second create POST (0.310375ms)
+✔ durable cursor consumes each delta once while replaying an unconsumed done after detail failure (0.419375ms)
+✔ production list refresh network after done cannot replay consumed deltas or rerender terminal detail (0.352541ms)
+✔ production list refresh 503 after done cannot replay consumed deltas or rerender terminal detail (0.348167ms)
+✔ A to B to A navigation ignores the first A response after the newer A history has rendered (0.573209ms)
+✔ terminal detail 401/403/404 clears remembered run without retrying or rendering unauthorized history (1.522125ms)
+✔ an older open-history response cannot overwrite the same conversation terminal replay result (0.393ms)
+✔ an older open-history response cannot overwrite the same conversation terminal original SSE result (0.344166ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8424.075667
