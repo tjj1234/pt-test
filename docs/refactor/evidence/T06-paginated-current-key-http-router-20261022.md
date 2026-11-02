@@ -1,0 +1,7 @@
+# T06 partial PT model listing through HTTP and manual router — 2026-10-22
+
+**Local integration slice: PASS.** Extended `tests/regression/conversation-model-preference-http-test.mjs` to run the production `model-catalog.cjs` implementation behind the real shell HTTP server, with a fake PT `/v1/models` response containing one `supported_endpoint_types: ["openai"]` model and `has_more: true`. The user's confirmed per-ID permission rule is applied to the returned ID even though the page is incomplete.
+
+The test verifies the model appears from `GET /api/models` with `permission=true`, `localPolicy.enabled=true`, `tasks.textChat.value=true`, manual `eligibility.ok=true`, and `verificationRequired=true`. The same ID passes `POST /api/models/select`; `/api/chat` then reaches the fake DSH execution boundary with that selected model. Cached IDs omitted from the partial response are absent from the executable list. `PT_CHAT_DRYRUN=1` is enabled; no PT model endpoint is contacted and no paid call occurs.
+
+Command: `node --test tests/regression/conversation-model-preference-http-test.mjs` — **1/1 PASS** with loopback permission; sandbox retry ran successfully. This confirms the local server-to-router path for a returned ID on a paginated response, not that PT pages are exhaustive, later pages are fetched, or a real target key/model is qualified. Candidate-28 binds the catalog implementation; maintainer deployment and the already-authorized single real text Run remain pending. T06/T07 and aggregate T00–T18/AC01–AC24 states are unchanged.

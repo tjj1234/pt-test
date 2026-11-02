@@ -1,0 +1,96 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T04:03:47.422Z",
+  "models": [
+    "qwen3.5-flash",
+    "seed-2-0-lite-260228"
+  ],
+  "runs": [
+    {
+      "requestedModel": "qwen3.5-flash",
+      "status": "completed",
+      "at": "2026-10-29T04:03:50.462Z",
+      "httpStatus": 200,
+      "runId": "d2bfe65b-cb80-4c6a-b3f3-efcdd8118faa",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"用户\"}\n\nid: 7\ndata: {\"delta\":\"要求我\"}\n\nid: 8\ndata: {\"delta\":\"回复 \\\"\"}\n\nid: 9\ndata: {\"delta\":\"NORTHSTAR_AGENT\"}\n\nid: 10\ndata: {\"delta\":\"_OK\\\"，并且\"}\n\nid: 11\ndata: {\"delta\":\"明确\"}\n\nid: 12\ndata: {\"delta\":\"说明不要使用工具\"}\n\nid: 13\ndata: {\"delta\":\"。这是一个简单的确认\"}\n\nid: 14\ndata: {\"delta\":\"响应，不需要调用\"}\n\nid: 15\ndata: {\"delta\":\"任何\"}\n\nid: 16\ndata: {\"delta\":\"工具。\\n</think>\"}\n\nid: 17\ndata: {\"delta\":\"\\n\\nNORTHSTAR\"}\n\nid: 18\ndata: {\"delta\":\"_AGENT\"}\n\nid: 19\ndata: {\"delta\":\"_OK\"}\n\nid: 25\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T04:03:51.002Z\",\"role\":\"user\",\"text\":\"Reply with exactly NORTHSTAR_AGENT_OK. Do not use tools.\"},{\"ts\":\"2026-10-29T04:03:54.054Z\",\"role\":\"assistant\",\"text\":\"用户要求我回复 \\\"NORTHSTAR_AGENT_OK\\\"，并且明确说明不要使用工具。这是一个简单的确认响应，不需要调用任何工具。\\n</think>\\n\\nNORTHSTAR_AGENT_OK\",\"runId\":\"d2bfe65b-cb80-4c6a-b3f3-efcdd8118faa\",\"steps\":[]}],\"reply\":\"用户要求我回复 \\\"NORTHSTAR_AGENT_OK\\\"，并且明确说明不要使用工具。这是一个简单的确认响应，不需要调用任何工具。\\n</think>\\n\\nNORTHSTAR_AGENT_OK\",\"turns\":1}\n\n",
+      "modelSelections": [
+        {
+          "requestedModelId": "qwen3.5-flash",
+          "resolvedModelId": "qwen3.5-flash",
+          "upstreamModelId": null
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 2407.881125,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "errorCodes": [],
+      "expectedTextPresent": true
+    },
+    {
+      "requestedModel": "seed-2-0-lite-260228",
+      "status": "completed",
+      "at": "2026-10-29T04:03:54.575Z",
+      "httpStatus": 200,
+      "runId": "6bd2d7b7-c002-44e2-89a9-367f58e91c70",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"NOR\"}\n\nid: 7\ndata: {\"delta\":\"TH\"}\n\nid: 8\ndata: {\"delta\":\"STAR\"}\n\nid: 9\ndata: {\"delta\":\"_AG\"}\n\nid: 10\ndata: {\"delta\":\"ENT\"}\n\nid: 11\ndata: {\"delta\":\"_OK\"}\n\nid: 17\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T04:03:51.002Z\",\"role\":\"user\",\"text\":\"Reply with exactly NORTHSTAR_AGENT_OK. Do not use tools.\"},{\"ts\":\"2026-10-29T04:03:54.054Z\",\"role\":\"assistant\",\"text\":\"用户要求我回复 \\\"NORTHSTAR_AGENT_OK\\\"，并且明确说明不要使用工具。这是一个简单的确认响应，不需要调用任何工具。\\n</think>\\n\\nNORTHSTAR_AGENT_OK\",\"runId\":\"d2bfe65b-cb80-4c6a-b3f3-efcdd8118faa\",\"steps\":[]},{\"ts\":\"2026-10-29T04:03:55.153Z\",\"role\":\"user\",\"text\":\"Reply with exactly NORTHSTAR_AGENT_OK. Do not use tools.\"},{\"ts\":\"2026-10-29T04:04:00.379Z\",\"role\":\"assistant\",\"text\":\"NORTHSTAR_AGENT_OK\",\"runId\":\"6bd2d7b7-c002-44e2-89a9-367f58e91c70\",\"steps\":[]}],\"reply\":\"NORTHSTAR_AGENT_OK\",\"turns\":2}\n\n",
+      "modelSelections": [
+        {
+          "requestedModelId": "seed-2-0-lite-260228",
+          "resolvedModelId": "seed-2-0-lite-260228",
+          "upstreamModelId": null
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 5155.598792000001,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "errorCodes": [],
+      "expectedTextPresent": true
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "historyAssistantCount": 2,
+  "historyExpectedTextCount": 2,
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T04:04:00.412Z"
+}

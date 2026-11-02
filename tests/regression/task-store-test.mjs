@@ -31,6 +31,9 @@ test('persistent task store: ownership, atomic claims, event order, revisions an
     assert.equal(attempts.filter((x) => !x.replayed).length, 1);
     assert.equal((await storage.adapter.query('SELECT count(*)::int AS count FROM agent_runs')).rows[0].count, 1);
     assert.equal((await store.eventsAfter(a, id)).events.length, 1);
+    assert.equal((await store.getRunByIdempotencyKey(a, 'key-1')).runId, id, 'the owner can recover a durable Run by its key without resending request content');
+    assert.equal(await store.getRunByIdempotencyKey(a, 'not-admitted-yet'), null);
+    assert.equal(await store.getRunByIdempotencyKey(b, 'key-1'), null, 'another tenant cannot resolve the Run by the same key');
     await assert.rejects(store.createRun(a, input('key-1', { request: { question: 'other' } })), { code: 'IDEMPOTENCY_CONFLICT', statusCode: 409 });
     await assert.rejects(store.createRun(a, input('cross', { conversationId: convB.id })), { code: 'NOT_FOUND' });
     await assert.rejects(store.createRun(a, input('cross2', { tenantId: b.tenantId })), { code: 'FORBIDDEN' });
@@ -41,6 +44,23 @@ test('persistent task store: ownership, atomic claims, event order, revisions an
     assert.equal((await store.listRuns(b)).runs.length, 0);
     const ownB = await store.createRun(b, { ...input(), conversationId: convB.id });
     assert.notEqual(ownB.run.runId, id, 'same client key in another identity has independent scope');
+
+    const fenced = await store.createRun(a, input('lease-fencing'), { owner: 'worker-old', ttlMs: 10000 });
+    await storage.adapter.query("UPDATE agent_runs SET lease_expires_at=now()-interval '1 second' WHERE run_id=$1", [fenced.run.runId]);
+    assert.equal((await store.acquireLease(a, fenced.run.runId, 'worker-new', 10000)).acquired, true);
+    await assert.rejects(
+      store.appendEvent(a, fenced.run.runId, { type: 'connecting', payload: {}, leaseOwner: 'worker-old' }),
+      { code: 'LEASE_LOST' },
+      'expired worker cannot append durable events after lease takeover',
+    );
+    await assert.rejects(
+      store.transition(a, fenced.run.runId, 'running', 0, 'worker-old'),
+      { code: 'LEASE_LOST' },
+      'expired worker cannot change durable state after lease takeover',
+    );
+    assert.equal((await store.transition(a, fenced.run.runId, 'running', 0, 'worker-new')).state, 'running');
+    const accepted = await store.appendEvent(a, fenced.run.runId, { type: 'connecting', payload: {}, leaseOwner: 'worker-new' });
+    assert.equal(accepted.seq, 3, 'only the current lease owner can advance the event stream');
 
     const leaseA = await store.acquireLease(a, id, 'worker-a', 10000);
     assert.equal(leaseA.acquired, true);
@@ -83,15 +103,86 @@ test('persistent task store: ownership, atomic claims, event order, revisions an
     const listTail = await store.listRuns(a, { afterRunId: listPage.nextCursor, limit: 1 });
     assert.equal(new Set([...listPage.runs, ...listTail.runs].map((x) => x.runId)).size, 2);
 
-    let ext = (await store.createRun(a, input('external-unknown'))).run;
-    ext = await store.transition(a, ext.runId, 'running', 0);
-    ext = await store.recordExternalIntent(a, ext.runId, { provider: 'fixture', operationKey: 'stable-upstream-key', expectedRevision: ext.revision });
+    const extOwner = 'external-worker-unknown';
+    let ext = (await store.createRun(a, input('external-unknown'), { owner: extOwner, ttlMs: 10000 })).run;
+    ext = await store.transition(a, ext.runId, 'running', 0, extOwner);
+    ext = await store.recordExternalIntent(a, ext.runId, { provider: 'fixture', operationKey: 'stable-upstream-key', expectedRevision: ext.revision, leaseOwner: extOwner });
     assert.equal(ext.externalTaskId, null);
     assert.equal(ext.reconciliation, 'needs_reconciliation');
-    let known = (await store.createRun(a, input('external-known'))).run;
-    known = await store.transition(a, known.runId, 'running', 0);
-    known = await store.recordExternalIntent(a, known.runId, { provider: 'fixture', operationKey: 'known-key', expectedRevision: known.revision });
-    known = await store.recordExternalTaskId(a, known.runId, { taskId: 'provider-task-1', expectedRevision: known.revision });
+    const observedAt = new Date().toISOString();
+    await assert.rejects(store.recordExternalReconciliation(a, ext.runId, {
+      expectedRevision: ext.revision, leaseOwner: extOwner, outcome: 'provider_pending',
+      observedAt, nextQueryAt: new Date(Date.now() + 1000).toISOString(),
+    }), { code: 'INVALID_TRANSITION' }, 'without a task ID, a query result cannot be recorded');
+    await assert.rejects(store.recordExternalReconciliation(a, ext.runId, {
+      expectedRevision: ext.revision, leaseOwner: extOwner, outcome: 'unknown_submission',
+      providerStatus: 'succeeded', observedAt,
+    }), { code: 'CONTRACT_INVALID' }, 'an unqueried submission cannot claim a provider status');
+    ext = await store.recordExternalReconciliation(a, ext.runId, {
+      expectedRevision: ext.revision, leaseOwner: extOwner, outcome: 'unknown_submission', observedAt,
+    });
+    assert.equal(ext.state, 'waiting_external', 'manual reconciliation preserves the Run lifecycle state');
+    assert.equal(ext.externalTaskId, null, 'an ambiguous submission is never resubmitted or assigned a fabricated task ID');
+    assert.equal(ext.externalState, 'manual_check');
+    assert.equal(ext.reconciliation, 'needs_reconciliation');
+    assert.equal(ext.reconciliationAttempts, 0, 'no provider query was made');
+    assert.deepEqual(ext.lastQuery, { outcome: 'unknown_submission', observedAt, providerStatus: null, reason: null, attempt: 0, queried: false });
+    const extLease = (await storage.adapter.query('SELECT lease_owner FROM agent_runs WHERE run_id=$1', [ext.runId])).rows[0];
+    assert.equal(extLease.lease_owner, null, 'recording manual review releases the submission worker lease');
+    assert.equal((await store.claimExternalReconciliation(a, ext.runId, 'reconciliation-worker', 10000)).acquired, false,
+      'an unknown submission with no provider task ID is never scheduled for status query or resubmission');
+
+    const activeUnknownOwner = 'active-unknown-worker';
+    let activeUnknown = (await store.createRun(a, input('active-unknown'), { owner: activeUnknownOwner, ttlMs: 10000 })).run;
+    activeUnknown = await store.transition(a, activeUnknown.runId, 'running', activeUnknown.revision, activeUnknownOwner);
+    activeUnknown = await store.recordExternalIntent(a, activeUnknown.runId, { provider: 'fixture', operationKey: 'active-unknown-key', expectedRevision: activeUnknown.revision, leaseOwner: activeUnknownOwner });
+    const activeRecovery = await store.recoverExpiredExternalReconciliationClaims();
+    assert.equal(activeRecovery.some((run) => run.runId === activeUnknown.runId), false, 'active submission lease is never recovered or interrupted');
+    assert.equal((await store.getRun(a, activeUnknown.runId)).externalState, 'submitting');
+
+    const expiredUnknownOwner = 'expired-unknown-worker';
+    let expiredUnknown = (await store.createRun(a, input('expired-unknown'), { owner: expiredUnknownOwner, ttlMs: 10000 })).run;
+    expiredUnknown = await store.transition(a, expiredUnknown.runId, 'running', expiredUnknown.revision, expiredUnknownOwner);
+    expiredUnknown = await store.recordExternalIntent(a, expiredUnknown.runId, { provider: 'fixture', operationKey: 'expired-unknown-key', expectedRevision: expiredUnknown.revision, leaseOwner: expiredUnknownOwner });
+    await storage.adapter.query("UPDATE agent_runs SET lease_expires_at=now()-interval '1 second' WHERE run_id=$1", [expiredUnknown.runId]);
+    const recoveredUnknown = await store.recoverExpiredExternalReconciliationClaims();
+    assert.equal(recoveredUnknown.some((run) => run.runId === expiredUnknown.runId), true);
+    expiredUnknown = await store.getRun(a, expiredUnknown.runId);
+    assert.equal(expiredUnknown.externalState, 'manual_check');
+    assert.equal(expiredUnknown.externalTaskId, null);
+    assert.equal(expiredUnknown.reconciliation, 'needs_reconciliation');
+    assert.deepEqual(expiredUnknown.lastQuery, { outcome: 'unknown_submission', observedAt: expiredUnknown.lastQuery.observedAt, providerStatus: null, reason: 'recovered_expired_submission_lease', attempt: 0, queried: false });
+    assert.ok((await store.eventsAfter(a, expiredUnknown.runId)).events.some((event) => event.payload?.action === 'recover_unknown_submission'));
+    assert.equal((await store.claimExternalReconciliation(a, expiredUnknown.runId, 'must-not-query', 10000)).acquired, false);
+
+    const terminalUnknownOwner = 'terminal-unknown-worker';
+    let terminalUnknown = (await store.createRun(a, input('terminal-unknown'), { owner: terminalUnknownOwner, ttlMs: 10000 })).run;
+    terminalUnknown = await store.transition(a, terminalUnknown.runId, 'running', terminalUnknown.revision, terminalUnknownOwner);
+    terminalUnknown = await store.recordExternalIntent(a, terminalUnknown.runId, { provider: 'fixture', operationKey: 'terminal-unknown-key', expectedRevision: terminalUnknown.revision, leaseOwner: terminalUnknownOwner });
+    terminalUnknown = await store.transition(a, terminalUnknown.runId, 'failed', terminalUnknown.revision, terminalUnknownOwner);
+    assert.equal(terminalUnknown.state, 'failed');
+    const terminalRecovery = await store.recoverExpiredExternalReconciliationClaims();
+    assert.equal(terminalRecovery.some((run) => run.runId === terminalUnknown.runId), true, 'terminal Runs with stale unknown intent still require manual reconciliation');
+    terminalUnknown = await store.getRun(a, terminalUnknown.runId);
+    assert.equal(terminalUnknown.state, 'failed', 'reconciliation recovery never reopens or interrupts a terminal Run');
+    assert.equal(terminalUnknown.externalState, 'manual_check');
+    assert.equal(terminalUnknown.reconciliation, 'needs_reconciliation');
+
+    const notSubmittedOwner = 'not-submitted-worker';
+    let notSubmitted = (await store.createRun(a, input('not-submitted'), { owner: notSubmittedOwner, ttlMs: 10000 })).run;
+    notSubmitted = await store.transition(a, notSubmitted.runId, 'running', notSubmitted.revision, notSubmittedOwner);
+    notSubmitted = await store.recordExternalIntent(a, notSubmitted.runId, { provider: 'fixture', operationKey: 'not-submitted-key', expectedRevision: notSubmitted.revision, leaseOwner: notSubmittedOwner });
+    notSubmitted = await store.recordExternalSubmissionResult(a, notSubmitted.runId, { expectedRevision: notSubmitted.revision, leaseOwner: notSubmittedOwner, outcome: 'cancelled', providerStatus: null, reason: 'not_submitted', observedAt });
+    assert.equal(notSubmitted.lastQuery.reason, 'not_submitted', 'local pre-POST cancellation is auditable without implying provider cancellation');
+
+    const knownOwner = 'external-worker-known';
+    let known = (await store.createRun(a, input('external-known'), { owner: knownOwner, ttlMs: 10000 })).run;
+    known = await store.transition(a, known.runId, 'running', 0, knownOwner);
+    known = await store.recordExternalIntent(a, known.runId, { provider: 'fixture', operationKey: 'known-key', expectedRevision: known.revision, leaseOwner: knownOwner });
+    known = await store.recordExternalTaskId(a, known.runId, { taskId: 'provider-task-1', expectedRevision: known.revision, leaseOwner: knownOwner });
+    await assert.rejects(store.recordExternalReconciliation(a, known.runId, {
+      expectedRevision: known.revision, leaseOwner: knownOwner, outcome: 'unknown_submission', observedAt,
+    }), { code: 'INVALID_TRANSITION' }, 'a durable provider task ID must not be audited as an unknown submission');
     assert.equal(known.externalTaskId, 'provider-task-1');
     const eventCount = (await store.eventsAfter(a, id)).events.length;
     await storage.close(); storage = null;
@@ -103,7 +194,7 @@ test('persistent task store: ownership, atomic claims, event order, revisions an
     assert.equal((await store.getRun(a, id)).state, 'interrupted');
     assert.equal((await store.getRun(a, second.runId)).state, 'interrupted', 'queued work without a live worker is interrupted during restart recovery');
     const unknownRecovered = await store.getRun(a, ext.runId);
-    assert.equal(unknownRecovered.externalState, 'unknown');
+    assert.equal(unknownRecovered.externalState, 'manual_check');
     assert.equal(unknownRecovered.state, 'waiting_external');
     assert.equal(unknownRecovered.reconciliation, 'needs_reconciliation');
     assert.equal((await store.getRun(a, known.runId)).externalState, 'pending_query');
@@ -112,7 +203,7 @@ test('persistent task store: ownership, atomic claims, event order, revisions an
     assert.deepEqual(await store.getRun(a, ext.runId), unknownRecovered, 'repeat recovery does not resubmit or mutate unknown task');
     await assert.rejects(store.transition(a, id, 'running', (await store.getRun(a, id)).revision), { code: 'INVALID_TRANSITION' });
     await assert.rejects(store.appendEvent(a, id, { type: 'delta', payload: {} }), { code: 'RUN_TERMINAL' });
-    assert.equal((await storage.adapter.query('SELECT count(*)::int AS count FROM agent_runs')).rows[0].count, 5, 'recovery never creates replacement paid runs');
+    assert.equal((await storage.adapter.query('SELECT count(*)::int AS count FROM agent_runs')).rows[0].count, 10, 'recovery never creates replacement paid runs');
     const terminalEvents = (await store.eventsAfter(a, id)).events;
     const done = terminalEvents.find((x) => x.type === 'done');
     assert.ok(done);

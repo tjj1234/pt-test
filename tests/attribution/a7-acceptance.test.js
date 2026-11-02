@@ -41,7 +41,7 @@ const report = {
   productionSeedAllowed: false,
   clientTenantTrusted: false,
   secondDbConnectionAllowed: false,
-  shellModified: false,
+  scopeCheck: "attribution-scope-integrity workflow job",
   results,
 };
 console.log(JSON.stringify(report, null, 2));

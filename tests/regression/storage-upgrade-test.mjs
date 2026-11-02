@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,9 @@ async function snapshot(storage, userId) {
     const where = table === 'users' ? 'id' : 'user_id';
     const order = table === 'user_memory' ? 'key' : 'id';
     result[table] = (await storage.adapter.query(`SELECT * FROM ${table} WHERE ${where}=$1 ORDER BY ${order}`, [userId])).rows;
+    // This column is intentionally introduced by the upgrade, not legacy data.
+    if (table === 'conversations') for (const row of result[table]) { delete row.model_preference; delete row.reasoning_effort; }
+    if (table === 'users') for (const row of result[table]) delete row.disabled_at;
   }
   return result;
 }
@@ -34,6 +38,30 @@ test('storage defaults to the same complete migration source as product auth', (
   assert.ok(migrationNames(DEFAULT_MIGRATIONS_DIR).includes('010_usage_and_tool_metadata.sql'));
   // Old applied names remain valid; they must never be renamed for this change.
   for (const name of migrationNames(legacyDir)) assert.ok(migrationNames(DEFAULT_MIGRATIONS_DIR).includes(name), name);
+  assert.ok(migrationNames(DEFAULT_MIGRATIONS_DIR).includes('020_chat_usage_total_semantics.sql'));
+});
+
+test('migration 020 preserves old totals and classifies prior rows without recomputing', async (t) => {
+  assertIsolatedEnvironment();
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'northstar-usage-semantics-upgrade-'));
+  const oldMigrations = path.join(tmp, 'old-migrations');
+  fs.mkdirSync(oldMigrations);
+  for (const file of migrationNames(DEFAULT_MIGRATIONS_DIR).filter((name) => name !== '020_chat_usage_total_semantics.sql')) {
+    fs.copyFileSync(path.join(DEFAULT_MIGRATIONS_DIR, file), path.join(oldMigrations, file));
+  }
+  const { db, close } = await dbmod.open({ dataDir: path.join(tmp, 'db') });
+  t.after(async () => { await close(); fs.rmSync(tmp, { recursive: true, force: true }); });
+  await dbmod.migrate(db, oldMigrations);
+  const tenantId = (await db.query("INSERT INTO tenants(name) VALUES ('old-usage') RETURNING id")).rows[0].id;
+  const userId = (await db.query("INSERT INTO users(tenant_id,username,password_hash,role) VALUES ($1,'old-usage','scrypt$fixture$unused','admin') RETURNING id", [tenantId])).rows[0].id;
+  const oldTotal = (await db.query('INSERT INTO chat_usage(tenant_id,workspace_id,user_id,model,prompt_tokens,completion_tokens,total_tokens) VALUES ($1,$2,$3,$4,10,2,99) RETURNING total_tokens', [tenantId, 'old-ws', userId, 'old-model'])).rows[0].total_tokens;
+  await dbmod.migrate(db, DEFAULT_MIGRATIONS_DIR);
+  const upgraded = (await db.query('SELECT total_tokens,total_semantics FROM chat_usage WHERE tenant_id=$1', [tenantId])).rows[0];
+  assert.equal(Number(upgraded.total_tokens), Number(oldTotal), 'the stored historical number is retained byte-for-byte in value');
+  assert.equal(upgraded.total_semantics, 'legacy_unclassified');
+  await dbmod.migrate(db, DEFAULT_MIGRATIONS_DIR);
+  const repeated = (await db.query('SELECT total_tokens,total_semantics FROM chat_usage WHERE tenant_id=$1', [tenantId])).rows[0];
+  assert.deepEqual(repeated, upgraded, 'rerunning migration leaves historical token value and label unchanged');
 });
 
 test('real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently', async () => {
@@ -49,9 +77,18 @@ test('real legacy PGlite upgrades preserve assets, revoke password sessions and 
     const reg = await current.repositories.auth.register({ username: 'upgrade-fixture', email: 'upgrade@example.test', password: 'UpgradeTest123' });
     assert.equal(reg.ok, true);
     const uid = reg.user.id;
-    const login = await current.repositories.auth.login({ username: 'upgrade-fixture', password: 'UpgradeTest123' });
-    assert.equal(login.ok, true);
-    const conv = await current.repositories.conversations.create(uid);
+    // Seed the legacy credential session directly: this schema intentionally
+    // predates the account-status column and models the real old-database row.
+    const legacyToken = crypto.randomBytes(32).toString('hex');
+    const legacyTokenHash = crypto.createHash('sha256').update(legacyToken).digest('hex');
+    await current.adapter.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES ($1,$2,now()+interval \'1 day\')', [reg.user.id, legacyTokenHash]);
+    // This is a pre-upgrade database: the current repository INSERT includes
+    // model_preference, which only exists after the latest migration. Seed an
+    // old-compatible row directly so this test exercises the migration path.
+    const conv = (await current.adapter.query(
+      "INSERT INTO conversations (user_id,title,messages) VALUES ($1,$2,'[]'::jsonb) RETURNING id",
+      [uid, '新对话'],
+    )).rows[0];
     const messages = [{ role: 'user', text: '保留旧对话', ts: '2026-10-16T00:00:00.000Z' }, { role: 'assistant', text: '历史回答', ts: '2026-10-16T00:00:01.000Z' }];
     await current.repositories.conversations.saveMessages(uid, conv.id, messages);
     await current.repositories.conversations.rename(uid, conv.id, '升级保留测试');
@@ -68,10 +105,12 @@ test('real legacy PGlite upgrades preserve assets, revoke password sessions and 
     current = await createStorage(opts);
     assert.equal(current.db, current.repositories.auth.db, 'storage shares the auth-owned real connection');
     assert.equal(current.ownsDb, false);
+    assert.equal((await current.adapter.query('SELECT reasoning_effort FROM conversations WHERE id=$1',[conv.id])).rows[0].reasoning_effort,null,'legacy conversations acquire no explicit effort');
     const afterUpgrade = await snapshot(current, uid);
     for (const table of ['users', 'conversations', 'user_memory', 'api_keys']) assert.deepEqual(afterUpgrade[table], before[table], 'upgrade preserves old ' + table + ' rows');
+    assert.equal((await current.adapter.query('SELECT disabled_at FROM users WHERE id=$1', [uid])).rows[0].disabled_at, null, 'existing users remain enabled by default');
     assert.deepEqual(afterUpgrade.sessions, [], 'Google-only migration revokes legacy password sessions without deleting users');
-    assert.equal(await current.repositories.auth.getSession(login.token), null, 'old password browser session requires Google reauthentication');
+    assert.equal(await current.repositories.auth.getSession(legacyToken), null, 'old password browser session requires Google reauthentication');
     await current.adapter.query("INSERT INTO google_identities(issuer,subject,user_id,email) VALUES ('https://accounts.google.com','upgrade-subject',$1,'upgrade@example.test')", [uid]);
     // This storage test exercises the repository's session row format after the
     // migration. Product password login is retired; Google callback issuance is

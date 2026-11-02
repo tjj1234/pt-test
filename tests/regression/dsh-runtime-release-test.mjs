@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const { findDshEntry, createDshRuntime } = require('../../shell/runtime/dsh-adapter.cjs');
+test('adapter only discovers the release-verified packaged CLI', t => {
+  const prior = process.env.DSH_JS;
+  t.after(() => { if (prior === undefined) delete process.env.DSH_JS; else process.env.DSH_JS = prior; });
+  delete process.env.DSH_JS;
+  const found = findDshEntry();
+  assert.equal(found.js, path.resolve('shell/node_modules/@deepseek-ai/dsh/lib/bin.js'));
+  assert.equal(found.nodePath, null);
+  assert.equal(found.installation.source, 'host_release_verification');
+  assert.match(found.installation.manifestSha256, /^[a-f0-9]{64}$/);
+  assert.equal(findDshEntry(found.js).js, found.js);
+  assert.equal(findDshEntry('shell/node_modules/@deepseek-ai/dsh/lib/bin.js').code, 'DSH_ENTRY_UNTRUSTED');
+  process.env.DSH_JS = '/untrusted/global/dsh/lib/bin.js';
+  assert.equal(findDshEntry().js, null, 'invalid override cannot fall back to packaged CLI');
+  assert.equal(findDshEntry().code, 'DSH_ENTRY_UNTRUSTED');
+  assert.equal(findDshEntry(found.js).js, null, 'a bad env override cannot be masked by an explicit argument');
+});
+test('runtime rechecks changed override before spawn, profile creation or opening logs', async t => {
+  const prior = process.env.DSH_JS; delete process.env.DSH_JS;
+  const temp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'northstar-dsh-release-'));
+  const home = path.join(temp, 'home'), logs = path.join(temp, 'logs');
+  const runtime = createDshRuntime({ dshHome: home, tmpDir: logs, settingsTemplate: path.resolve('shell/dsh-settings.yaml'), persistentRunner: path.resolve('shell/persistent-runner.mjs') });
+  t.after(() => { runtime.close(); if (prior === undefined) delete process.env.DSH_JS; else process.env.DSH_JS = prior; fs.rmSync(temp, { recursive: true, force: true }); });
+  process.env.DSH_JS = '/untrusted/global/dsh/lib/bin.js';
+  const result = await runtime.run({ tenantId: 'release-fixture', userId: 'user', sessionKey: 'session', workspace: temp, question: 'never sent' });
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'DSH_ENTRY_UNTRUSTED');
+  assert.equal(fs.existsSync(home), false);
+  assert.equal(fs.existsSync(logs), false);
+});

@@ -19,7 +19,7 @@ const jwk={...await exportJWK(pair.publicKey),kid:'review',alg:'RS256',use:'sig'
 const sha=x=>crypto.createHash('sha256').update(x).digest('hex');
 async function fixture(extra={}){
  const db=new PGlite();await db.waitReady;
- for(const filename of ['001_auth.sql','012_google_identities.sql'])await db.exec(fs.readFileSync(path.join(root,'shell/db-migrations',filename),'utf8'));
+ for(const filename of ['001_auth.sql','012_google_identities.sql','019_account_disable.sql'])await db.exec(fs.readFileSync(path.join(root,'shell/db-migrations',filename),'utf8'));
  let exchanges=0;
  const fetchImpl=async(url,opts)=>{
   if(String(url)===JWKS_URL)return new Response(JSON.stringify({keys:[jwk]}),{headers:{'Content-Type':'application/json'}});

@@ -1,0 +1,72 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-30T01:41:30.646Z",
+  "models": [],
+  "runs": [
+    {
+      "taskType": "image2video",
+      "requestModel": "dreamina-seedance-2-0-mini-260615",
+      "status": "failed",
+      "at": "2026-10-30T01:41:33.918Z",
+      "inputSourceSha256": "3730be1b01a4450f902ee6ccbbd33006f3dcb5235189c349bb4e0a5d79daa550",
+      "inputByteCount": 119992,
+      "runId": "1bf93bd6-32c3-4f84-a9d0-871b380bcd1e",
+      "httpStatus": 200,
+      "authorization": "explicit-single-submission",
+      "streamTail": "蓝色陶瓷咖啡杯和白色桌面，添加平缓的镜头移动效果\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2video\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\"}}\n\nid: 12\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成一段5秒720P 16:9的视频，保留原参考图中的蓝色陶瓷咖啡杯和白色桌面，添加平缓的镜头移动效果\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2video\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"Error: Parent tool request failed\",\"isError\":true}}\n\nid: 14\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成5秒720P 16:9的视频，保留蓝色陶瓷咖啡杯与白色桌面，添加平缓自然的镜头移动效果\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2video\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\"}}\n\nid: 15\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成5秒720P 16:9的视频，保留蓝色陶瓷咖啡杯与白色桌面，添加平缓自然的镜头移动效果\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2video\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"Error: Run stopped because the tool-call budget was exhausted\",\"isError\":true}}\n\nid: 21\ndata: {\"done\":true,\"ok\":false,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-30T01:41:34.251Z\",\"role\":\"user\",\"text\":\"Use media_route exactly once with taskType image2video and the current uploaded image to generate one 5 second 720P 16:9 video. Keep the blue ceramic coffee cup and white table, with gentle camera movement. Actually call the video tool, then briefly confirm completion.\",\"image\":\"/uploads/73fff08b-2972-41a8-bf19-1f2762e05b70/8ca80c75812a47c5ec5af45fdb6e4023.jpg\",\"taskType\":\"image2video\",\"imageEvidence\":{\"ref\":\"/uploads/73fff08b-2972-41a8-bf19-1f2762e05b70/8ca80c75812a47c5ec5af45fdb6e4023.jpg\",\"size\":119992,\"sha256\":\"3730be1b01a4450f902ee6ccbbd33006f3dcb5235189c349bb4e0a5d79daa550\"}},{\"ts\":\"2026-10-30T01:41:54.499Z\",\"role\":\"assistant\",\"text\":\"（DSH 执行失败：Run stopped because the model-call budget was exhausted）\",\"runId\":\"1bf93bd6-32c3-4f84-a9d0-871b380bcd1e\"}],\"reply\":\"（DSH 执行失败：Run stopped because the model-call budget was exhausted）\",\"turns\":1,\"code\":\"RUN_MODEL_CALL_LIMIT\",\"error\":\"Run stopped because the model-call budget was exhausted\"}\n\n",
+      "externalOperations": {
+        "operations": [
+          {
+            "operationId": "37329b41-a38f-41e2-a996-b2472352aadc",
+            "runId": "1bf93bd6-32c3-4f84-a9d0-871b380bcd1e",
+            "operationKey": "1bf93bd6-32c3-4f84-a9d0-871b380bcd1e:d8d176d9-771f-43c2-a2a9-33dea5a63854:asset",
+            "provider": "powertokens_asset",
+            "status": "accepted",
+            "taskId": "task_2610300941477932337",
+            "queryAttempts": 0,
+            "nextQueryAt": "2026-10-30T01:41:47.373Z",
+            "lastQuery": null,
+            "createdAt": "2026-10-30T01:41:42.577Z",
+            "updatedAt": "2026-10-30T01:41:47.373Z"
+          }
+        ],
+        "nextCursor": "37329b41-a38f-41e2-a996-b2472352aadc",
+        "hasMore": false
+      },
+      "managedMedia": {
+        "media": [],
+        "hasMore": false
+      },
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 1,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 2,
+            "maxOutputTokens": 512,
+            "maxToolCallsPerKey": 1
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 18656.407125,
+            "toolCalls": 1,
+            "costStatus": "unlimited",
+            "modelCalls": 2,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 1
+          }
+        }
+      ],
+      "inputBound": true,
+      "historyManagedUrl": false
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "result": "INCOMPLETE",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-30T01:41:54.530Z"
+}

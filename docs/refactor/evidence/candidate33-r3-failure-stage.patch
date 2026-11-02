@@ -1,0 +1,273 @@
+--- a/shell/server.cjs
++++ b/shell/server.cjs
+@@ -67,7 +67,8 @@
+ /* ---- 模型目录：按用户 PT 凭据 scope 缓存（B3/T06）----
+  * 不允许把服务级目录凭据或另一个用户的目录结果当作当前用户的权限证据。 */
+ const _catalogBusyByScope = new Map();
+-function catalogFallback(reason = null, errorCode = null, state = "credential_unavailable") {
++function catalogFallback(reason = null, errorCode = null, state = "credential_unavailable", failureStage = null) {
++  const safeFailureStage = modelCatalog.CATALOG_FAILURE_STAGES.includes(failureStage) ? failureStage : null;
+   const models = tenantMod.readModels().map((m) => modelCatalog.normalizeModel(m)).filter(Boolean);
+   return {
+     models,
+@@ -78,9 +79,11 @@
+       errorCode,
+       upstreamStatus: null,
+       lastSuccessfulAt: null,
+-      failureCount: 0,
++      failureCount: state === "internal_error" ? null : 0,
++      failureCountKnown: state !== "internal_error",
+       retryAt: null,
+       modelCount: models.length,
++      failureStage: safeFailureStage,
+     },
+   };
+ }
+@@ -111,38 +114,44 @@
+   };
+ }
+ async function ensureModelCatalog(userId, { force = false } = {}) {
++  let failureStage = "scope";
+   let apiKey = null;
+   try { apiKey = userId ? await keys.decryptApiKey(userId) : null; }
+   catch {
+     log.error("model_catalog_credential_decrypt_failed", { errorCode: "PT_KEY_DECRYPT_FAILED" });
+     return catalogFallback("PT credential could not be read", "PT_KEY_DECRYPT_FAILED", "credential_decrypt_failed");
+   }
+-  const scopeId = modelCatalog.resolveScopeId({ apiKey, baseURL: modelCatalog.DEFAULT_BASE_URL, scopeId: userId });
++  let scopeId;
++  try { scopeId = modelCatalog.resolveScopeId({ apiKey, baseURL: modelCatalog.DEFAULT_BASE_URL, scopeId: userId }); }
++  catch (error) { return catalogInternalFallback(error, failureStage); }
+   if (!scopeId) {
+     log.warn("model_catalog_credential_missing", { errorCode: "PT_KEY_MISSING" });
+     return catalogFallback("PT key is not configured for this user", "PT_KEY_MISSING", "credential_missing");
+   }
+   if (_catalogBusyByScope.has(scopeId)) return _catalogBusyByScope.get(scopeId);
+-  const qualification = textChatQualificationMaps();
+-  const pending = modelCatalog.getCatalog({
+-    apiKey,
+-    scopeId: userId,
+-    fallback: tenantMod.readModels(),
+-    ...qualification,
+-    force,
+-  }).catch((error) => {
+-    const errorCode = catalogInternalFailureCode(error);
+-    const errorClass = ["TypeError", "RangeError", "ReferenceError", "SyntaxError"].includes(error?.name) ? error.name : "Error";
+-    log.error("model_catalog_internal_failed", { errorCode, errorClass });
+-    return catalogFallback("Model catalog unavailable", errorCode, "internal_error");
+-  }).then((catalog) => {
++  const pending = Promise.resolve().then(() => {
++    failureStage = "qualification";
++    const qualification = textChatQualificationMaps();
++    const fallback = tenantMod.readModels();
++    failureStage = "cache_read";
++    return modelCatalog.getCatalog({
++      apiKey,
++      scopeId: userId,
++      fallback,
++      ...qualification,
++      force,
++      onCatalogStage: (stage) => { if (modelCatalog.CATALOG_FAILURE_STAGES.includes(stage)) failureStage = stage; },
++    });
++  }).catch((error) => catalogInternalFallback(error, failureStage)).then((catalog) => {
+     const diagnostics = catalog.catalogDiagnostics || {};
+     if (diagnostics.errorCode || catalog.availability?.status !== "available") {
+       log.warn("model_catalog_status", {
+         state: diagnostics.state || "unknown",
+         errorCode: diagnostics.errorCode || "CATALOG_STATUS_UNKNOWN",
+         upstreamStatus: Number(diagnostics.upstreamStatus) || null,
+-        failureCount: Number(diagnostics.failureCount) || 0,
++        failureCount: diagnostics.failureCount == null ? null : (Number(diagnostics.failureCount) || 0),
++        failureCountKnown: diagnostics.failureCountKnown !== false && diagnostics.failureCount != null,
++        failureStage: diagnostics.failureStage || null,
+         modelCount: Number(diagnostics.modelCount) || catalog.models?.length || 0,
+       });
+     }
+@@ -150,6 +159,21 @@
+   }).finally(() => _catalogBusyByScope.delete(scopeId));
+   _catalogBusyByScope.set(scopeId, pending);
+   return pending;
++}
++function catalogInternalFallback(error, failureStage) {
++  const errorCode = catalogInternalFailureCode(error);
++  const errorClass = ["TypeError", "RangeError", "ReferenceError", "SyntaxError"].includes(error?.name) ? error.name : "Error";
++  const safeStage = modelCatalog.CATALOG_FAILURE_STAGES.includes(failureStage) ? failureStage : "projection";
++  log.error("model_catalog_internal_failed", { errorCode, errorClass, failureStage: safeStage });
++  try { return catalogFallback("Model catalog unavailable", errorCode, "internal_error", safeStage); }
++  catch (fallbackError) {
++    log.error("model_catalog_internal_failed", {
++      errorCode: catalogInternalFailureCode(fallbackError),
++      errorClass: ["TypeError", "RangeError", "ReferenceError", "SyntaxError"].includes(fallbackError?.name) ? fallbackError.name : "Error",
++      failureStage: "fallback_projection",
++    });
++    throw fallbackError;
++  }
+ }
+ 
+ function selectChatModel(catalog, requestedModelId) {
+--- a/shell/model-catalog.cjs
++++ b/shell/model-catalog.cjs
+@@ -37,6 +37,14 @@
+ 
+ /** 同步用的 baseURL（PT 网关）；测试可注入覆盖。 */
+ const DEFAULT_BASE_URL = "https://api.powertokens.ai/v1";
++const CATALOG_FAILURE_STAGES = Object.freeze([
++  "scope", "qualification", "cache_read", "fetch_or_parse", "merge",
++  "local_update", "cache_write", "projection", "fallback_projection",
++]);
++function markCatalogStage(opts, stage) {
++  if (!CATALOG_FAILURE_STAGES.includes(stage)) return;
++  try { if (typeof opts?.onCatalogStage === "function") opts.onCatalogStage(stage); } catch { /* diagnostic observer must not affect catalog behavior */ }
++}
+ 
+ /**
+  * 名称特征只用于 kind 展示分组，不用来判断能力或 AUTO 资格。
+@@ -404,7 +412,9 @@
+   const pending = inFlightByScope.get(scopeId);
+   if (pending) return pending;
+   const promise = (async () => {
++    markCatalogStage(opts, "fetch_or_parse");
+     const fetched = await fetchPtSnapshot(opts);
++    markCatalogStage(opts, "merge");
+     let mergeOptions = {};
+     for (const key of ["permission", "policies", "adaptations", "verifications", "overrides"]) {
+       if (Object.hasOwn(opts, key)) mergeOptions[key] = opts[key];
+@@ -421,6 +431,7 @@
+       const backoff = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000, 6 * 60 * 60_000][Math.min(failureCount - 1, 4)];
+       retained.syncFailureCount = failureCount;
+       retained.nextSyncAt = new Date(now + backoff).toISOString();
++      markCatalogStage(opts, "cache_write");
+       const cacheWritten = writeScopedCache(scopeId, retained, opts);
+       return {
+         snapshot: retained,
+@@ -428,6 +439,7 @@
+         errorCode: cacheWritten ? (fetched.errorCode || "PT_SYNC_FAILED") : "CATALOG_CACHE_WRITE_FAILED",
+         upstreamStatus: fetched.status || null,
+         state: cacheWritten ? "sync_failed" : "cache_write_failed",
++        failureStage: cacheWritten ? "fetch_or_parse" : "cache_write",
+       };
+     }
+     // Under the user's confirmed PT contract, a model ID returned for this
+@@ -459,7 +471,8 @@
+     }
+     merged.syncFailureCount = 0;
+     merged.nextSyncAt = null;
+-    if (!writeScopedCache(scopeId, merged, opts)) return { snapshot: merged, error: "catalog cache write failed", errorCode: "CATALOG_CACHE_WRITE_FAILED", state: "cache_write_failed", fresh: true };
++    markCatalogStage(opts, "cache_write");
++    if (!writeScopedCache(scopeId, merged, opts)) return { snapshot: merged, error: "catalog cache write failed", errorCode: "CATALOG_CACHE_WRITE_FAILED", state: "cache_write_failed", fresh: true, failureStage: "cache_write" };
+     return { snapshot: merged, error: null, errorCode: null, upstreamStatus: null, state: "fresh", fresh: true };
+   })().finally(() => inFlightByScope.delete(scopeId));
+   inFlightByScope.set(scopeId, promise);
+@@ -475,13 +488,16 @@
+ async function getCatalog(opts) {
+   const o = opts || {};
+   const now = o.now || Date.now();
++  markCatalogStage(o, "scope");
+   const scopeId = scopedCache.resolveScopeId({ apiKey: o.apiKey, baseURL: o.baseURL, scopeId: o.scopeId });
+   if (scopeId) {
++    markCatalogStage(o, "cache_read");
+     const prior = readScopedCache(scopeId, o);
+     let snapshot = prior;
+     let syncError = null, fresh = false;
+     let syncState = prior ? "cached" : "fallback";
+     let syncErrorCode = null, upstreamStatus = null;
++    let syncFailureStage = null;
+     const backoffActive = !o.force && prior?.nextSyncAt && Number.isFinite(Date.parse(prior.nextSyncAt)) && now < Date.parse(prior.nextSyncAt);
+     if (!backoffActive && (o.force || cacheIsStale(prior, now))) {
+       const result = await syncScopedCatalog(scopeId, o, prior, now);
+@@ -491,11 +507,13 @@
+       syncState = result.state || (syncError ? "sync_failed" : "fresh");
+       syncErrorCode = result.errorCode || null;
+       upstreamStatus = result.upstreamStatus || null;
++      syncFailureStage = result.failureStage || (result.errorCode === "CATALOG_CACHE_WRITE_FAILED" ? "cache_write" : null);
+     } else if (backoffActive) {
+       syncError = "Model catalog sync is in retry backoff";
+       syncState = "backoff";
+       syncErrorCode = "CATALOG_SYNC_BACKOFF";
+     }
++    markCatalogStage(o, "local_update");
+     let localUpdates = {};
+     for (const key of ["permission", "permissions", "policies", "adaptations", "verifications", "overrides"]) {
+       if (Object.hasOwn(o, key)) localUpdates[key] = o[key];
+@@ -511,12 +529,15 @@
+       }, localUpdates);
+       updated.events = snapshot.events;
+       snapshot = updated;
++      markCatalogStage(o, "cache_write");
+       if (!writeScopedCache(scopeId, snapshot, o)) {
+         syncError = syncError || "catalog local policy cache write failed";
+         syncErrorCode = syncErrorCode || "CATALOG_CACHE_WRITE_FAILED";
+         syncState = "cache_write_failed";
++        syncFailureStage = "cache_write";
+       }
+     }
++    markCatalogStage(o, "projection");
+     let models = (snapshot?.models || []).map((model) => ({
+       ...model,
+       chat: model.tasks?.textChat?.value ?? null,
+@@ -531,7 +552,10 @@
+       status: knownAvailability ? "available" : "unknown",
+       modelIds: knownAvailability ? (snapshot.models || []).filter((model) => model.availability === "present").map((model) => model.id) : [],
+     };
+-    if (!models.length) models = dedupeAndSort((o.fallback || []).map(normalizeModel).filter(Boolean).map((model) => ({ ...model, source: "static-config" })));
++    if (!models.length) {
++      markCatalogStage(o, "fallback_projection");
++      models = dedupeAndSort((o.fallback || []).map(normalizeModel).filter(Boolean).map((model) => ({ ...model, source: "static-config" })));
++    }
+     const syncedAt = snapshot?.lastSuccessfulAt ? Date.parse(snapshot.lastSuccessfulAt) : 0;
+     return {
+       models, availability, syncedAt, fresh, syncError, auto: AUTO_ID, scopeId,
+@@ -541,13 +565,16 @@
+         upstreamStatus,
+         lastSuccessfulAt: snapshot?.lastSuccessfulAt || null,
+         failureCount: Math.max(0, Number(snapshot?.syncFailureCount) || 0),
++        failureCountKnown: true,
+         retryAt: snapshot?.nextSyncAt || null,
+         modelCount: models.length,
++        failureStage: syncFailureStage || null,
+       },
+     };
+   }
+ 
+   // No credential means no previous credential-scoped cache can be trusted.
++  markCatalogStage(o, "cache_read");
+   const cache = null;
+   let syncError = null;
+   let syncedAt = 0;
+@@ -555,8 +582,10 @@
+   let fresh = false;
+ 
+   if (o.force || isStale(cache, now)) {
++    markCatalogStage(o, "fetch_or_parse");
+     const r = await syncFromPt(o);
+     if (r.ok && r.models.length) {
++      markCatalogStage(o, "cache_write");
+       writeCache(r.models, { syncedAt: now, source: "pt" });
+       models = r.models;
+       syncedAt = now;
+@@ -568,6 +597,7 @@
+ 
+   if (!models || !models.length) {
+     // 一次都没同步成功过：退回 yaml 静态列表（全部按「可聊」处理，因为那本来就是对话白名单）
++    markCatalogStage(o, "fallback_projection");
+     models = dedupeAndSort((o.fallback || []).map((m) => normalizeModel(m)).filter(Boolean));
+   }
+ 
+@@ -579,8 +609,10 @@
+       upstreamStatus: null,
+       lastSuccessfulAt: null,
+       failureCount: 0,
++      failureCountKnown: true,
+       retryAt: null,
+       modelCount: models.length,
++      failureStage: syncError ? "fetch_or_parse" : null,
+     },
+   };
+ }
+@@ -616,5 +648,6 @@
+   syncFromPt,
+   fetchPtSnapshot,
+   resolveScopeId: scopedCache.resolveScopeId,
++  CATALOG_FAILURE_STAGES,
+   getCatalog,
+ };

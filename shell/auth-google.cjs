@@ -44,8 +44,14 @@ async function createGoogleAuth({db,config=process.env,fetchImpl=globalThis.fetc
     const issuer=ISSUER,subject=payload.sub,email=payload.email.toLowerCase();
     for(let attempt=0;attempt<2;attempt++) {
       try {return await db.transaction(async tx=>{
-        const found=await tx.query('SELECT u.id,u.username,u.email,u.role,u.tenant_id FROM google_identities g JOIN users u ON u.id=g.user_id WHERE g.issuer=$1 AND g.subject=$2',[issuer,subject]);
-        if(found.rows.length)return createSession(tx,found.rows[0]);
+        // Lock the account through session creation so a concurrent trusted
+        // disable cannot delete sessions and then have this callback insert a
+        // fresh one after the revocation transaction commits.
+        const found=await tx.query('SELECT u.id,u.username,u.email,u.role,u.tenant_id,u.disabled_at FROM google_identities g JOIN users u ON u.id=g.user_id WHERE g.issuer=$1 AND g.subject=$2 FOR UPDATE OF u',[issuer,subject]);
+        if(found.rows.length) {
+          if(found.rows[0].disabled_at)throw new GoogleAuthError('ACCOUNT_DISABLED');
+          return createSession(tx,found.rows[0]);
+        }
         const collision=await tx.query('SELECT id FROM users WHERE lower(email)=$1',[email]);
         if(collision.rows.length)throw new GoogleAuthError('IDENTITY_BINDING_REQUIRED');
         const username='google_'+crypto.randomUUID().replaceAll('-','');

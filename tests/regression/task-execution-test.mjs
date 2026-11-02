@@ -55,6 +55,16 @@ test('run execution persists ordered events, deduplicates before execution, and 
     const finalizedEvents = (await store.eventsAfter(identity, finalized.run.runId)).events;
     assert.deepEqual(finalizedEvents.slice(-3).map((event) => event.type), ['usage', 'state', 'done'], 'finalizer events are durable before terminal events');
 
+    const interrupted = await service.submit(identity, { ...input, idempotencyKey: 'request-interrupted' }, {}, {
+      executor: async () => ({ ok: false, code: 'RUN_INTERRUPTED' }),
+      finalize: async (result) => ({ runOutcome: result, completionPayload: { ok: false, code: result.code, error: 'Runner shutdown interrupted this Run' } }),
+    });
+    await interrupted.execution.result;
+    assert.equal((await store.getRun(identity, interrupted.run.runId)).state, 'interrupted', 'runner shutdown must persist the interrupted terminal state');
+    const interruptedEvents = (await store.eventsAfter(identity, interrupted.run.runId)).events;
+    assert.equal(interruptedEvents.at(-1).type, 'done');
+    assert.equal(interruptedEvents.at(-1).payload.code, 'RUN_INTERRUPTED', 'terminal event retains the runner interruption diagnostic');
+
     const cancelInput = { ...input, idempotencyKey: 'request-2' };
     let started;
     const startedPromise = new Promise((resolve) => { started = resolve; });
@@ -72,6 +82,24 @@ test('run execution persists ordered events, deduplicates before execution, and 
     assert.equal(stopped.stopped, true);
     assert.equal(stopped.run.state, 'cancelled');
     assert.equal((await storage.adapter.query('SELECT lease_owner FROM agent_runs WHERE run_id=$1', [run.run.runId])).rows[0].lease_owner, null, 'terminal transition releases its worker lease');
+
+    const remoteControllerScheduler = createSessionScheduler({ perUserLimit: 2, globalLimit: 2 });
+    t.after(() => remoteControllerScheduler.close());
+    const remoteController = createRunExecutionService({ store, scheduler: remoteControllerScheduler, processId: 'remote-controller', executor: async () => ({ ok: true }) });
+    let remoteStarted;
+    const remoteStartedPromise = new Promise((resolve) => { remoteStarted = resolve; });
+    const remoteWorker = createRunExecutionService({ store, scheduler, processId: 'remote-worker', leaseTtlMs: 3000, executor: ({ signal }) => new Promise((resolve, reject) => {
+      remoteStarted();
+      signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+    }) });
+    const remoteRun = await remoteWorker.submit(identity, { ...input, idempotencyKey: 'request-remote-cancel' });
+    await remoteStartedPromise;
+    const remoteCancel = await remoteController.cancel(identity, remoteRun.run.runId);
+    assert.equal(remoteCancel.stopped, false);
+    assert.equal(remoteCancel.cancelRequested, true, 'controller without the scheduler persists a cancellation request');
+    assert.equal(remoteCancel.run.state, 'cancelling');
+    await assert.rejects(remoteRun.execution.result, { code: 'SCHEDULER_CANCELLED' });
+    assert.equal((await store.getRun(identity, remoteRun.run.runId)).state, 'cancelled', 'lease owner observes remote cancellation and settles it');
 
     let failDelta = true;
     const flakyStore = Object.create(store);

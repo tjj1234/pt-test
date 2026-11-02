@@ -39,6 +39,7 @@ ok("html", A.artifactKind("page.html") === "html");
 ok("htm", A.artifactKind("page.htm") === "html");
 ok("md", A.artifactKind("README.md") === "md");
 ok("markdown", A.artifactKind("a.markdown") === "md");
+ok("csv", A.artifactKind("result.csv") === "csv" && A.artifactContentType("result.csv") === "text/csv; charset=utf-8");
 ok("大写扩展名也认", A.artifactKind("REPORT.PDF") === "pdf");
 ok("纯扩展名入参（.md）", A.artifactKind(".md") === "md");
 ok("不支持的类型 -> null", A.artifactKind("a.txt") === null);

@@ -1,0 +1,738 @@
+{
+  "scope": "provider-preflight-not-product-acceptance",
+  "authorization": "user-authorized-existing-key-balance-20261029",
+  "balanceReadable": false,
+  "attempts": [
+    {
+      "action": "chat",
+      "requestModel": "qwen3.8-flash",
+      "at": "2026-10-29T03:39:47.673Z",
+      "status": "response_received",
+      "maxTokens": 32,
+      "httpStatus": 200,
+      "actualModel": "qwen3.8-flash",
+      "responseId": "chatcmpl-12339eb4-844b-91c3-83f4-97846b8a18d9",
+      "expectedText": true,
+      "usage": {
+        "prompt_tokens": 68,
+        "completion_tokens": 34,
+        "total_tokens": 102
+      },
+      "requestId": "12339eb4-844b-91c3-83f4-97846b8a18d9"
+    },
+    {
+      "action": "image",
+      "requestModel": "seedream-5-0-260128",
+      "at": "2026-10-29T03:53:40.179Z",
+      "status": "remote_result_received",
+      "parameters": {
+        "n": 1,
+        "size": "2048x2048",
+        "sequential_image_generation": "disabled"
+      },
+      "posts": 1,
+      "lastHttpStatus": 200,
+      "requestId": "021793246022535a139bd89baa39633285680c9471d15efc69db8",
+      "remoteOutcome": "succeeded",
+      "resultHost": "ark-acg-ap-southeast-1.tos-ap-southeast-1.volces.com",
+      "elapsedMs": 19771,
+      "localMedia": {
+        "kind": "image",
+        "url": "/api/run-media/aeb78947-e7b8-4e61-9dbb-8919c4ec37eb/fd0d013a-f2dc-4db9-b6ba-8d32e1d9fb51.jpg",
+        "managed": {
+          "rel": "media-results/aeb78947-e7b8-4e61-9dbb-8919c4ec37eb/fd0d013a-f2dc-4db9-b6ba-8d32e1d9fb51.jpg",
+          "mime": "image/jpeg",
+          "size": 153587,
+          "sha256": "2b8e94fd3e7afc80de0d351867b8643fdb9000ab0db274a7f071c1a6d43b8b4e"
+        },
+        "taskType": "text2image",
+        "label": "文生图",
+        "model": "seedream-5-0-260128",
+        "provider": "seedream",
+        "elapsedMs": 19771,
+        "workspaceRoot": "/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-live-managed-BPo910",
+        "tenantId": "8257638c-57ec-425a-b5a6-e28d51c33f0a",
+        "syntheticRun": true
+      }
+    },
+    {
+      "action": "agent",
+      "at": "2026-10-29T03:57:13.777Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-review-r2",
+      "at": "2026-10-29T03:59:18.272Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-fixed-r3",
+      "at": "2026-10-29T04:03:47.413Z",
+      "status": "PASS"
+    },
+    {
+      "action": "agent-media-r4",
+      "at": "2026-10-29T06:49:46.581Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-media-r5",
+      "at": "2026-10-29T06:52:15.252Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-media-r6",
+      "at": "2026-10-29T06:53:46.029Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-media-r7",
+      "at": "2026-10-29T07:02:44.176Z",
+      "status": "PASS"
+    },
+    {
+      "action": "agent-i2i-r1",
+      "at": "2026-10-29T07:45:27.376Z",
+      "status": "PASS"
+    },
+    {
+      "action": "agent-t2v-r1",
+      "at": "2026-10-29T07:53:10.149Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "query-video",
+      "taskId": "task_rG4FqFS5NyefXXurkTdCz8H5Mi0HfM0K",
+      "at": "2026-10-29T08:00:10.920Z",
+      "readOnly": true,
+      "status": "response_received",
+      "httpStatus": 200,
+      "providerStatus": "completed",
+      "resultHost": "pub-425ca9cea13d454a907692a0a9f80079.r2.dev"
+    },
+    {
+      "action": "agent-t2v-r2",
+      "at": "2026-10-29T08:36:09.184Z",
+      "status": "PASS"
+    },
+    {
+      "action": "agent-csv-r1",
+      "at": "2026-10-29T08:46:17.683Z",
+      "status": "PASS"
+    },
+    {
+      "action": "agent-auto-r1",
+      "at": "2026-10-29T09:09:51.040Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-auto-r2",
+      "at": "2026-10-29T09:15:51.111Z",
+      "status": "PASS"
+    },
+    {
+      "action": "agent-i2v-r1",
+      "at": "2026-10-30T01:41:30.633Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-i2v-r2",
+      "at": "2026-10-30T01:48:44.615Z",
+      "status": "PASS"
+    },
+    {
+      "action": "agent-vision-r1",
+      "at": "2026-10-30T04:11:58.258Z",
+      "status": "INCOMPLETE"
+    },
+    {
+      "action": "agent-vision-shapes-r1",
+      "at": "2026-10-30T04:17:15.441Z",
+      "status": "PASS"
+    }
+  ],
+  "catalog": {
+    "at": "2026-10-29T03:39:19.868Z",
+    "httpStatus": 200,
+    "count": 82,
+    "models": [
+      {
+        "id": "audio1.0",
+        "endpoints": [
+          "vidu"
+        ]
+      },
+      {
+        "id": "deepseek-flash",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "deepseek-v3-2-251201",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "deepseek-v4-1-flash-260910",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "deepseek-v4-pro",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "dola-seedream-5-0-pro-260628",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "dreamina-seedance-2-0-260128",
+        "endpoints": [
+          "openai-video",
+          "byteplus"
+        ]
+      },
+      {
+        "id": "dreamina-seedance-2-0-fast-260128",
+        "endpoints": [
+          "openai-video",
+          "byteplus"
+        ]
+      },
+      {
+        "id": "dreamina-seedance-2-0-mini-260615",
+        "endpoints": [
+          "openai-video",
+          "byteplus"
+        ]
+      },
+      {
+        "id": "dreamina-seedance-2-5-260628",
+        "endpoints": [
+          "openai-video",
+          "byteplus"
+        ]
+      },
+      {
+        "id": "glm-4.5-air",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-4.7",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-4.7-flash",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-5",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-5-turbo",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-5.1",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-5.2",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-5.3",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "glm-5.3-flash",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "happyhorse-1.1-i2v",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "happyhorse-1.1-r2v",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "happyhorse-1.1-t2v",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "image-01",
+        "endpoints": [
+          "image-generation",
+          "openai"
+        ]
+      },
+      {
+        "id": "kling-image-o1",
+        "endpoints": [
+          "image-generation",
+          "kling"
+        ]
+      },
+      {
+        "id": "kling-v2-5-turbo",
+        "endpoints": [
+          "kling",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "kling-v3",
+        "endpoints": [
+          "image-generation",
+          "kling",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "kling-v3-omni",
+        "endpoints": [
+          "image-generation",
+          "kling",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "kling-video-o1",
+        "endpoints": [
+          "kling",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "mimo-v2.6-flash",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "mimo-v2.6-pro",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "MiniMax-H3-Max",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "MiniMax-Hailuo-02",
+        "endpoints": [
+          "openai-video"
+        ]
+      },
+      {
+        "id": "MiniMax-Hailuo-2.3",
+        "endpoints": [
+          "openai-video"
+        ]
+      },
+      {
+        "id": "MiniMax-Hailuo-2.3-Fast",
+        "endpoints": [
+          "openai-video"
+        ]
+      },
+      {
+        "id": "MiniMax-M2.5",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "MiniMax-M2.5-highspeed",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "MiniMax-M2.7",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "MiniMax-M2.7-highspeed",
+        "endpoints": [
+          "anthropic",
+          "openai"
+        ]
+      },
+      {
+        "id": "MiniMax-M3",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen-image-2.0-pro",
+        "endpoints": [
+          "image-generation",
+          "openai"
+        ]
+      },
+      {
+        "id": "qwen-image-3.0-pro",
+        "endpoints": [
+          "image-generation",
+          "openai"
+        ]
+      },
+      {
+        "id": "qwen3-coder-plus",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen3-max",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen3-tts-instruct-flash",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "qwen3.5-flash",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen3.6-plus",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen3.7-max",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen3.7-plus",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen3.8-flash",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "qwen3.8-max",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "seed-1-6-250915",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "seed-1-6-flash-250715",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "seed-1-8-251228",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "seed-2-0-lite-260228",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "seed-2-0-mini-260215",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "seed-2-0-pro-260328",
+        "endpoints": [
+          "anthropic",
+          "openai",
+          "openai-response"
+        ]
+      },
+      {
+        "id": "seedance-1-0-pro-250528",
+        "endpoints": [
+          "openai-video",
+          "byteplus"
+        ]
+      },
+      {
+        "id": "seedance-1-0-pro-fast-251015",
+        "endpoints": [
+          "openai-video",
+          "byteplus"
+        ]
+      },
+      {
+        "id": "seedance-1-5-pro-251215",
+        "endpoints": [
+          "openai-video",
+          "byteplus"
+        ]
+      },
+      {
+        "id": "seedream-4-0-250828",
+        "endpoints": [
+          "image-generation",
+          "openai"
+        ]
+      },
+      {
+        "id": "seedream-4-5-251128",
+        "endpoints": [
+          "image-generation",
+          "openai"
+        ]
+      },
+      {
+        "id": "seedream-5-0-260128",
+        "endpoints": [
+          "image-generation",
+          "openai"
+        ]
+      },
+      {
+        "id": "speech-02-hd",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "speech-02-turbo",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "speech-2.6-hd",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "speech-2.6-turbo",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "speech-2.8-hd",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "speech-2.8-turbo",
+        "endpoints": [
+          "openai"
+        ]
+      },
+      {
+        "id": "viduq2",
+        "endpoints": [
+          "image-generation",
+          "vidu"
+        ]
+      },
+      {
+        "id": "viduq3",
+        "endpoints": [
+          "vidu",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "viduq3-pro",
+        "endpoints": [
+          "vidu",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "viduq3-pro-fast",
+        "endpoints": [
+          "vidu",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "viduq3-turbo",
+        "endpoints": [
+          "vidu",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "viduq4-preview",
+        "endpoints": [
+          "vidu",
+          "openai-video"
+        ]
+      },
+      {
+        "id": "wan2.1-kf2v-plus",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "wan2.2-kf2v-flash",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "wan2.7-i2v",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "wan2.7-image-pro",
+        "endpoints": [
+          "image-generation",
+          "openai"
+        ]
+      },
+      {
+        "id": "wan2.7-r2v",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "wan2.7-t2v",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "wan3.0-video",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      },
+      {
+        "id": "wan3.0-video-prime",
+        "endpoints": [
+          "openai-video",
+          "openai"
+        ]
+      }
+    ]
+  }
+}

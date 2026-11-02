@@ -30,7 +30,7 @@ const WORKSPACE_STATUS = {
 };
 
 // 工作区存储目录（与 db/、logs/ 同级）
-const RUNTIME_DIR = path.join(__dirname, "..", "..", "runtime");
+const RUNTIME_DIR = process.env.PT_RUNTIME_DIR ? path.resolve(process.env.PT_RUNTIME_DIR) : path.join(__dirname, "..", "..", "runtime");
 const WORKSPACES_DIR = path.join(RUNTIME_DIR, "workspaces");
 
 // 确保工作区目录存在

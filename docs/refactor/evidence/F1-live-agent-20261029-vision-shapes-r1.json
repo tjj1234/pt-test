@@ -1,0 +1,138 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-30T04:17:15.455Z",
+  "models": [],
+  "runs": [
+    {
+      "name": "manual-image",
+      "status": "completed",
+      "at": "2026-10-30T04:17:18.583Z",
+      "runId": "c5e47953-b847-46af-a610-328dc7a886a2",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"3\"}\n\nid: 13\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-30T04:17:19.016Z\",\"role\":\"user\",\"text\":\"How many blue circles are in this image? Reply with only the number. Do not use tools.\",\"image\":\"/uploads/8628b623-3ad9-46aa-984f-7bb085b52e7a/4bfcf6f28a899e9ed8cd859a16a26ad1.png\",\"imageEvidence\":{\"ref\":\"/uploads/8628b623-3ad9-46aa-984f-7bb085b52e7a/4bfcf6f28a899e9ed8cd859a16a26ad1.png\",\"size\":7294,\"sha256\":\"780ee825fea2ba5a1ca8a6fb6b6dd252a525e3a58818d76a231ce456d9368124\"}},{\"ts\":\"2026-10-30T04:17:23.287Z\",\"role\":\"assistant\",\"text\":\"3\",\"runId\":\"c5e47953-b847-46af-a610-328dc7a886a2\",\"steps\":[]}],\"reply\":\"3\",\"turns\":1}\n\n",
+      "imageQualified": true,
+      "selections": [
+        {
+          "requested": "qwen3.8-flash",
+          "resolved": "qwen3.8-flash",
+          "task": "imageUnderstanding"
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 3598.96575,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "answer": "3",
+      "expectedAnswer": "3",
+      "answerMatches": true
+    },
+    {
+      "name": "auto-followup",
+      "status": "completed",
+      "at": "2026-10-30T04:17:24.895Z",
+      "runId": "c5ecac4c-4334-4324-bb16-8348e8712db9",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"red\"}\n\nid: 12\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-30T04:17:19.016Z\",\"role\":\"user\",\"text\":\"How many blue circles are in this image? Reply with only the number. Do not use tools.\",\"image\":\"/uploads/8628b623-3ad9-46aa-984f-7bb085b52e7a/4bfcf6f28a899e9ed8cd859a16a26ad1.png\",\"imageEvidence\":{\"ref\":\"/uploads/8628b623-3ad9-46aa-984f-7bb085b52e7a/4bfcf6f28a899e9ed8cd859a16a26ad1.png\",\"size\":7294,\"sha256\":\"780ee825fea2ba5a1ca8a6fb6b6dd252a525e3a58818d76a231ce456d9368124\"}},{\"ts\":\"2026-10-30T04:17:23.287Z\",\"role\":\"assistant\",\"text\":\"3\",\"runId\":\"c5e47953-b847-46af-a610-328dc7a886a2\",\"steps\":[]},{\"ts\":\"2026-10-30T04:17:25.319Z\",\"role\":\"user\",\"text\":\"What color is the square in the uploaded image? Reply with one lowercase English color word. Do not use tools.\"},{\"ts\":\"2026-10-30T04:17:33.157Z\",\"role\":\"assistant\",\"text\":\"red\",\"runId\":\"c5ecac4c-4334-4324-bb16-8348e8712db9\",\"steps\":[]}],\"reply\":\"red\",\"turns\":2}\n\n",
+      "imageQualified": false,
+      "selections": [
+        {
+          "requested": "AUTO",
+          "resolved": "qwen3.8-flash",
+          "task": "imageUnderstanding"
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 7764.514708000001,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "answer": "red",
+      "expectedAnswer": "red",
+      "answerMatches": true
+    },
+    {
+      "name": "cold-regenerate",
+      "status": "completed",
+      "at": "2026-10-30T04:17:33.177Z",
+      "runId": "ee35d335-7967-44dd-a26d-c56a89028777",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"red\"}\n\nid: 12\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-30T04:17:19.016Z\",\"role\":\"user\",\"text\":\"How many blue circles are in this image? Reply with only the number. Do not use tools.\",\"image\":\"/uploads/8628b623-3ad9-46aa-984f-7bb085b52e7a/4bfcf6f28a899e9ed8cd859a16a26ad1.png\",\"imageEvidence\":{\"ref\":\"/uploads/8628b623-3ad9-46aa-984f-7bb085b52e7a/4bfcf6f28a899e9ed8cd859a16a26ad1.png\",\"size\":7294,\"sha256\":\"780ee825fea2ba5a1ca8a6fb6b6dd252a525e3a58818d76a231ce456d9368124\"}},{\"ts\":\"2026-10-30T04:17:23.287Z\",\"role\":\"assistant\",\"text\":\"3\",\"runId\":\"c5e47953-b847-46af-a610-328dc7a886a2\",\"steps\":[]},{\"ts\":\"2026-10-30T04:17:25.319Z\",\"role\":\"user\",\"text\":\"What color is the square in the uploaded image? Reply with one lowercase English color word. Do not use tools.\"},{\"ts\":\"2026-10-30T04:17:36.554Z\",\"role\":\"assistant\",\"text\":\"red\",\"runId\":\"ee35d335-7967-44dd-a26d-c56a89028777\",\"steps\":[]}],\"reply\":\"red\",\"turns\":2}\n\n",
+      "imageQualified": false,
+      "selections": [
+        {
+          "requested": "AUTO",
+          "resolved": "qwen3.8-flash",
+          "task": "imageUnderstanding"
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 2213.407791999998,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "answer": "red",
+      "expectedAnswer": "red",
+      "answerMatches": true
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "input": {
+    "sha256": "780ee825fea2ba5a1ca8a6fb6b6dd252a525e3a58818d76a231ce456d9368124",
+    "bytes": 7294,
+    "fixture": "native-vision-fixture-20261030.png"
+  },
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-30T04:17:36.598Z"
+}

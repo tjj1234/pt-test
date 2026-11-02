@@ -18,11 +18,13 @@ const conv = (id, archived) => ({
   id, title: (archived ? "归档的" : "正常的") + id, preview: "…", msgCount: 2,
   archived, updated_at: Date.now(), messages: [{ role: "user", text: "旧消息", ts: 1 }],
 });
+const readyModelCatalog = { ok: true, auto: "AUTO", current: "fixture-chat", models: [{ id: "fixture-chat", chat: true, availability: "present", runtimeStatus: "verified" }], eligibility: { "fixture-chat": { ok: true, mode: "manual" } } };
+async function openConversation(app, id) { await app.awaitRun(`openConversation('${id}')`); await app.awaitRun("loadModels()"); await flush(6); }
 
 /* ================== 一组：打开归档对话 → 输入框只读 ================== */
 {
-  const app = await bootApp({ conversations: { A: conv("A", true), B: conv("B", false) } });
-  await app.awaitRun("openConversation('A')");
+  const app = await bootApp({ modelCatalogResponse: readyModelCatalog, conversations: { A: conv("A", true), B: conv("B", false) } });
+  await openConversation(app, "A");
 
   const ta = app.el("ta"), send = app.el("send"), banner = app.el("archBanner");
   ok("归档对话：输入框被禁用", ta.disabled === true, "disabled=" + ta.disabled);
@@ -42,17 +44,17 @@ const conv = (id, archived) => ({
   app.run("switchView('chat')");
   ok("切回对话视图提示条重新出现", banner.hidden === false, "hidden=" + banner.hidden);
 
-  // 最容易漏的一条：生成结束时的 setBusy(false) 不能顺手把归档锁抹掉
-  app.run("setBusy(true)");
+  // 生成锁现在按对话登记；结束生成不能顺手把归档锁抹掉。
+  app.run("window.__archiveTestBusyEntry = {}; setConversationBusy('A', window.__archiveTestBusyEntry, true)");
   ok("生成中同样禁用", ta.disabled === true);
-  app.run("setBusy(false)");
+  app.run("setConversationBusy('A', window.__archiveTestBusyEntry, false)");
   ok("生成结束后归档锁仍在（没被一起解锁）", ta.disabled === true, "disabled=" + ta.disabled);
 }
 
 /* ================== 二组：点「恢复」→ 解锁联动 ================== */
 {
-  const app = await bootApp({ conversations: { A: conv("A", true) } });
-  await app.awaitRun("openConversation('A')");
+  const app = await bootApp({ modelCatalogResponse: readyModelCatalog, conversations: { A: conv("A", true) } });
+  await openConversation(app, "A");
   const ta = app.el("ta"), send = app.el("send"), banner = app.el("archBanner");
 
   ok("恢复前是锁着的", ta.disabled === true);
@@ -72,9 +74,9 @@ const conv = (id, archived) => ({
 
 /* ================== 三组：恢复没成功 → 绝不解锁 ================== */
 {
-  const app = await bootApp({ conversations: { A: conv("A", true) } });
+  const app = await bootApp({ modelCatalogResponse: readyModelCatalog, conversations: { A: conv("A", true) } });
   app.db.failArchiveOps = true;      // 后端回了 200，但状态没变（比如并发写失败）
-  await app.awaitRun("openConversation('A')");
+  await openConversation(app, "A");
   const ta = app.el("ta"), banner = app.el("archBanner");
 
   app.el("archRestore").dispatch("click");
@@ -86,8 +88,8 @@ const conv = (id, archived) => ({
 
 /* ================== 四组：普通对话不受影响 ================== */
 {
-  const app = await bootApp({ conversations: { B: conv("B", false) } });
-  await app.awaitRun("openConversation('B')");
+  const app = await bootApp({ modelCatalogResponse: readyModelCatalog, conversations: { B: conv("B", false) } });
+  await openConversation(app, "B");
   const ta = app.el("ta"), banner = app.el("archBanner");
   ok("普通对话：输入框可用", ta.disabled === false, "disabled=" + ta.disabled);
   ok("普通对话：不显示归档提示条", banner.hidden === true, "hidden=" + banner.hidden);
@@ -106,12 +108,10 @@ const conv = (id, archived) => ({
 /* ================== 五组：详情里的 archived 以它为准 ================== */
 {
   // 列表告诉你「已归档」，详情说「没归档」（列表是旧缓存）→ 以详情为准
-  const app = await bootApp({ conversations: { A: conv("A", true) } });
+  const app = await bootApp({ modelCatalogResponse: readyModelCatalog, conversations: { A: conv("A", true) }, detailOverrides: { A: conv("A", false) } });
   // 详情返回 archived:false，覆盖列表里的 true
-  const c = app.db.convs.A;
-  c.archived = true;
-  await app.awaitRun("openConversation('A')");
-  ok("以列表为准时锁上", app.el("ta").disabled === true);
+  await openConversation(app, "A");
+  ok("以详情为准时解锁", app.el("ta").disabled === false);
 }
 
 console.log("\n归档只读回归：" + pass + " PASS / " + fail + " FAIL  （共 " + (pass + fail) + " 项）");

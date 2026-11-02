@@ -1,0 +1,397 @@
+diff --git a/pt_video.py b/pt_video.py
+index 8890b99..df69658 100644
+--- a/pt_video.py
++++ b/pt_video.py
+@@ -1012,54 +1012,360 @@ def download_binary(url, path, key=None):
+ 
+ 
+ # ---------- 资产库上传（Seedance 图生视频必须先把素材上传拿 asset://）----------
+-def upload_asset(key, path, group_name=None, poll_timeout=120):
+-    """上传本地文件到 PT 资产库，返回 asset_id（引用为 asset://<id>）。上传免费，不扣 credits。"""
++_MAX_ASSET_BYTES = 5 * 1024 * 1024  # 5 MiB
++_MAX_ASSET_RESPONSE_BYTES = 128 * 1024  # 128 KiB
++_ASSET_SAFE_FILENAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,256}\Z")
++_ASSET_TASK_ID_RE = re.compile(r"^[a-zA-Z0-9_.:-]{1,256}\Z")
++_ASSET_ID_RE = re.compile(r"^[A-Za-z0-9_.-]{1,256}\Z")
++
++
++class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
++    def redirect_request(self, req, fp, code, msg, headers, newurl):
++        return None
++
++
++_ASSET_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirectHandler)
++
++
++def _read_bounded_asset_response(r, max_bytes=_MAX_ASSET_RESPONSE_BYTES):
++    data = r.read(max_bytes + 1)
++    if len(data) > max_bytes:
++        raise ApiError(0, "响应体积超出128KiB限制")
++    return data
++
++
++def _build_asset_multipart(content_bytes, filename, group_name=None):
+     import uuid
++    if not isinstance(content_bytes, (bytes, bytearray)):
++        raise TypeError("content must be bytes")
++    if len(content_bytes) == 0 or len(content_bytes) > _MAX_ASSET_BYTES:
++        raise ValueError(f"Content length must be between 1 and {_MAX_ASSET_BYTES} bytes")
++    if not isinstance(filename, str) or not _ASSET_SAFE_FILENAME_RE.fullmatch(filename):
++        raise ValueError("Filename must be a safe alphanumeric string without path or control characters")
++    if any(c in filename for c in "/\\\r\n"):
++        raise ValueError("Filename contains path separator or CRLF")
++
+     boundary = "----ptboundary" + uuid.uuid4().hex
+-    body = b""
++    body = bytearray()
+     if group_name:
+-        body += f'--{boundary}\r\n'.encode()
+-        body += b'Content-Disposition: form-data; name="group_name"\r\n\r\n'
+-        body += group_name.encode() + b"\r\n"
+-    fn = os.path.basename(path)
+-    body += f'--{boundary}\r\n'.encode()
+-    body += f'Content-Disposition: form-data; name="file"; filename="{fn}"\r\n'.encode()
+-    body += b'Content-Type: application/octet-stream\r\n\r\n'
++        if any(c in group_name for c in "\r\n"):
++            raise ValueError("group_name contains CRLF")
++        body.extend(f'--{boundary}\r\n'.encode('ascii'))
++        body.extend(b'Content-Disposition: form-data; name="group_name"\r\n\r\n')
++        body.extend(group_name.encode('utf-8') + b"\r\n")
++
++    body.extend(f'--{boundary}\r\n'.encode('ascii'))
++    body.extend(f'Content-Disposition: form-data; name="file"; filename="{filename}"\r\n'.encode('utf-8'))
++    body.extend(b'Content-Type: application/octet-stream\r\n\r\n')
++    body.extend(content_bytes)
++    body.extend(b"\r\n")
++    body.extend(f'--{boundary}--\r\n'.encode('ascii'))
++    return bytes(body), f"multipart/form-data; boundary={boundary}"
++
++
++def _make_asset_result(outcome, ok, task_id, asset_id, error_code, submission_may_have_started, byte_count, sha256):
++    return {
++        "outcome": outcome,
++        "ok": bool(ok),
++        "task_id": str(task_id) if task_id else None,
++        "asset_id": str(asset_id) if asset_id else None,
++        "error_code": str(error_code) if error_code else None,
++        "submission_may_have_started": bool(submission_may_have_started),
++        "may_resubmit": False,
++        "byte_count": int(byte_count) if byte_count is not None else 0,
++        "sha256": str(sha256) if sha256 else "",
++    }
++
++
++def upload_asset_for_product(
++    content,
++    filename="reference.png",
++    key=None,
++    hooks=None,
++    transport=None,
++    clock=None,
++    sleep=None,
++    cancel_token=None,
++    poll_timeout=120,
++    **kwargs
++):
++    """产品级资产上传入口（同步调用，确定性结果字典）。"""
++    import hashlib
++
++    if kwargs:
++        bc = len(content) if isinstance(content, (bytes, bytearray)) else 0
++        h = hashlib.sha256(content).hexdigest() if isinstance(content, (bytes, bytearray)) else ""
++        return _make_asset_result("not_submitted", False, None, None, "INVALID_ARGUMENTS", False, bc, h)
++
++    if not isinstance(content, (bytes, bytearray)):
++        return _make_asset_result("not_submitted", False, None, None, "INVALID_CONTENT_TYPE", False, 0, "")
++    if len(content) == 0:
++        return _make_asset_result("not_submitted", False, None, None, "EMPTY_CONTENT", False, 0, "")
++    if len(content) > _MAX_ASSET_BYTES:
++        h = hashlib.sha256(content).hexdigest()
++        return _make_asset_result("not_submitted", False, None, None, "CONTENT_SIZE_EXCEEDED", False, len(content), h)
++
++    byte_count = len(content)
++    sha256_hex = hashlib.sha256(content).hexdigest()
++
++    if not isinstance(key, str) or not key.strip() or any(c in key for c in "\r\n"):
++        return _make_asset_result("not_submitted", False, None, None, "INVALID_KEY", False, byte_count, sha256_hex)
++
++    if not isinstance(filename, str) or not _ASSET_SAFE_FILENAME_RE.fullmatch(filename) or any(c in filename for c in "/\\\r\n"):
++        return _make_asset_result("not_submitted", False, None, None, "INVALID_FILENAME", False, byte_count, sha256_hex)
++
++    hooks = hooks or {}
++    if not isinstance(hooks, dict):
++        return _make_asset_result("not_submitted", False, None, None, "INVALID_HOOKS", False, byte_count, sha256_hex)
++
++    clock = clock or time.monotonic
++    sleep = sleep or time.sleep
++
++    try:
++        poll_timeout = float(poll_timeout)
++        if poll_timeout <= 0 or poll_timeout > 120.0:
++            poll_timeout = 120.0
++    except (TypeError, ValueError):
++        poll_timeout = 120.0
++
++    def is_cancelled():
++        if cancel_token is None:
++            return False
++        if callable(cancel_token):
++            try:
++                return bool(cancel_token())
++            except Exception:
++                return True
++        if hasattr(cancel_token, "is_cancelled"):
++            try:
++                prop = cancel_token.is_cancelled
++                return bool(prop() if callable(prop) else prop)
++            except Exception:
++                return True
++        return False
++
++    def do_request(request, timeout):
++        if transport is not None:
++            if hasattr(transport, "open"):
++                return transport.open(request, timeout=timeout)
++            if callable(transport):
++                return transport(request, timeout=timeout)
++        return _ASSET_NO_REDIRECT_OPENER.open(request, timeout=timeout)
++
++    start_time = clock()
++    deadline = start_time + poll_timeout
++
++    if is_cancelled():
++        return _make_asset_result("cancelled", False, None, None, "CANCELLED", False, byte_count, sha256_hex)
++
++    if callable(hooks.get("before_submit")):
++        try:
++            hooks["before_submit"]({"byte_count": byte_count, "sha256": sha256_hex, "filename": filename})
++        except Exception:
++            return _make_asset_result("not_submitted", False, None, None, "HOOK_BEFORE_SUBMIT_FAILED", False, byte_count, sha256_hex)
++
++    if is_cancelled():
++        return _make_asset_result("cancelled", False, None, None, "CANCELLED", False, byte_count, sha256_hex)
++
++    if callable(hooks.get("submission_started")):
++        try:
++            hooks["submission_started"]()
++        except Exception:
++            return _make_asset_result("not_submitted", False, None, None, "HOOK_SUBMISSION_STARTED_FAILED", False, byte_count, sha256_hex)
++
++    if is_cancelled():
++        return _make_asset_result("cancelled", False, None, None, "CANCELLED", False, byte_count, sha256_hex)
++
++    try:
++        body_bytes, content_type = _build_asset_multipart(content, filename)
++    except Exception:
++        return _make_asset_result("not_submitted", False, None, None, "MULTIPART_BUILD_FAILED", False, byte_count, sha256_hex)
++
++    post_req = urllib.request.Request(
++        ASSET_UPLOAD,
++        data=body_bytes,
++        headers={
++            "Authorization": key.strip(),
++            "Content-Type": content_type,
++            "User-Agent": "pt-media-skill",
++        },
++        method="POST",
++    )
++
++    now = clock()
++    if now >= deadline:
++        return _make_asset_result("poll_timeout", False, None, None, "POLL_TIMEOUT", False, byte_count, sha256_hex)
++
++    post_timeout = min(60.0, max(0.1, deadline - now))
++    submission_may_have_started = True
++
++    try:
++        with do_request(post_req, timeout=post_timeout) as r:
++            body_data = _read_bounded_asset_response(r)
++            try:
++                post_json = json.loads(body_data.decode("utf-8"))
++            except Exception:
++                return _make_asset_result("unknown_submission", False, None, None, "MALFORMED_JSON_RESPONSE", True, byte_count, sha256_hex)
++    except urllib.error.HTTPError as e:
++        status = e.code
++        if 400 <= status < 500 and status not in (408, 429):
++            return _make_asset_result("rejected", False, None, None, f"HTTP_{status}", True, byte_count, sha256_hex)
++        return _make_asset_result("unknown_submission", False, None, None, f"HTTP_{status}", True, byte_count, sha256_hex)
++    except Exception:
++        return _make_asset_result("unknown_submission", False, None, None, "POST_NETWORK_ERROR", True, byte_count, sha256_hex)
++
++    if not isinstance(post_json, dict):
++        return _make_asset_result("unknown_submission", False, None, None, "MALFORMED_POST_ENVELOPE", True, byte_count, sha256_hex)
++
++    code = post_json.get("code")
++    if code != 200:
++        return _make_asset_result("rejected", False, None, None, f"UPSTREAM_CODE_{code}", True, byte_count, sha256_hex)
++
++    data_obj = post_json.get("data")
++    if not isinstance(data_obj, dict):
++        return _make_asset_result("unknown_submission", False, None, None, "MISSING_DATA_OBJECT", True, byte_count, sha256_hex)
++
++    raw_task_id = data_obj.get("task_id")
++    if not isinstance(raw_task_id, str) or not _ASSET_TASK_ID_RE.fullmatch(raw_task_id):
++        return _make_asset_result("unknown_submission", False, None, None, "MISSING_OR_INVALID_TASK_ID", True, byte_count, sha256_hex)
++
++    task_id = raw_task_id
++
++    if callable(hooks.get("on_task_id")):
++        try:
++            hooks["on_task_id"](task_id)
++        except Exception:
++            return _make_asset_result("task_id_persisting_failed", False, task_id, None, "HOOK_ON_TASK_ID_FAILED", True, byte_count, sha256_hex)
++
++    query_url = ASSET_GET_ID.format(urllib.parse.quote(task_id, safe=""))
++    get_req = urllib.request.Request(
++        query_url,
++        headers={"User-Agent": "pt-media-skill"},
++        method="GET",
++    )
++
++    while True:
++        if is_cancelled():
++            return _make_asset_result("cancelled", False, task_id, None, "CANCELLED", True, byte_count, sha256_hex)
++
++        now = clock()
++        rem_time = deadline - now
++        if rem_time <= 0:
++            return _make_asset_result("poll_timeout", False, task_id, None, "POLL_TIMEOUT", True, byte_count, sha256_hex)
++
++        query_timeout = min(30.0, max(0.1, rem_time))
++        get_json = None
++        try:
++            with do_request(get_req, timeout=query_timeout) as r:
++                body_data = _read_bounded_asset_response(r)
++                get_json = json.loads(body_data.decode("utf-8"))
++        except urllib.error.HTTPError as e:
++            pass
++        except Exception:
++            pass
++
++        if isinstance(get_json, dict):
++            if get_json.get("code") is not None and get_json.get("code") != 200:
++                return _make_asset_result("get_asset_id_rejected", False, task_id, None, f"UPSTREAM_GET_CODE_{get_json.get('code')}", True, byte_count, sha256_hex)
++
++            data_section = get_json.get("data")
++            if isinstance(data_section, dict):
++                raw_aid = data_section.get("asset_id")
++                if raw_aid is not None:
++                    if not isinstance(raw_aid, str) or not _ASSET_ID_RE.fullmatch(raw_aid):
++                        return _make_asset_result("get_asset_id_failed", False, task_id, None, "INVALID_ASSET_ID_FORMAT", True, byte_count, sha256_hex)
++
++                    if is_cancelled():
++                        return _make_asset_result("cancelled", False, task_id, raw_aid, "CANCELLED", True, byte_count, sha256_hex)
++                    if clock() >= deadline:
++                        return _make_asset_result("poll_timeout", False, task_id, raw_aid, "POLL_TIMEOUT", True, byte_count, sha256_hex)
++
++                    if callable(hooks.get("on_asset_id")):
++                        try:
++                            hooks["on_asset_id"](raw_aid)
++                        except Exception:
++                            return _make_asset_result("asset_id_persisting_failed", False, task_id, raw_aid, "HOOK_ON_ASSET_ID_FAILED", True, byte_count, sha256_hex)
++
++                    return _make_asset_result("succeeded", True, task_id, raw_aid, None, True, byte_count, sha256_hex)
++
++        if is_cancelled():
++            return _make_asset_result("cancelled", False, task_id, None, "CANCELLED", True, byte_count, sha256_hex)
++        now = clock()
++        if now >= deadline:
++            return _make_asset_result("poll_timeout", False, task_id, None, "POLL_TIMEOUT", True, byte_count, sha256_hex)
++
++        sleep_dur = min(2.0, max(0.0, deadline - now))
++        sleep(sleep_dur)
++
++
++def upload_asset(key, path, group_name=None, poll_timeout=120):
++    """上传本地文件到 PT 资产库，返回 asset_id（引用为 asset://<id>）。上游实现说明上传免费，不扣 credits。"""
++    if not key or not isinstance(key, str) or not key.strip() or any(c in key for c in "\r\n"):
++        raise ApiError(0, "无效或缺失的 API Key")
++    if not isinstance(path, (str, Path)) or not os.path.isfile(path):
++        raise ApiError(0, f"文件不存在：{path}")
++
++    file_size = os.path.getsize(path)
++    if file_size > _MAX_ASSET_BYTES:
++        raise ApiError(0, f"文件大小超过5MiB限制（实际 {file_size} 字节）")
++
+     with open(path, "rb") as f:
+-        body += f.read()
+-    body += b"\r\n"
+-    body += f'--{boundary}--\r\n'.encode()
++        content = f.read(_MAX_ASSET_BYTES + 1)
++    if len(content) > _MAX_ASSET_BYTES:
++        raise ApiError(0, "文件大小超过5MiB限制")
++
++    fn = os.path.basename(str(path))
++    if not fn or not _ASSET_SAFE_FILENAME_RE.fullmatch(fn) or any(c in fn for c in "/\\\r\n"):
++        fn = "reference.png"
++
++    if not group_name:
++        res = upload_asset_for_product(content=content, filename=fn, key=key.strip(), poll_timeout=poll_timeout)
++        if res.get("ok"):
++            return res.get("asset_id")
++        raise ApiError(0, f"资产上传失败：{res.get('outcome')} ({res.get('error_code')})")
++
++    body_bytes, content_type = _build_asset_multipart(content, fn, group_name=group_name)
+     req = urllib.request.Request(
+-        ASSET_UPLOAD, data=body,
+-        headers={"Authorization": key, "Content-Type": f"multipart/form-data; boundary={boundary}"},
++        ASSET_UPLOAD, data=body_bytes,
++        headers={"Authorization": key.strip(), "Content-Type": content_type, "User-Agent": "pt-media-skill"},
+         method="POST",
+     )
+     try:
+-        with urllib.request.urlopen(req, timeout=60) as r:
+-            data = json.loads(r.read().decode("utf-8"))
++        with _ASSET_NO_REDIRECT_OPENER.open(req, timeout=60) as r:
++            body_data = _read_bounded_asset_response(r)
++            data = json.loads(body_data.decode("utf-8"))
+     except urllib.error.HTTPError as e:
+-        raise ApiError(e.code, f"资产上传失败：{e.read().decode('utf-8', 'replace')}")
++        raise ApiError(e.code, f"资产上传失败 HTTP {e.code}")
++    except Exception as e:
++        raise ApiError(0, "资产上传网络请求失败")
++
+     if data.get("code") != 200:
+-        raise ApiError(data.get("code", 0), f"资产上传失败：{data}")
++        raise ApiError(data.get("code", 0), f"资产上传失败：{data.get('code')}")
+     task_id = (data.get("data") or {}).get("task_id")
+-    if not task_id:
+-        raise ApiError(0, f"上传未返回 task_id：{data}")
+-    # 轮询 get-asset-id（无需鉴权）
+-    deadline = time.time() + poll_timeout
++    if not task_id or not isinstance(task_id, str) or not _ASSET_TASK_ID_RE.fullmatch(task_id):
++        raise ApiError(0, "上传未返回有效 task_id")
++
++    deadline = time.monotonic() + min(float(poll_timeout), 120.0)
++    query_url = ASSET_GET_ID.format(urllib.parse.quote(task_id, safe=""))
++    get_req = urllib.request.Request(query_url, headers={"User-Agent": "pt-media-skill"}, method="GET")
++
+     while True:
+         try:
+-            with urllib.request.urlopen(ASSET_GET_ID.format(task_id), timeout=30) as r:
+-                j = json.loads(r.read().decode("utf-8"))
+-        except urllib.error.HTTPError as e:
+-            raise ApiError(e.code, f"查询 asset_id 失败：{e.read().decode('utf-8', 'replace')}")
+-        aid = (j.get("data") or {}).get("asset_id")
+-        if aid:
+-            return aid
+-        if time.time() >= deadline:
+-            raise ApiError(0, f"轮询 asset_id 超时（>{poll_timeout}s），task_id={task_id}")
++            with _ASSET_NO_REDIRECT_OPENER.open(get_req, timeout=30) as r:
++                body_data = _read_bounded_asset_response(r)
++                j = json.loads(body_data.decode("utf-8"))
++        except Exception:
++            j = {}
++        if isinstance(j, dict) and j.get("code") == 200:
++            aid = (j.get("data") or {}).get("asset_id")
++            if aid and isinstance(aid, str) and _ASSET_ID_RE.fullmatch(aid):
++                return aid
++        if time.monotonic() >= deadline:
++            raise ApiError(0, f"轮询 asset_id 超时（>{poll_timeout}s）")
+         time.sleep(2)
+ 
+ 
++
+ def cmd_upload(argv):
+     parser = argparse.ArgumentParser(prog="pt_video.py upload")
+     parser.add_argument("-f", "--file", required=True, help="本地文件路径")

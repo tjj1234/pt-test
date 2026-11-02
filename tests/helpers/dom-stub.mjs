@@ -37,6 +37,7 @@ export function makeEl(tag) {
     cloneNode() { return makeEl(); },
     matches() { return false; }, scrollIntoView() {}, contains() { return false; },
     children: [], firstChild: null, lastChild: null, parentNode: null,
+    get options() { return el.children; },
     _q: null,
     // 桩不解析 HTML，所以 querySelector 命中不到真实子节点 —— 造一个并挂进 children，
     // 这样 streamInto(t, text) 写进 .bub 的内容能被断言到（真实 DOM 里它本来就在子树中）。

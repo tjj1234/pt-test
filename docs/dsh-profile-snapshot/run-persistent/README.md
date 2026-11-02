@@ -1,0 +1,7 @@
+# `run-persistent` source-generated candidate snapshot
+
+This directory is generated from the current repository-owned profile builder, `shell/package-lock.json`, `shell/.npmrc`, and the runner/business source files listed in `northstar-profile-manifest.json`. It records the files Northstar manages for the product profile; it is **not** an export from a deployed production DSH home and does not prove that production loaded these bundles or patches.
+
+Reproduce or verify it from the repository root with `node scripts/northstar-profile-snapshot.mjs write` or `node scripts/northstar-profile-snapshot.mjs check`. The generator creates an isolated temporary DSH home with an empty synthetic settings fixture, copies only manifest-managed profile inputs, and removes that temporary home. It does not read `runtime/dsh-home`, developer `~/.dsh`, `.env`, credentials, or deployed settings. `settings.yaml`, installed `node_modules`, and DSH-generated `cordis.yml` are intentionally absent.
+
+To prove deployed equivalence, the deployment owner must provide a redacted export of the managed profile files plus the DSH-generated `cordis.yml` and installed bundle versions from the product-specific production home. Do not provide `settings.yaml`, API keys, tokens, connection strings, workspace data, or user files. Record the product home/profile identity, DSH version, bundle load order, and capture time without exposing its absolute path.

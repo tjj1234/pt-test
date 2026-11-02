@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   syntax-check:
     name: 语法检查（node --check）
@@ -24,17 +27,16 @@ jobs:
       - name: 语法检查（遍历所有 JS 源文件）
         run: node scripts/ci-check.mjs
 
-  # 后端 SQL 自检：analytics 起库时会跑 pt_security_selfcheck()（fail-closed）。
-  # 这里再补一层「迁移脚本可被提取」的冒烟检查，避免 psql 脚本语法坏掉才在运行时发现。
+  # 这里只核对指定迁移文件存在且非空，不执行 SQL 或验证迁移语法。
   migrate-smoke:
-    name: 迁移脚本冒烟
+    name: 迁移文件存在性
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: 校验 001/002/003 迁移文件存在且非空
+      - name: 校验指定迁移文件存在且非空
         run: |
           for f in analytics/backend/db/001_init.sql \
                    analytics/backend/db/002_attribution_index.sql \
@@ -44,10 +46,10 @@ jobs:
           done
           echo "迁移脚本齐备"
 
-  # 回归门禁：强制执行 tests/regression/ 全部套件（真正跑起来，不是语法检查）。
+  # 默认回归门禁；依赖 PostgreSQL 的 suites 在独立 job 使用 disposable service。
   # 任一项失败即非零退出 → CI 标红 → 阻止合并。这是合并前必须通过的红线。
   regression:
-    name: 回归测试（tests/regression 全量）
+    name: 回归测试（本地依赖 suites）
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -66,5 +68,114 @@ jobs:
         working-directory: shell
         run: npm ci
 
-      - name: 运行全部回归测试
+      - name: 运行默认回归测试
         run: node scripts/run-regression.mjs
+
+  postgres-regression:
+    name: PostgreSQL 回归（临时数据库）
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: northstar
+          POSTGRES_PASSWORD: northstar-test
+          POSTGRES_DB: northstar_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U northstar -d northstar_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PT_PG_DSN: postgres://northstar:northstar-test@127.0.0.1:5432/northstar_test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 安装 shell 依赖
+        working-directory: shell
+        run: npm ci
+
+      - name: 运行 PostgreSQL 回归测试
+        run: node scripts/run-regression.mjs --postgres
+
+  # Keep the original attribution delivery-scope check tied to its reviewed
+  # baseline/commit range instead of whatever unrelated files are dirty in a
+  # developer's integrated working tree.
+  attribution-scope-integrity:
+    name: Attribution A7 交付范围
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 安装 Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: 校验 A7 原始交付未触碰受保护基础路径
+        run: node scripts/verify-a7-scope.mjs
+
+  # Attribution/GA quality suites use three independently locked package roots.
+  # Keep each test file in a separate Node process so one suite cannot mask another.
+  attribution-regression:
+    name: Attribution 回归（逐文件）
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 Node ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      - name: 安装 analytics 锁定依赖
+        working-directory: analytics
+        run: npm ci
+
+      - name: 安装 shell 锁定依赖
+        working-directory: shell
+        run: npm ci
+
+      - name: 安装 business attribution 锁定依赖
+        working-directory: business/attribution
+        run: npm ci
+
+      - name: 逐文件运行 attribution、quality 与 GA 回归
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_files=(
+            tests/attribution/*.test.js
+            business/attribution/quality/quality.test.js
+            business/attribution/skills/tracking-quality-audit.test.js
+            business/attribution/ga-connector/*.test.js
+          )
+          # Update this count when a suite is intentionally added or removed.
+          expected_test_file_count=25
+          if [[ "${#test_files[@]}" -ne "$expected_test_file_count" ]]; then
+            echo "Expected $expected_test_file_count test files, found ${#test_files[@]}" >&2
+            exit 1
+          fi
+          for test_file in "${test_files[@]}"; do
+            if [[ ! -f "$test_file" ]]; then
+              echo "Missing expected test file: $test_file" >&2
+              exit 1
+            fi
+            echo "Running $test_file"
+            node --test "$test_file"
+          done

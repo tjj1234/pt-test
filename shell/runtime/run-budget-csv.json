@@ -1,0 +1,9 @@
+{
+  "maxDurationMs": 180000,
+  "maxModelCalls": 2,
+  "maxToolCalls": 1,
+  "maxToolCallsPerKey": 1,
+  "maxRetries": 0,
+  "maxOutputTokens": 512,
+  "allowedTools": ["csv_analyze"]
+}

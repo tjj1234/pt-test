@@ -1,0 +1,58 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+const require = createRequire(import.meta.url);
+const dbmod = require('../../shell/db.cjs');
+const { PGlite } = require(dbmod.resolvePgliteEntry());
+async function openFixture(dataDir) { const db = new PGlite(dataDir); await db.waitReady; return { db, close: () => db.close() }; }
+const { initConversations } = require('../../shell/conversations.cjs');
+const migrations = path.resolve('shell/db-migrations');
+const U1 = '11111111-1111-4111-8111-111111111111';
+const U2 = '22222222-2222-4222-8222-222222222222';
+test('conversation model preference persists, isolates users, and snapshots atomically', { timeout: 30000 }, async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'northstar-conversation-model-'));
+  let handle;
+  try {
+    handle = await openFixture(path.join(root, 'db'));
+    await handle.db.exec(`CREATE TABLE users(id UUID PRIMARY KEY); INSERT INTO users VALUES ('${U1}'),('${U2}');`);
+    for (const file of ['003_conversations.sql', '004_conversations_v2.sql', '005_archive_memory.sql', '018_conversation_model_preference.sql', '024_conversation_reasoning_preference.sql']) await handle.db.exec(fs.readFileSync(path.join(migrations, file), 'utf8'));
+    await handle.db.exec(fs.readFileSync(path.join(migrations, '018_conversation_model_preference.sql'), 'utf8'));
+    let conv = await initConversations(handle.db);
+    const legacy = await conv.create(U1);
+    assert.deepEqual(await conv.getModelPreference(U1, legacy.id), { modelPreference: null });
+    assert.equal(await conv.getModelPreference(U2, legacy.id), null);
+    assert.deepEqual(await conv.setModelPreference(U2, legacy.id, 'other'), { ok: false, notFound: true });
+    assert.deepEqual(await conv.ensureModelPreference(U2, legacy.id, 'other'), { ok: false, notFound: true });
+    const results = await Promise.all(['first', 'second', 'third'].map(model => conv.ensureModelPreference(U1, legacy.id, model)));
+    assert.ok(results.every(r => r.ok && r.modelPreference === results[0].modelPreference));
+    assert.equal((await conv.ensureModelPreference(U1, legacy.id, 'changed-user-default')).modelPreference, results[0].modelPreference);
+    assert.deepEqual(await conv.setModelPreference(U1, legacy.id, 'explicit'), { ok: true, modelPreference: 'explicit' });
+    assert.equal((await conv.ensureModelPreference(U1, legacy.id, 'changed-again')).modelPreference, 'explicit');
+    const first = await conv.create(U1, { modelPreference: 'default-a' });
+    const second = await conv.create(U1, { modelPreference: 'default-b' });
+    assert.equal(first.model_preference, 'default-a'); assert.equal(second.model_preference, 'default-b');
+    assert.equal((await conv.get(U1, first.id)).model_preference, 'default-a');
+    assert.equal((await conv.list(U1)).find(row => row.id === first.id).model_preference, 'default-a');
+    await conv.rename(U1, first.id, 'model search');
+    assert.equal((await conv.search(U1, 'model search'))[0].model_preference, 'default-a');
+    const absent = '33333333-3333-4333-8333-333333333333';
+    assert.deepEqual(await conv.ensureModelPreference(U1, absent, 'x'), { ok: false, notFound: true });
+    for (const value of ['', ' ', null, 'bad\nmodel', 'x'.repeat(513)]) assert.equal((await conv.setModelPreference(U1, first.id, value)).ok, false);
+    const count = await handle.db.query('SELECT count(*) AS count FROM conversations'); assert.equal(Number(count.rows[0].count), 3);
+    assert.equal((await conv.setModelSelection(U1,first.id,'reasoner','high')).ok,true);
+    assert.deepEqual(await conv.getModelSelection(U1,first.id),{model:'reasoner',reasoningEffort:'high'});
+    assert.equal(await conv.getModelSelection(U2,first.id),null);
+    assert.equal((await conv.setModelSelection(U1,first.id,'AUTO','high')).ok,false);
+    assert.equal((await conv.setModelSelection(U1,first.id,'reasoner','x'.repeat(65))).ok,false);
+    await conv.setModelPreference(U1,first.id,'default-a');
+    assert.deepEqual(await conv.getModelSelection(U1,first.id),{model:'default-a',reasoningEffort:null});
+    await conv.setModelSelection(U1,second.id,'reasoner','low');
+    await handle.close(); handle = await openFixture(path.join(root, 'db')); conv = await initConversations(handle.db);
+    assert.deepEqual(await conv.getModelPreference(U1, legacy.id), { modelPreference: 'explicit' });
+    assert.equal((await conv.get(U1, first.id)).model_preference, 'default-a');
+    assert.deepEqual(await conv.getModelSelection(U1,second.id),{model:'reasoner',reasoningEffort:'low'});
+  } finally { await handle?.close(); fs.rmSync(root, { recursive: true, force: true }); }
+});

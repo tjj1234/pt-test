@@ -1,0 +1,9 @@
+{
+  "status": "DRAFT_NOT_FOR_DEPLOYMENT",
+  "builder": "scripts/package-northstar-candidate34-r19-draft.py",
+  "audit": "scripts/audit-northstar-candidate34-r19-draft.py",
+  "archive": "northstar-controlled-trial-20261031-candidate-34-r19-draft.tar.gz",
+  "sha256": "7eb6d84fe8f2aa810f7f966071f0c11bed2b5a3a6f46b3ce10bc3b03dc6798eb",
+  "boundSources": 198,
+  "members": 399
+}

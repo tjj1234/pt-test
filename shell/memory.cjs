@@ -12,7 +12,8 @@
  *   await mem.list(userId)              // -> [{key, value, updated_at}]（不含内部键）
  *   await mem.set(userId, key, value)   // 写 / 覆盖
  *   await mem.del(userId, key)          // 删
- *   await mem.memoryLines(userId)       // -> ["key=value", ...]（供注入任务）
+ *   await mem.memoryLines(userId)       // -> 有界的 ["key=value", ...]（供注入任务）
+ *   await mem.memorySnapshot(userId)    // -> lines 与预算/遗漏摘要
  *   await mem.getModel(userId)          // -> string|null（所选模型）
  *   await mem.setModel(userId, model)   // 存所选模型
  * ============================================================================
@@ -26,7 +27,7 @@ async function initMemory(db) {
   /** 读该用户全部用户记忆（排除内部保留键）。 */
   async function list(userId) {
     const r = await db.query(
-      "SELECT key, value, updated_at FROM user_memory WHERE user_id = $1 ORDER BY updated_at DESC",
+      "SELECT key, value, updated_at FROM user_memory WHERE user_id = $1 ORDER BY updated_at DESC, key ASC",
       [userId]
     );
     return r.rows
@@ -56,10 +57,81 @@ async function initMemory(db) {
     return { ok: true };
   }
 
-  /** 拼成 "key=value" 行数组（供注入 DSH 任务开头），排除内部键。 */
-  async function memoryLines(userId) {
-    const items = await list(userId);
-    return items.map((m) => m.key + "=" + m.value);
+  /**
+   * 按最近更新时间取整条记忆，避免超限时把最新的大条目直接挡在后续短条目前。
+   * 上限按最终注入文本的 JS UTF-16 code unit 计，包含每行前缀和行间换行。
+   */
+  async function memorySnapshot(userId, opts = {}) {
+    const rawBudget = opts?.maxChars;
+    const requested = Number(rawBudget);
+    const maxChars = Number.isFinite(requested) && requested > 0
+      ? Math.floor(requested)
+      : rawBudget === 0 ? 0 : 4000;
+    const lines = [];
+    let includedChars = 0;
+    let totalCount = 0;
+    const consume = (items) => {
+      for (const item of items) {
+        if (isInternal(item.key)) continue;
+        const line = item.key + "=" + item.value;
+        // server.cjs formats these as "  · " + line and joins them with "\n".
+        const injectedChars = 4 + line.length + (lines.length > 0 ? 1 : 0);
+        if (includedChars + injectedChars <= maxChars) {
+          lines.push(line);
+          includedChars += injectedChars;
+        }
+      }
+    };
+
+    if (typeof db.transaction === "function") {
+      // Keep page reads and the summary count on one stable view while avoiding
+      // materializing every key/value row in the application process.
+      await db.transaction(async (tx) => {
+        await tx.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+        const count = await tx.query(
+          "SELECT COUNT(*) AS total_count FROM user_memory WHERE user_id = $1 AND LEFT(key, 1) <> '$'",
+          [userId]
+        );
+        totalCount = Number(count.rows[0]?.total_count || 0);
+
+        const pageSize = 64;
+        let offset = 0;
+        while (true) {
+          // No later record can fit once the remaining space is smaller than
+          // the shortest possible formatted line (empty key, value, and '=').
+          const minimumNextLine = 4 + 1 + (lines.length > 0 ? 1 : 0);
+          if (maxChars - includedChars < minimumNextLine) break;
+
+          const page = await tx.query(
+            "SELECT key, value, updated_at FROM user_memory WHERE user_id = $1 ORDER BY updated_at DESC, key ASC LIMIT $2 OFFSET $3",
+            [userId, pageSize, offset]
+          );
+          if (page.rows.length === 0) break;
+          offset += page.rows.length;
+          consume(page.rows);
+          if (page.rows.length < pageSize) break;
+        }
+      });
+    } else {
+      // Keep compatibility with lightweight query-only adapters used by older
+      // callers; production PGlite/PostgreSQL adapters use the paged path above.
+      const items = await list(userId);
+      totalCount = items.length;
+      consume(items);
+    }
+
+    return {
+      lines,
+      maxChars,
+      includedChars,
+      totalCount,
+      omittedCount: totalCount - lines.length,
+    };
+  }
+
+  /** 兼容现有调用者；默认最终注入文本最多 4000 个 UTF-16 code unit。 */
+  async function memoryLines(userId, opts) {
+    return (await memorySnapshot(userId, opts)).lines;
   }
 
   /** 读所选模型（内部键 $model）。 */
@@ -80,7 +152,7 @@ async function initMemory(db) {
     return { ok: true, model: m };
   }
 
-  return { list, set, del, memoryLines, getModel, setModel };
+  return { list, set, del, memoryLines, memorySnapshot, getModel, setModel };
 }
 
 module.exports = { initMemory };

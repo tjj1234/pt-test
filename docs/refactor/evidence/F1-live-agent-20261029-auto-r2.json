@@ -1,0 +1,54 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T09:15:51.123Z",
+  "models": [],
+  "runs": [],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "manualQualification": {
+    "runId": "ca0a9a93-f169-422e-8057-a4bc463bc93f",
+    "modelId": "seed-2-0-lite-260228",
+    "status": "completed",
+    "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"NOR\"}\n\nid: 7\ndata: {\"delta\":\"TH\"}\n\nid: 8\ndata: {\"delta\":\"STAR\"}\n\nid: 9\ndata: {\"delta\":\"_MAN\"}\n\nid: 10\ndata: {\"delta\":\"UAL\"}\n\nid: 11\ndata: {\"delta\":\"_OK\"}\n\nid: 18\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T09:15:54.457Z\",\"role\":\"user\",\"text\":\"Reply with exactly NORTHSTAR_MANUAL_OK. Do not use tools.\"},{\"ts\":\"2026-10-29T09:15:58.323Z\",\"role\":\"assistant\",\"text\":\"NORTHSTAR_MANUAL_OK\",\"runId\":\"ca0a9a93-f169-422e-8057-a4bc463bc93f\",\"steps\":[]}],\"reply\":\"NORTHSTAR_MANUAL_OK\",\"turns\":1}\n\n",
+    "verified": true
+  },
+  "auto": {
+    "runId": "7d990fef-7515-4643-a36a-2a9fa2473181",
+    "status": "completed",
+    "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"NOR\"}\n\nid: 7\ndata: {\"delta\":\"TH\"}\n\nid: 8\ndata: {\"delta\":\"STAR\"}\n\nid: 9\ndata: {\"delta\":\"_A\"}\n\nid: 10\ndata: {\"delta\":\"UTO\"}\n\nid: 11\ndata: {\"delta\":\"_OK\"}\n\nid: 17\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T09:15:54.457Z\",\"role\":\"user\",\"text\":\"Reply with exactly NORTHSTAR_MANUAL_OK. Do not use tools.\"},{\"ts\":\"2026-10-29T09:15:58.323Z\",\"role\":\"assistant\",\"text\":\"NORTHSTAR_MANUAL_OK\",\"runId\":\"ca0a9a93-f169-422e-8057-a4bc463bc93f\",\"steps\":[]},{\"ts\":\"2026-10-29T09:15:59.043Z\",\"role\":\"user\",\"text\":\"Reply with exactly NORTHSTAR_AUTO_OK. Do not use tools.\"},{\"ts\":\"2026-10-29T09:16:01.827Z\",\"role\":\"assistant\",\"text\":\"NORTHSTAR_AUTO_OK\",\"runId\":\"7d990fef-7515-4643-a36a-2a9fa2473181\",\"steps\":[]}],\"reply\":\"NORTHSTAR_AUTO_OK\",\"turns\":2}\n\n",
+    "modelSelections": [
+      {
+        "requestedModelId": "AUTO",
+        "resolvedModelId": "seed-2-0-lite-260228",
+        "upstreamModelId": null
+      }
+    ],
+    "budgets": [
+      {
+        "limits": {
+          "maxRetries": 0,
+          "maxToolCalls": 0,
+          "maxDurationMs": 180000,
+          "maxModelCalls": 1,
+          "maxOutputTokens": 128,
+          "maxToolCallsPerKey": 0
+        },
+        "snapshot": {
+          "retries": 0,
+          "elapsedMs": 2719.1256250000006,
+          "toolCalls": 0,
+          "costStatus": "unlimited",
+          "modelCalls": 1,
+          "clockStatus": "monotonic",
+          "policyStatus": "configured",
+          "duplicateToolCalls": 0
+        }
+      }
+    ],
+    "historyExpectedText": true
+  },
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T09:16:01.865Z"
+}

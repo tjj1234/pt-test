@@ -31,22 +31,22 @@ console.log("模型目录（B3）回归：");
 console.log("\n[1] normalizeModel / isChatModel");
 ok("AUTO 常量", C.AUTO_ID === "AUTO");
 const chatRaw = { id: "deepseek-v4-pro", supported_endpoint_types: ["anthropic"] };
-ok("带 anthropic 端点 -> 可聊", C.isChatModel(chatRaw) === true);
-ok("带 openai-response 端点 -> 可聊", C.isChatModel({ id: "x", supported_endpoint_types: ["openai-response"] }) === true);
+ok("PT 确认 anthropic 端点映射为聊天", C.isChatModel(chatRaw) === true && C.normalizeModel(chatRaw).tasks.textChat.source.path === "supported_endpoint_types");
+ok("PT 确认 openai-response 端点映射为聊天", C.normalizeModel({ id: "x", supported_endpoint_types: ["openai-response"] }).chat === true);
 ok("只有 image 端点 -> 不可聊", C.isChatModel({ id: "x", supported_endpoint_types: ["image-generation"] }) === false);
 ok("名字含 seedance -> 不可聊（端点缺失兜底）", C.isChatModel({ id: "seedance-2.5" }) === false);
 ok("名字含 seedream -> 不可聊", C.isChatModel({ id: "seedream-4.0" }) === false);
 ok("名字含 tts -> 不可聊", C.isChatModel({ id: "speech-tts-1" }) === false);
 ok("名字含 embedding -> 不可聊", C.isChatModel({ id: "text-embedding-3" }) === false);
-ok("普通对话模型 -> 可聊", C.isChatModel({ id: "glm-5.2" }) === true);
+ok("普通模型名不推断聊天能力", C.normalizeModel({ id: "glm-5.2" }).chat === null);
 ok("空 id -> 不可聊", C.isChatModel({}) === false);
 
-const n1 = C.normalizeModel({ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", supported_endpoint_types: ["anthropic"] });
+const n1 = C.normalizeModel({ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", capabilities: { textChat: true }, supported_endpoint_types: ["anthropic"] });
 ok("归一化 id", n1 && n1.id === "deepseek-v4-pro");
 ok("归一化 name", n1 && n1.name === "DeepSeek V4 Pro");
-ok("归一化 kind=chat", n1 && n1.kind === "chat");
+ok("显式 textChat 元数据归一化为 chat", n1 && n1.kind === "chat" && n1.chat === true);
 const n2 = C.normalizeModel({ id: "seedance-2.5" });
-ok("生成类 kind=video", n2 && n2.chat === false && n2.kind === "video");
+ok("生成类名称仅作展示分类，能力仍 unknown", n2 && n2.chat === null && n2.kind === "video");
 ok("生成类 kind=image", C.normalizeModel({ id: "seedream-4.0" }).kind === "image");
 ok("生成类 kind=audio", C.normalizeModel({ id: "speech-02-tts" }).kind === "audio");
 ok("空对象 -> null", C.normalizeModel({}) === null && C.normalizeModel(null) === null);
@@ -94,8 +94,8 @@ ok("looksLikeReasoning 判定", C.looksLikeReasoning("请证明这个定理") ==
 console.log("\n[4] syncFromPt：注入 fetch 桩");
 const ptPayload = { data: [
   { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", supported_endpoint_types: ["anthropic"] },
-  { id: "seedance-2.5", name: "Seedance", supported_endpoint_types: ["video"] },
-  { id: "seedream-4.0", name: "Seedream", supported_endpoint_types: ["image"] },
+  { id: "seedance-2.5", name: "Seedance", supported_endpoint_types: ["openai-video"] },
+  { id: "seedream-4.0", name: "Seedream", supported_endpoint_types: ["image-generation"] },
 ] };
 const fakeFetch = async (url, opts) => {
   fakeFetch.lastUrl = url; fakeFetch.lastOpts = opts;
@@ -106,8 +106,8 @@ ok("同步成功", r1.ok === true);
 ok("拉到 3 个模型", r1.models.length === 3);
 ok("请求 URL 是 /v1/models", String(fakeFetch.lastUrl).endsWith("/models"));
 ok("带 Bearer 鉴权", fakeFetch.lastOpts && fakeFetch.lastOpts.headers && fakeFetch.lastOpts.headers.Authorization === "Bearer sk-test");
-ok("生成类被标 chat=false", r1.models.filter((m) => m.chat === false).length === 2);
-ok("对话模型 chat=true", r1.models.find((m) => m.id === "deepseek-v4-pro").chat === true);
+ok("仅端点/名称按 PT 确认规则映射能力", r1.models.find((m) => m.id === "deepseek-v4-pro").chat === true && r1.models.find((m) => m.id === "seedance-2.5").tasks.textToVideo.value === true && r1.models.find((m) => m.id === "seedream-4.0").tasks.textToImage.value === true);
+ok("映射能力保留来源字段", r1.models.find((m) => m.id === "deepseek-v4-pro").tasks.textChat.source.path === "supported_endpoint_types");
 
 ok("没有 key -> 不同步（不报错）", (await C.syncFromPt({ apiKey: "", fetchImpl: fakeFetch })).ok === false);
 ok("PT 返回错误码 -> ok=false", (await C.syncFromPt({ apiKey: "k", fetchImpl: async () => ({ ok: false, status: 500 }) })).ok === false);
@@ -133,6 +133,7 @@ try {
   const c1 = await C.getCatalog({
     apiKey: "",
     fallback: [{ id: "deepseek-v4-pro", name: "DS" }],
+    cacheDir: tmpHome,
     now,
   });
   ok("同步失败 -> 退回静态列表", c1.models.length === 1 && c1.models[0].id === "deepseek-v4-pro");
@@ -140,7 +141,7 @@ try {
   ok("返回 auto 字段", c1.auto === "AUTO");
 
   // getCatalog：同步成功
-  const c2 = await C.getCatalog({ apiKey: "sk", fetchImpl: fakeFetch, fallback: [], now, force: true });
+  const c2 = await C.getCatalog({ apiKey: "sk", fetchImpl: fakeFetch, fallback: [], cacheDir: tmpHome, now, force: true });
   ok("强制同步生效", c2.models.length === 3 && c2.fresh === true);
   ok("syncedAt 被记录", c2.syncedAt === now);
 

@@ -67,6 +67,58 @@ const MODEL_ROUTING = {
 
 const TASK_TYPES = Object.keys(MODEL_ROUTING);
 
+// These are wire contracts implemented below, not claims about any catalog
+// model. A trusted host must qualify a model for one of these exact contracts.
+const MEDIA_ADAPTERS = Object.freeze({
+  "pt-python-video-v1": Object.freeze({
+    adapterId: "pt-python-video-v1", version: "1", endpoint: "openai-videos",
+    path: "/v1/videos", provider: "powertokens-video", kind: "video",
+    taskTypes: Object.freeze(["text2video", "image2video"]),
+  }),
+  "pt-python-seedance-v1": Object.freeze({
+    adapterId: "pt-python-seedance-v1", version: "1", endpoint: "openai-videos",
+    path: "/v1/videos", provider: "powertokens-video", kind: "seedance",
+    taskTypes: Object.freeze(["text2video", "image2video"]),
+  }),
+  "pt-image-generations-v1": Object.freeze({
+    adapterId: "pt-image-generations-v1", version: "1", endpoint: "openai-images-generations",
+    path: "/v1/images/generations", provider: "powertokens-image", kind: "image",
+    taskTypes: Object.freeze(["text2image", "image2image"]),
+  }),
+  "pt-video-generations-v1": Object.freeze({
+    adapterId: "pt-video-generations-v1", version: "1", endpoint: "openai-videos",
+    path: "/v1/videos", provider: "powertokens-video", kind: "video",
+    taskTypes: Object.freeze(["text2video", "image2video"]),
+  }),
+});
+
+function routeError(code) { return Object.assign(new Error(code), { code }); }
+function boundedIdentity(value, max = 256) {
+  return typeof value === "string" && value.length > 0 && value.length <= max && value.trim() === value && !/[\x00-\x1f\x7f]/.test(value);
+}
+
+/** Validate a host decision's shape, never grant permission from this object.
+ * Only trusted host code may provide opts.resolvedRoute after current-scope
+ * catalog qualification; child/tool args must never be forwarded into opts.
+ */
+function validateResolvedMediaRoute(route, taskType) {
+  if (!route || typeof route !== "object" || Array.isArray(route) || route.schemaVersion !== 1 ||
+      !Object.hasOwn(MODEL_ROUTING, taskType) || route.taskType !== taskType ||
+      !boundedIdentity(route.model) || !boundedIdentity(route.scopeId) ||
+      !/^[a-f0-9]{64}$/.test(route.capabilityRevision || "")) throw routeError("MEDIA_ROUTE_INVALID");
+  const adapter = Object.hasOwn(MEDIA_ADAPTERS, route.adapterId) ? MEDIA_ADAPTERS[route.adapterId] : null;
+  if (!adapter || route.adapterVersion !== adapter.version || !adapter.taskTypes.includes(taskType) ||
+      route.endpoint !== adapter.endpoint || route.provider !== adapter.provider || route.kind !== adapter.kind) {
+    throw routeError("MEDIA_ADAPTER_UNSUPPORTED");
+  }
+  // Reconstruct the route: extra keys cannot inject a URL, parameters or provider.
+  return Object.freeze({ schemaVersion: 1, taskType, model: route.model,
+    scopeId: route.scopeId, capabilityRevision: route.capabilityRevision,
+    adapterId: adapter.adapterId, adapterVersion: adapter.version, endpoint: adapter.endpoint,
+    provider: adapter.provider, kind: adapter.kind, path: adapter.path,
+    label: MODEL_ROUTING[taskType].label, needsImage: MODEL_ROUTING[taskType].needsImage });
+}
+
 function resolveRouting(taskType) {
   const t = String(taskType || "").trim();
   const routing = MODEL_ROUTING[t];
@@ -110,20 +162,23 @@ function pollDelay(attempts) {
 /** 成功/失败状态词表（坑 01：文档枚举不可信，多路兜底，含常见变体）。 */
 const SUCCESS_STATUSES = new Set(["completed", "succeeded", "success", "successful", "finished", "done", "ready", "ok"]);
 const FAIL_STATUSES = new Set(["failed", "error", "cancelled", "canceled", "expired", "rejected", "timeout"]);
+const PENDING_STATUSES = new Set(["pending", "queued", "running", "processing", "in_progress", "submitted", "created", "waiting"]);
 
 /** 从任意嵌套结构里递归收集 http/https URL（坑 01：兼容 data/result/task 包裹与别名键）。 */
 function collectHttpUrls(node, out) {
-  if (!node) return out;
-  if (typeof node === "string") {
-    if (/^https?:\/\//i.test(node)) out.push(node);
-    return out;
-  }
+  if (!node || typeof node !== "object") return out;
   if (Array.isArray(node)) {
-    for (const v of node) collectHttpUrls(v, out);
+    for (const value of node) collectHttpUrls(value, out);
     return out;
   }
-  if (typeof node === "object") {
-    for (const v of Object.values(node)) collectHttpUrls(v, out);
+  // Only result fields can contain a generated asset. A task/status URL, input
+  // image, documentation link or error URL is never a generated result.
+  for (const key of ["url", "image_url", "video_url"]) {
+    const value = node[key];
+    if (typeof value === "string" && /^https?:\/\//i.test(value)) out.push(value);
+  }
+  for (const key of ["data", "result", "output", "images", "videos", "content", "metadata"]) {
+    if (node[key] && typeof node[key] === "object") collectHttpUrls(node[key], out);
   }
   return out;
 }
@@ -200,21 +255,21 @@ async function pollTask(fetchImpl, statusUrl, apiKey, timeoutMs, kind) {
     const data = json;
     const outUrl = kind === "video" ? extractVideoUrl(data) : extractImageUrl(data);
     const status = readStatus(data).toLowerCase();
-    if (outUrl) return data;
-    if (status && SUCCESS_STATUSES.has(status)) return data;
-    if (isProgressComplete(data)) return data;
     if (status && FAIL_STATUSES.has(status)) {
       throw new Error(`${kind}任务失败（status=${status}）：${text.slice(0, 300)}`);
     }
+    if (outUrl && !PENDING_STATUSES.has(status)) return data;
+    if (status && SUCCESS_STATUSES.has(status)) return data;
+    if (isProgressComplete(data)) return data;
 
-    if (status) {
-      // 识别出的进行中状态（running/queued/pending/…）：正常排队，重置「读不出」计数
+    if (PENDING_STATUSES.has(status)) {
+      // 只有已识别的进行中状态才能清除异常计数；未知枚举不能静默空转。
       unreadable = 0;
     } else {
-      // 状态读不出来（200 但无 status/URL/progress）：显式计数熔断（坑 02/12）
+      // 状态缺失或未知枚举：显式计数熔断（坑 02/12）
       unreadable++;
       if (unreadable >= 40) {
-        throw new Error(`${kind}任务连续 ${unreadable} 次读不出有效状态，熔断退出；最后原始响应：${text.slice(0, 500)}`);
+        throw new Error(`${kind}任务连续 ${unreadable} 次状态缺失或未知（status=${status || "<missing>"}），熔断退出；最后原始响应：${text.slice(0, 500)}`);
       }
     }
     await sleep(pollDelay(attempts));
@@ -383,10 +438,23 @@ function enforceMinImageSize(size) {
  * media.route 主入口：按 taskType 路由到 PowerTokens 生成，返回结果 URL。
  * @param {Object} context 执行上下文（shell 层为 {userId, tenantId, workspaceId}；DSH 层可空）
  * @param {Object} args    { taskType, prompt, inputImageUrl?, stylePreset?, size?, resolution?, duration?, n? }
- * @param {Object} opts    { apiKey?, baseUrl?, fetchImpl?, timeoutMs?, size?, resolution?, duration?, n? }
+ * @param {Object} opts    { apiKey?, baseUrl?, fetchImpl?, timeoutMs?, size?, resolution?, duration?, n?,
+ *   onExternalIntent?(metadata), onExternalTaskId?({ ...metadata, taskId }),
+ *   onExternalResult?({ ...metadata, outcome, providerStatus, hasResult }) }
+ *   Lifecycle callbacks are awaited; metadata contains route identifiers only (no prompt, URLs, or key).
  */
 async function callMediaRoute(context, args = {}, opts = {}) {
-  const routing = resolveRouting(args && args.taskType);
+  const hasResolvedRoute = Object.hasOwn(opts, "resolvedRoute");
+  if (opts.requireResolvedRoute === true && !hasResolvedRoute) throw routeError("MEDIA_ROUTE_REQUIRED");
+  const routing = hasResolvedRoute
+    ? validateResolvedMediaRoute(opts.resolvedRoute, args && args.taskType)
+    : resolveRouting(args && args.taskType);
+  if (hasResolvedRoute && ["model", "modelId", "provider", "endpoint", "baseUrl", "resolvedRoute"].some((key) => Object.hasOwn(args, key))) {
+    throw routeError("MEDIA_ROUTE_ARGUMENT_OVERRIDE");
+  }
+  if (hasResolvedRoute && ["pt-python-video-v1", "pt-python-seedance-v1"].includes(routing.adapterId)) {
+    return require("../../shell/media/ptvideo-executor.cjs").executePtVideoRoute(routing, args, { ...opts, parsedParams: parseMediaParams(args?.prompt) });
+  }
   let prompt = String((args && args.prompt) || "").trim();
 
   const apiKey = (opts && opts.apiKey) || process.env.POWERTOKENS_API_KEY || "";
@@ -421,22 +489,56 @@ async function callMediaRoute(context, args = {}, opts = {}) {
 
   if (!prompt) throw new Error("prompt 不能为空");
 
-  const baseUrl = (opts && opts.baseUrl) || DEFAULT_BASE_URL;
+  const baseUrl = String((opts && opts.baseUrl) || DEFAULT_BASE_URL).replace(/\/+$/, "");
   // 本地轮询守护超时（坑 07：非 PT 服务端上限；视频异步生成无硬上限，给足本地守护窗口）
   const timeoutMs = (opts && opts.timeoutMs) || (routing.kind === "image" ? 120000 : 3600000);
   const startedAt = Date.now();
+
+  // Lifecycle metadata is intentionally limited to routing identity. Never pass
+  // prompt, image URLs, API credentials, request bodies, or generated result URLs.
+  const externalMetadata = Object.freeze({
+    operation: "media.generate",
+    provider: routing.provider,
+    taskType: routing.taskType,
+    model: routing.model,
+    kind: routing.kind,
+    endpoint: routing.path || (routing.kind === "image" ? "/v1/images/generations" : "/v1/videos"),
+  });
+  const invokeLifecycle = async (name, payload) => {
+    const callback = opts && opts[name];
+    if (callback === undefined) return;
+    if (typeof callback !== "function") throw new TypeError(`${name} must be a function`);
+    try {
+      await callback(payload);
+    } catch (cause) {
+      const error = new Error(`External lifecycle callback failed: ${name}`, { cause });
+      error.code = `EXTERNAL_${name.replace(/^onExternal/, "").replace(/[A-Z]/g, (letter) => "_" + letter).replace(/^_/, "").toUpperCase()}_CALLBACK_FAILED`;
+      error.lifecycleCallback = name;
+      throw error;
+    }
+  };
+  for (const name of ["onExternalIntent", "onExternalTaskId", "onExternalResult"]) {
+    if (opts?.[name] !== undefined && typeof opts[name] !== "function") throw new TypeError(`${name} must be a function`);
+  }
 
   // 上游解析：从 prompt 提取尺寸/分辨率/时长/张数（有合法解析值就准备用，无值走兜底）
   const parsed = parseMediaParams(prompt);
 
   let url = null;
+  let taskId = null;
   let rawSize = null;
   let sizeGuard = null;
   if (routing.kind === "image") {
     // size：显式 opts.size > 解析 parsed.size > 兜底 2048x2048
     rawSize = (opts && opts.size) || parsed.size || "2048x2048";
     // 最低像素护栏：PT Seedream 低于 1920×1920（3686400 px）会 400，统一回退 2048x2048
-    sizeGuard = enforceMinImageSize(rawSize);
+    // The legacy Seedream constraint is not evidence about a dynamically
+    // qualified model. Dynamic adapters preserve explicit dimensions instead.
+    if (hasResolvedRoute) {
+      const match = String(rawSize).match(/^(\d{2,4})[x×*](\d{2,4})$/i);
+      if (!match || Number(match[1]) < 1 || Number(match[2]) < 1) throw routeError("MEDIA_SIZE_INVALID");
+      sizeGuard = { size: `${Number(match[1])}x${Number(match[2])}`, adjusted: false, reason: "" };
+    } else sizeGuard = enforceMinImageSize(rawSize);
     if (sizeGuard.adjusted) console.warn("[media] " + sizeGuard.reason);
     const body = {
       model: routing.model,
@@ -445,11 +547,21 @@ async function callMediaRoute(context, args = {}, opts = {}) {
       // n：显式 opts.n > 解析 parsed.n > 兜底 1
       n: (opts && opts.n) || parsed.n || 1,
     };
+    if(opts.sequentialImageGeneration!==undefined&&opts.sequentialImageGeneration!=="disabled")throw routeError("MEDIA_SEQUENCE_POLICY_INVALID");
+    if(opts.sequentialImageGeneration==="disabled"&&routing.model==="seedream-5-0-260128")body.sequential_image_generation="disabled";
     if (inputImageUrl) body.image = inputImageUrl;
+    await invokeLifecycle("onExternalIntent", externalMetadata);
     let data = await postJson(fetchImpl, `${baseUrl}/v1/images/generations`, body, apiKey);
-    const taskId = data && (data.task_id || (data.data && data.data.task_id));
-    if (taskId) data = await pollImageTask(fetchImpl, baseUrl, taskId, apiKey, timeoutMs);
-    url = extractImageUrl(data);
+    if (FAIL_STATUSES.has(readStatus(data).toLowerCase())) throw routeError("EXTERNAL_PROVIDER_FAILED");
+    taskId = data && (data.task_id || (data.data && data.data.task_id));
+    if (taskId) {
+      await invokeLifecycle("onExternalTaskId", { ...externalMetadata, taskId });
+      data = await pollImageTask(fetchImpl, baseUrl, taskId, apiKey, timeoutMs);
+    }
+    url = PENDING_STATUSES.has(readStatus(data).toLowerCase()) ? null : extractImageUrl(data);
+    if (!taskId && url) {
+      await invokeLifecycle("onExternalResult", { ...externalMetadata, outcome: "succeeded", providerStatus: "succeeded", hasResult: true });
+    }
   } else {
     // 分辨率：显式 opts.resolution > 解析 parsed.resolution > 兜底 720P（统一归一 1080P/720P）
     const rawResolution = (opts && opts.resolution) || parsed.resolution;
@@ -463,13 +575,28 @@ async function callMediaRoute(context, args = {}, opts = {}) {
       seconds: String((opts && opts.duration) || parsed.duration || 5),
       size: resolutionLabel,
     };
+    if(opts.ratio!==undefined){
+      if(!["adaptive","16:9","4:3","1:1","3:4","9:16"].includes(opts.ratio))throw routeError("MEDIA_RATIO_INVALID");
+      body.ratio=opts.ratio;
+    }
     if (inputImageUrl) body.media = [{ type: "first_frame", url: inputImageUrl }];
+    await invokeLifecycle("onExternalIntent", externalMetadata);
     const data = await postJson(fetchImpl, `${baseUrl}/v1/videos`, body, apiKey);
-    const taskId = data && (data.task_id || data.id);
-    url = extractVideoUrl(taskId ? await pollVideoTask(fetchImpl, baseUrl, taskId, apiKey, timeoutMs) : data);
+    if (FAIL_STATUSES.has(readStatus(data).toLowerCase())) throw routeError("EXTERNAL_PROVIDER_FAILED");
+    taskId = data && (data.task_id || data.id);
+    if (taskId) await invokeLifecycle("onExternalTaskId", { ...externalMetadata, taskId });
+    const result = taskId ? await pollVideoTask(fetchImpl, baseUrl, taskId, apiKey, timeoutMs) : data;
+    url = PENDING_STATUSES.has(readStatus(result).toLowerCase()) ? null : extractVideoUrl(result);
+    if (!taskId && url) {
+      await invokeLifecycle("onExternalResult", { ...externalMetadata, outcome: "succeeded", providerStatus: "succeeded", hasResult: true });
+    }
   }
 
-  if (!url) throw new Error("PowerTokens 返回里未找到结果 URL");
+  if (!url) {
+    const error = new Error("PowerTokens returned no result URL");
+    error.code = taskId ? "EXTERNAL_RESULT_URL_MISSING" : "EXTERNAL_SUBMISSION_OUTCOME_UNKNOWN";
+    throw error;
+  }
 
   return {
     taskType: routing.taskType,
@@ -487,6 +614,8 @@ async function callMediaRoute(context, args = {}, opts = {}) {
 }
 
 module.exports = {
+  MEDIA_ADAPTERS,
+  validateResolvedMediaRoute,
   MODEL_ROUTING,
   TASK_TYPES,
   resolveRouting,

@@ -1,21 +1,171 @@
-import { writeSync } from "node:fs";
+import { readFileSync, writeSync } from "node:fs";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { installModelSelection } from "@deepseek-ai/dsh-agent";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { LlmError } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import {nativeImageMessage} from './native-image-message.mjs';
 
-// media.route 依赖的 PowerTokens 调用层：makeProfile() 会把
-// business/media/powertokens.cjs 复制到本插件同目录，这里按相对路径引用。
 const require = createRequire(import.meta.url);
-const { callMediaRoute } = require("./powertokens.cjs");
+const { createRunBudget } = require("./budget.cjs");
+const { collectResponseUsage, collectModelIdentity } = require("./usage.cjs");
 const { listStylePresets, stylePresetSummary } = require("./presets.cjs");
-// ga.query 依赖的 GA4 连接器 executor（自包含：仅 node:http/node:crypto），
-// makeProfile() 会把 business/attribution/ga-connector/executor.js 复制为
-// 同目录 ga-query-executor.cjs，这里按相对路径引用。
-const { buildGaQueryExecutor } = require("./ga-query-executor.cjs");
-const http = require("node:http");
+// Business executors run in the trusted host through registered RPC handlers.
 const crypto = require("node:crypto");
+
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit"]);
+const NATIVE_RUN_TOOL_NAMES = new Set(['ask_user_question', 'skill', 'web_search']);
+const RUN_TOOL_NAMES = new Set([...HOST_RUN_TOOL_NAMES, ...NATIVE_RUN_TOOL_NAMES]);
+const MEDIA_TASK_TYPES = new Set(["text2image", "image2image", "text2video", "image2video"]);
+const RUNNER_FAILURE_MESSAGES = Object.freeze({
+  UNSUPPORTED_REASONING_EFFORT: 'The selected model does not support this reasoning effort',
+  UNKNOWN_MODEL: 'The selected model is absent from the active DSH configuration; operator settings upgrade is required',
+  NO_ADAPTER: 'The selected provider has no active DSH adapter',
+  INVALID_REQUEST: 'The model adapter rejected the request; diagnostic details were withheld',
+  RUN_TOOL_CONTEXT_INVALID: 'The tool request is not bound to the active Run agent and native call record',
+  RUN_DURATION_LIMIT: "Run duration limit reached before the agent turn completed",
+  RUN_MODEL_CALL_LIMIT: "Run stopped because the model-call budget was exhausted",
+  RUN_TOOL_CALL_LIMIT: "Run stopped because the tool-call budget was exhausted",
+  RUN_TOOL_NOT_ALLOWED: "Run stopped because this tool is outside the configured scope",
+  RUN_MEDIA_TASK_NOT_ALLOWED: "Run stopped because this media task is outside the configured scope",
+  RUN_DUPLICATE_TOOL_LIMIT: "Run stopped because the repeated-tool-call budget was exhausted",
+  RUN_RETRY_LIMIT: "Run stopped because the retry budget was exhausted",
+  RUN_COST_UNKNOWN: "Run stopped because cost evidence was unavailable",
+  RUN_COST_LIMIT: "Run stopped because the configured cost limit was reached",
+  RUN_CLOCK_UNKNOWN: "Run stopped because the runtime budget clock became unavailable",
+  RUN_BUDGET_CONFIG_INVALID: "Run budget configuration is missing or unreadable or invalid",
+  RUN_INTERRUPTED: "Run was interrupted because the runner process is shutting down",
+  NATIVE_IMAGE_MODEL_UNSUPPORTED: "The selected model route has no verified image input capability",
+});
+
+function safeBudgetSummary(active) {
+  if (!active) return { configured: null, status: "unavailable", snapshot: null };
+  let raw;
+  try { raw = active.budget?.snapshot?.(); } catch { raw = null; }
+  const snapshot = raw && typeof raw === "object" ? {
+    elapsedMs: Number.isFinite(raw.elapsedMs) && raw.elapsedMs >= 0 ? raw.elapsedMs : null,
+    modelCalls: Number.isSafeInteger(raw.modelCalls) && raw.modelCalls >= 0 ? raw.modelCalls : null,
+    toolCalls: Number.isSafeInteger(raw.toolCalls) && raw.toolCalls >= 0 ? raw.toolCalls : null,
+    retries: Number.isSafeInteger(raw.retries) && raw.retries >= 0 ? raw.retries : null,
+    duplicateToolCalls: Number.isSafeInteger(raw.duplicateToolCalls) && raw.duplicateToolCalls >= 0 ? raw.duplicateToolCalls : null,
+    // A configured currency cap cannot be reported as known until trusted actual
+    // provider cost evidence is available. This runner currently fails closed.
+    costStatus: active.limits?.maxCost ? "unknown" : (["unlimited", "unknown", "known"].includes(raw.costStatus) ? raw.costStatus : "unknown"),
+    policyStatus: ["configured", "unconfigured"].includes(raw.policyStatus) ? raw.policyStatus : (active.configured ? "configured" : "unconfigured"),
+    clockStatus: ["monotonic", "unknown"].includes(raw.clockStatus) ? raw.clockStatus : "unknown",
+  } : null;
+  return {
+    configured: active.configured === true,
+    status: active.configured === true ? "configured" : "unconfigured",
+    limits: active.limits && typeof active.limits === "object" ? {
+      ...Object.fromEntries(
+      ["maxDurationMs", "maxModelCalls", "maxToolCalls", "maxToolCallsPerKey", "maxRetries", "maxOutputTokens"]
+        .filter((key) => Number.isSafeInteger(active.limits[key]) && (["maxRetries", "maxToolCalls", "maxToolCallsPerKey"].includes(key) ? active.limits[key] >= 0 : active.limits[key] > 0))
+        .map((key) => [key, active.limits[key]]),
+      ),
+      ...(active.limits.maxCost && Number.isFinite(active.limits.maxCost.amount) && active.limits.maxCost.amount >= 0 &&
+        typeof active.limits.maxCost.currency === "string" && active.limits.maxCost.currency.trim()
+        ? { maxCost: { amount: active.limits.maxCost.amount, currency: active.limits.maxCost.currency.trim() } }
+        : {}),
+      ...(Number.isSafeInteger(active.maxOutputTokens) && active.maxOutputTokens > 0 ? { maxOutputTokens: active.maxOutputTokens } : {}),
+      ...(active.toolPolicy?.allowedTools ? { allowedTools: [...active.toolPolicy.allowedTools] } : {}),
+      ...(active.toolPolicy?.allowedMediaTaskTypes ? { allowedMediaTaskTypes: [...active.toolPolicy.allowedMediaTaskTypes] } : {}),
+    } : {},
+    snapshot,
+  };
+}
+
+function budgetAdmissionError(code, fallback) {
+  return new LlmError(RUNNER_FAILURE_MESSAGES[code] || fallback, code);
+}
+
+function loadRunBudgetPolicy(profile = "default") {
+  const dshHome = process.env.DSH_HOME;
+  if (!dshHome) throw Object.assign(new Error("Run budget configuration root is unavailable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  const mediaTask = /^media:(text2image|image2image|text2video|image2video)$/.exec(profile)?.[1] || null;
+  if (profile !== "default" && profile !== "csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? "run-budget-media.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
+  let text;
+  try { text = readFileSync(configPath, "utf8"); }
+  catch {
+    throw Object.assign(new Error("Run budget configuration is missing or unreadable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  }
+  const supported = new Set(["maxDurationMs", "maxModelCalls", "maxToolCalls", "maxToolCallsPerKey", "maxRetries", "maxOutputTokens", "maxCost", "allowedTools", "allowedMediaTaskTypes"]);
+  let limits = {};
+  if (text !== null) {
+    try { limits = JSON.parse(text); } catch {
+      throw Object.assign(new Error("Run budget configuration is invalid JSON"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+    }
+    if (!limits || typeof limits !== "object" || Array.isArray(limits) || !Object.keys(limits).length ||
+        Object.keys(limits).some((key) => !supported.has(key))) {
+      throw Object.assign(new Error("Run budget configuration must contain supported finite limits"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+    }
+    for (const [key, value] of Object.entries(limits)) {
+      if (key === "allowedTools" || key === "allowedMediaTaskTypes") {
+        const known = key === "allowedTools" ? RUN_TOOL_NAMES : MEDIA_TASK_TYPES;
+        if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || !known.has(item)) ||
+            new Set(value).size !== value.length) {
+          throw Object.assign(new Error("Run tool scope must contain known unique names"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+        }
+        continue;
+      }
+      if (key === "maxCost") {
+        if (!value || typeof value !== "object" || Array.isArray(value) ||
+            !Number.isFinite(value.amount) || value.amount < 0 ||
+            typeof value.currency !== "string" || !value.currency.trim() ||
+            Object.keys(value).some((field) => !["amount", "currency"].includes(field))) {
+          throw Object.assign(new Error("Run cost limit must contain a finite non-negative amount and currency"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+        }
+        limits[key] = { amount: value.amount, currency: value.currency.trim() };
+        continue;
+      }
+      const tooLong = key === "maxDurationMs" && value > MAX_TIMER_DELAY_MS;
+      const zeroAllowed = ["maxRetries", "maxToolCalls", "maxToolCallsPerKey"].includes(key) && value === 0;
+      if (!Number.isSafeInteger(value) || (value <= 0 && !zeroAllowed) || tooLong) {
+        throw Object.assign(new Error("Run budget limit is outside its supported range"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+      }
+    }
+  }
+  if (mediaTask) {
+    // This host-selected profile scopes a single explicitly granted task.
+    // Count limits remain the existing Run guard, never a monetary promise.
+    if (limits.maxDurationMs !== 180000 || limits.maxOutputTokens !== 512 || limits.maxModelCalls !== 2 || limits.maxToolCalls !== 1 || limits.maxToolCallsPerKey !== 1 || limits.maxRetries !== 0 ||
+        limits.maxCost !== undefined || limits.allowedTools?.length !== 1 || limits.allowedTools[0] !== "media_route") {
+      throw Object.assign(new Error("Controlled media policy is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+    }
+    limits.allowedMediaTaskTypes = [mediaTask];
+  }
+  const { maxOutputTokens, allowedTools, allowedMediaTaskTypes, ...budgetLimits } = limits;
+  if (allowedMediaTaskTypes && (!allowedTools || !allowedTools.includes("media_route"))) {
+    throw Object.assign(new Error("Media task scope requires the media tool"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  }
+  const toolPolicy = {
+    allowedTools: allowedTools === undefined ? null : Object.freeze([...allowedTools]),
+    allowedMediaTaskTypes: allowedMediaTaskTypes === undefined ? null : Object.freeze([...allowedMediaTaskTypes]),
+  };
+  try { return { limits: budgetLimits, maxOutputTokens, toolPolicy, budget: createRunBudget({ limits: budgetLimits }), configured: true }; }
+  catch {
+    throw Object.assign(new Error("Run budget configuration is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  }
+}
+
+function canonicalToolKey(name, args) {
+  function normalize(value) {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (Array.isArray(value)) return value.map(normalize);
+    if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+      return Object.fromEntries(Object.keys(value).sort().map((key) => [key, normalize(value[key])]));
+    }
+    throw Object.assign(new Error("Tool arguments cannot be canonicalized"), { code: "TOOL_ARGS_INVALID" });
+  }
+  let encoded;
+  try { encoded = JSON.stringify([name, normalize(args == null ? {} : args)]); }
+  catch (error) { throw Object.assign(new Error("Tool arguments cannot be canonicalized"), { code: error?.code || "TOOL_ARGS_INVALID" }); }
+  return crypto.createHash("sha256").update(encoded).digest("hex");
+}
 
 const STYLE_PRESET_ENUM = listStylePresets().map((p) => p.id);
 
@@ -24,125 +174,6 @@ const STYLE_PRESET_ENUM = listStylePresets().map((p) => p.id);
 const MEDIA_NO_LINK_NOTE =
   "生成的图片/视频已经直接显示在对话里了，回复里不要再重复粘贴链接，用一句话说明生成完成就行。";
 
-// ga.query executor 依赖 { internalKey, dashPort } 与可信 tenantId：
-// 由 dsh-adapter 在 spawn 前注入 DASH_PORT / PT_DASH_INTERNAL_KEY 到进程 env，
-// tenantId 由每条 task 命令携带（见 handleTask）。此处仅构造一次。
-const gaQueryExecutor = buildGaQueryExecutor({
-  internalKey: process.env.PT_DASH_INTERNAL_KEY || "",
-  dashPort: Number(process.env.DASH_PORT || 0),
-});
-
-const computeAnalyticsToken = (internalKey, tenantId) =>
-  crypto.createHmac("sha256", internalKey).update(String(tenantId)).digest("hex");
-
-// 把 from/to 归一化为后端 parseFunnelParams 期望的 epoch 毫秒：
-// 接受 YYYY-MM-DD（转当天起止）或已是纯数字的 epoch 毫秒；其它原样透传交给后端 400。
-function normalizeEpochBoundary(v, isEnd) {
-  const s = String(v == null ? "" : v).trim();
-  if (!s) return s;
-  if (/^\d+$/.test(s)) return s;
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return s;
-  const dayStart = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  return String(isEnd ? dayStart + 86400000 - 1 : dayStart);
-}
-
-// attribution.query 真实 executor：GET /api/attribution/funnel（带 HMAC Authorization）。
-function attributionQuery(args, tenantId) {
-  const internalKey = process.env.PT_DASH_INTERNAL_KEY || "";
-  const dashPort = Number(process.env.DASH_PORT || 0);
-  const normalized = Object.assign({}, args || {});
-  if (normalized.from != null && normalized.from !== "") normalized.from = normalizeEpochBoundary(normalized.from, false);
-  if (normalized.to != null && normalized.to !== "") normalized.to = normalizeEpochBoundary(normalized.to, true);
-  return new Promise((resolve, reject) => {
-    const qs = Object.keys(normalized)
-      .filter((k) => normalized[k] != null && normalized[k] !== "")
-      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(String(normalized[k])))
-      .join("&");
-    const path = "/api/attribution/funnel" + (qs ? "?" + qs : "");
-    const req = http.request({
-      host: "127.0.0.1",
-      port: dashPort,
-      path,
-      method: "GET",
-      headers: { authorization: "Bearer " + computeAnalyticsToken(internalKey, tenantId), accept: "application/json" },
-    }, (res) => {
-      let data = ""; res.setEncoding("utf8");
-      res.on("data", (c) => { data += c; });
-      res.on("end", () => {
-        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error("attribution.query 返回非 JSON")); }
-      });
-    });
-    req.on("error", reject);
-    req.setTimeout(20000, () => req.destroy(new Error("attribution.query 超时")));
-    req.end();
-  });
-}
-
-// attribution.quality 真实 executor：GET /api/attribution/quality（带 HMAC Authorization）。
-// from/to 为 YYYY-MM-DD（后端按 UTC 归一），返回 report（outputType=report）。
-function attributionQuality(args, tenantId) {
-  const internalKey = process.env.PT_DASH_INTERNAL_KEY || "";
-  const dashPort = Number(process.env.DASH_PORT || 0);
-  return new Promise((resolve, reject) => {
-    const qs = Object.keys(args || {})
-      .filter((k) => args[k] != null && args[k] !== "")
-      .map((k) => encodeURIComponent(k) + "=" + encodeURIComponent(String(args[k])))
-      .join("&");
-    const path = "/api/attribution/quality" + (qs ? "?" + qs : "");
-    const req = http.request({
-      host: "127.0.0.1",
-      port: dashPort,
-      path,
-      method: "GET",
-      headers: { authorization: "Bearer " + computeAnalyticsToken(internalKey, tenantId), accept: "application/json" },
-    }, (res) => {
-      let data = ""; res.setEncoding("utf8");
-      res.on("data", (c) => { data += c; });
-      res.on("end", () => {
-        try { resolve(JSON.parse(data)); } catch (e) { reject(new Error("attribution.quality 返回非 JSON")); }
-      });
-    });
-    req.on("error", reject);
-    req.setTimeout(20000, () => req.destroy(new Error("attribution.quality 超时")));
-    req.end();
-  });
-}
-
-// tracking_quality_audit 真实 executor：GET /api/business/attribution/ingestion/tracking-quality-report
-// （带 HMAC Authorization），返回 report（outputType=report）。
-function trackingQualityAudit(tenantId) {
-  const internalKey = process.env.PT_DASH_INTERNAL_KEY || "";
-  const dashPort = Number(process.env.DASH_PORT || 0);
-  return new Promise((resolve, reject) => {
-    const path = "/api/business/attribution/ingestion/tracking-quality-report";
-    const req = http.request({
-      host: "127.0.0.1",
-      port: dashPort,
-      path,
-      method: "GET",
-      headers: { authorization: "Bearer " + computeAnalyticsToken(internalKey, tenantId), accept: "application/json" },
-    }, (res) => {
-      let data = ""; res.setEncoding("utf8");
-      res.on("data", (c) => { data += c; });
-      res.on("end", () => {
-        try {
-          const body = JSON.parse(data);
-          if (res.statusCode !== 200 || !body || !body.report) {
-            const detail = body && body.error && (body.error.message || body.error.code);
-            reject(new Error("tracking_quality_audit 查询失败：" + (detail || ("HTTP " + res.statusCode))));
-            return;
-          }
-          resolve(body.report);
-        } catch (e) { reject(new Error("tracking_quality_audit 返回非 JSON")); }
-      });
-    });
-    req.on("error", reject);
-    req.setTimeout(20000, () => req.destroy(new Error("tracking_quality_audit 超时")));
-    req.end();
-  });
-}
-
 /**
  * persistent-runner —— 常驻 agent 驱动插件（替代 headless 一次性 runner）。
  * 挂载在 dsh-base 上（无 headless），通过 stdin/stdout 走 JSON-lines 协议：
@@ -150,16 +181,35 @@ function trackingQualityAudit(tenantId) {
  *               {"type":"close","sessionId":..}
  *               {"type":"ping"}  /  {"type":"exit"}
  *   stdout 事件： {"type":"ready"} | {"type":"delta","sessionId":..,"text":..}
+ *               {"type":"tool_request","requestId":..,"sessionId":..,"name":..,"args":..}
+ *   stdin  RPC回包： {"type":"tool_response","requestId":..,"sessionId":..,"ok":..,"result"|"error":..}
  *               {"type":"done","sessionId":..,"ok":..,"text":..,"reason":..,"ms":..}
  *               {"type":"closed","sessionId":..} | {"type":"error",..} | {"type":"pong"}
  * 同一 sessionId 复用同一个 Agent（session 持久 = 轨迹可见）；进程常驻不退出。
  */
 
 const name = "persistent-runner";
-const inject = ["agentDefaultModel", "agents", "sessions"];
+const inject = ["agentDefaultModel", "agents", "sessions", "attachments"];
+const RPC_PROTOCOL_VERSION = 1;
+const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1"]);
+const CONTROL_ERROR_MESSAGES = Object.freeze({
+  RUNNER_SETUP_FAILED: "Persistent runner setup failed",
+  RUNNER_QUEUE_FAILED: "Parent command could not be processed",
+  PARENT_FRAME_INVALID: "Parent frame is not valid JSON",
+  PARENT_COMMAND_UNSUPPORTED: "Parent command is not supported",
+});
+
+function emitControlError(code, sessionId) {
+  emit({ type: "error", ...(sessionId ? { sessionId } : {}), code,
+    message: CONTROL_ERROR_MESSAGES[code] || "Persistent runner request failed" });
+}
+
+function safeSessionId(value) {
+  return typeof value === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : undefined;
+}
 
 function emit(obj) {
-  try { writeSync(1, JSON.stringify(obj) + "\n"); } catch (e) { /* stdout 关闭时忽略 */ }
+  try { writeSync(1, JSON.stringify({ ...obj, protocolVersion: RPC_PROTOCOL_VERSION }) + "\n"); } catch (e) { /* stdout 关闭时忽略 */ }
 }
 
 /** 截断超长文本（轨迹展示用）。 */
@@ -173,7 +223,6 @@ function summarize(events, firstSeq) {
   let started = false;
   let text = "";
   let reason;
-  let usage;
   for (const event of events) {
     if (event.seq < firstSeq) continue;
     if (event.type === "turn/start") { started = true; continue; }
@@ -183,11 +232,39 @@ function summarize(events, firstSeq) {
         .filter((block) => block.type === "text")
         .map((block) => block.text).join("");
       if (joined !== "") text = joined;
-      if (event.data?.usage) usage = event.data.usage;
     }
     if (event.type === "turn/end") reason = event.data?.reason;
   }
-  return { text, reason, usage };
+  return { text, reason, usageEvidence: collectResponseUsage(events, firstSeq), modelIdentity: collectModelIdentity(events, firstSeq) };
+}
+
+async function guardNativeToolExecution(active, execution, next) {
+  if (!active?.agent || execution?.agent !== active.agent || !execution?.signal || typeof execution.signal.aborted !== 'boolean') {
+    throw budgetAdmissionError('RUN_TOOL_CONTEXT_INVALID');
+  }
+  // Warm agents span multiple Runs. Agent identity alone cannot authorize a
+  // delayed call from an earlier Run; require the current native tool/call log.
+  const rootCallId = execution.rootCallId || execution.callId;
+  if (!rootCallId || !active.stepNames?.has(rootCallId) ||
+      (rootCallId === execution.callId && active.stepNames.get(rootCallId) !== execution.name)) {
+    throw budgetAdmissionError('RUN_TOOL_CONTEXT_INVALID');
+  }
+  if (active.expired) throw budgetAdmissionError('RUN_DURATION_LIMIT');
+  if (active.cancelRequested || execution.signal.aborted) throw new LlmError('Run tool request was cancelled', 'RUN_CANCELLED');
+  if (!active.budget || active.configured !== true) throw budgetAdmissionError('RUN_BUDGET_CONFIG_INVALID');
+  // Existing host tool wrappers own their admission and durable RPC. Never
+  // debit them twice. All other dispatches must pass the native tool policy.
+  if (HOST_RUN_TOOL_NAMES.has(execution.name)) return next();
+  if (!NATIVE_RUN_TOOL_NAMES.has(execution.name) || !Array.isArray(active.toolPolicy?.allowedTools) || !active.toolPolicy.allowedTools.includes(execution.name)) {
+    throw budgetAdmissionError('RUN_TOOL_NOT_ALLOWED');
+  }
+  const admission = active.budget.admit({type: 'tool', key: canonicalToolKey(execution.name, execution.arguments)});
+  if (!admission.allowed) {
+    if (admission.code === 'RUN_DURATION_LIMIT') active.expire?.();
+    throw budgetAdmissionError(admission.code);
+  }
+  try { return await next(); }
+  finally { admission.settle(); }
 }
 
 function apply(ctx) {
@@ -197,23 +274,86 @@ function apply(ctx) {
     const defaultModel = ctx.get("agentDefaultModel");
     const sessions = ctx.get("sessions");
     if (!agents || !defaultModel || !sessions) {
-      emit({ type: "error", message: "persistent-runner: 核心服务缺失（agents/sessions/agentDefaultModel）" });
+      emitControlError("RUNNER_SETUP_FAILED");
       return;
     }
 
     const agentMap = new Map();       // sessionId -> { agent }
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
-    const stepNames = new Map();      // callId -> 工具名（tool/result 时回填名字）
-    const stepStarted = new Map();    // callId -> { name, args, t0 }（tool/call 起，tool/result 算真实耗时）
-    let mediaRouteResults = [];       // 本 turn 全部 media.route 的结构化结果 [{ type, url }]（C4：不再只保留最后一次）
-    let lastMediaRouteModel = null;   // 本 turn 最近一次 media.route 实际使用的生成模型（seedream / wan 等，step 展示用）
-    let currentTenantId = "";         // 本 turn 租户上下文（cmd.tenantId 注入，供 ga.query / attribution.query）
-    let reportResults = [];           // 本 turn 全部 report 工具返回的 report（outputType=report，透传前端抽屉）（C4：不再只保留最后一次）
+    const pendingToolRequests = new Map(); // requestId -> { sessionId, resolve, reject }
+    const activeTurns = new Map(); // sessionId -> isolated turn context
+    const sessionQueues = new Map(); // sessionId -> FIFO task/close chain
+    let shutdownRequested = false;
+    let shutdownPromise = null;
+
+    function registerRunTool(agentCtx, sessionId, name, definition) {
+      // Persistent agents outlive one Run budget. Register the tool once and
+      // apply the current turn's limits at execution, so a later explicitly
+      // configured Run can use it without losing conversation history.
+      const execute = definition.execute;
+      if (typeof execute !== "function") throw new TypeError("Run tool requires an execute function");
+      const wrapped = {
+        ...definition,
+        async execute(...args) {
+          const active = activeTurns.get(sessionId);
+          if (!active?.budget || active.configured !== true) {
+            throw budgetAdmissionError("RUN_BUDGET_CONFIG_INVALID", "Run tool budget is unavailable");
+          }
+          if (active.toolPolicy?.allowedTools && !active.toolPolicy.allowedTools.includes(name)) {
+            throw budgetAdmissionError("RUN_TOOL_NOT_ALLOWED", "Run tool is outside the configured scope");
+          }
+          if (name === "media_route" && active.toolPolicy?.allowedMediaTaskTypes &&
+              !active.toolPolicy.allowedMediaTaskTypes.includes(args[0]?.taskType)) {
+            throw budgetAdmissionError("RUN_MEDIA_TASK_NOT_ALLOWED", "Run media task is outside the configured scope");
+          }
+          const admission = active.budget.admit({ type: "tool", key: canonicalToolKey(name, args[0]) });
+          if (!admission.allowed) {
+            if (admission.code === "RUN_DURATION_LIMIT") active.expire?.();
+            throw budgetAdmissionError(admission.code, "Run tool admission was denied by the configured budget");
+          }
+          try { return await execute.apply(this, args); }
+          finally { admission.settle(); }
+        },
+      };
+      agentCtx.tools.register(defineTool(wrapped));
+    }
+
+    function rejectToolRequests(sessionId, code, message) {
+      for (const [requestId, pending] of [...pendingToolRequests.entries()]) {
+        if (sessionId != null && pending.sessionId !== sessionId) continue;
+        pendingToolRequests.delete(requestId);
+        pending.reject(Object.assign(new Error(message), { code }));
+      }
+    }
+
+    function requestParentTool(sessionId, name, args) {
+      const requestId = crypto.randomUUID();
+      return new Promise((resolve, reject) => {
+        pendingToolRequests.set(requestId, { sessionId, resolve, reject });
+        emit({ type: "tool_request", requestId, sessionId, name, args: args == null ? {} : args });
+      });
+    }
+
+    function handleToolResponse(frame) {
+      if (typeof frame.requestId !== "string" || typeof frame.sessionId !== "string") return;
+      const pending = pendingToolRequests.get(frame.requestId);
+      if (!pending || pending.sessionId !== frame.sessionId) return;
+      pendingToolRequests.delete(frame.requestId);
+      if (frame.protocolVersion !== RPC_PROTOCOL_VERSION) {
+        pending.reject(Object.assign(new Error("Parent RPC protocol version mismatch"), { code: "PROTOCOL_VERSION_MISMATCH" }));
+        return;
+      }
+      if (frame.ok === true) { pending.resolve(frame.result); return; }
+      const code = typeof frame.error?.code === "string" && /^[A-Za-z0-9_.-]{1,64}$/.test(frame.error.code) ? frame.error.code : "TOOL_REQUEST_FAILED";
+      const message = typeof frame.error?.message === "string" ? frame.error.message.slice(0, 200) : "Parent tool request failed";
+      pending.reject(Object.assign(new Error(message), { code }));
+    }
 
     // 逐字流 + 轨迹：把 assistant 文本增量 / 工具调用路由到对应 sessionId
     ctx.on("session/event", (session, event) => {
       const sid = sessionKey.get(session);
       if (!sid) return;
+      const turn = activeTurns.get(sid);
       if (event.type === "assistant/chunk") {
         const chunk = event.data?.chunk;
         if (chunk?.type === "text-delta" && chunk.text) {
@@ -223,9 +363,9 @@ function apply(ctx) {
       }
       if (event.type === "tool/call") {
         const d = event.data || {};
-        if (d.callId) stepNames.set(d.callId, d.name || "tool");
+        if (d.callId && turn) turn.stepNames.set(d.callId, d.name || "tool");
         const args = truncate(JSON.stringify(d.arguments), 200);
-        if (d.callId) stepStarted.set(d.callId, { name: d.name || "tool", args, t0: Date.now() });
+        if (d.callId && turn) turn.stepStarted.set(d.callId, { name: d.name || "tool", args, t0: Date.now() });
         emit({ type: "step", sessionId: sid, callId: d.callId, name: d.name || "tool", args, phase: "call" });
         return;
       }
@@ -233,8 +373,8 @@ function apply(ctx) {
         const d = event.data || {};
         const msg = d.message || {};
         const callId = msg.source && msg.source.callId;
-        const started = callId ? stepStarted.get(callId) : null;
-        const name = (started && started.name) || stepNames.get(callId) || "tool";
+        const started = callId && turn ? turn.stepStarted.get(callId) : null;
+        const name = (started && started.name) || (callId && turn ? turn.stepNames.get(callId) : null) || "tool";
         let text = "";
         let isError = false;
         const blocks = Array.isArray(msg.content) ? msg.content : [];
@@ -244,35 +384,192 @@ function apply(ctx) {
           if (b.isError === true) isError = true;
         }
         const durationMs = started ? (Date.now() - started.t0) : null;
-        const modelName = (name === "media_route" || name === "media.route") ? lastMediaRouteModel : null;
+        const modelName = (name === "media_route" || name === "media.route") ? turn?.lastMediaRouteModel ?? null : null;
         emit({ type: "step", sessionId: sid, callId, name, args: started ? started.args : undefined, result: truncate(text, 400), isError, durationMs, modelName, phase: "result" });
-        if (callId) stepStarted.delete(callId);
+        if (callId && turn) turn.stepStarted.delete(callId);
         return;
       }
     });
 
+    // Metadata uses the installed LLM service only; never creates an Agent/task.
+    let metadataBusy = false;
+    async function handleModelInfo(cmd) {
+      const requestId = safeSessionId(cmd.requestId);
+      if (!requestId) return;
+      const reply = (value) => emit({ type: "model_info", requestId, ...value });
+      if (typeof cmd.provider !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(cmd.provider)
+          || typeof cmd.model !== "string" || !/^[A-Za-z0-9_./:@+-]{1,256}$/.test(cmd.model)) {
+        reply({ ok: false, code: "MODEL_INFO_INVALID" }); return;
+      }
+      if (metadataBusy) { reply({ ok: false, code: "MODEL_INFO_BUSY" }); return; }
+      metadataBusy = true;
+      try {
+        const info = await ctx.get("llm").resolveModelInfo(cmd.provider, cmd.model);
+        const entries = info?.reasoning?.efforts;
+        const efforts = [];
+        if (entries !== undefined) {
+          if (!Array.isArray(entries) || entries.length > 16) throw new Error();
+          for (const entry of entries) {
+            if (typeof entry?.id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(entry.id)
+                || typeof entry.name !== "string" || entry.name.length > 128
+                || efforts.some((item) => item.id === entry.id)) throw new Error();
+            efforts.push({ id: entry.id, name: entry.name });
+          }
+        }
+        const defaultEffort = info?.reasoning?.defaultEffort;
+        if (defaultEffort !== undefined && !efforts.some((item) => item.id === defaultEffort)) throw new Error();
+        reply({ ok: true, provider: cmd.provider, model: cmd.model, efforts,
+          ...(defaultEffort === undefined ? {} : { defaultEffort }) });
+      } catch {
+        reply({ ok: false, code: "MODEL_INFO_UNAVAILABLE" });
+      } finally { metadataBusy = false; }
+    }
+
     async function handleTask(cmd) {
+      if (cmd.protocolVersion !== RPC_PROTOCOL_VERSION || typeof cmd.sessionId !== "string"
+          || !cmd.sessionId.trim() || typeof cmd.task !== "string" || !cmd.task.trim()
+          || typeof cmd.tenantId !== "string" || !cmd.tenantId.trim()
+          || (cmd.model != null && typeof cmd.model !== "string")
+          || (cmd.reasoningEffort !== undefined && (typeof cmd.reasoningEffort !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(cmd.reasoningEffort)))
+          || (cmd.recordModelIntents !== undefined && typeof cmd.recordModelIntents !== "boolean")
+          || (cmd.budgetProfile !== undefined && cmd.budgetProfile !== "csv" && !/^media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
+        emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
+          code: cmd.protocolVersion !== RPC_PROTOCOL_VERSION ? "PROTOCOL_VERSION_MISMATCH" : "TASK_FRAME_INVALID",
+          message: "Parent task frame is invalid" });
+        return;
+      }
       const sid = String(cmd.sessionId || "").trim();
       const task = String(cmd.task || "").trim();
       if (!sid) { emit({ type: "done", sessionId: sid, ok: false, error: "缺 sessionId" }); return; }
       if (!task) { emit({ type: "done", sessionId: sid, ok: false, error: "任务不能为空" }); return; }
       const t0 = Date.now();
-      currentTenantId = String(cmd.tenantId || "").trim();
+      const turn = {
+        sessionId: sid,
+        recordModelIntents: cmd.recordModelIntents === true,
+        tenantId: String(cmd.tenantId || "").trim(),
+        mediaRouteResults: [],
+        lastMediaRouteModel: null,
+        reportResults: [],
+        stepNames: new Map(),
+        stepStarted: new Map(),
+        agent: null,
+        cancelRequested: false,
+        cancelOrigin: null,
+      };
 
       let rec = agentMap.get(sid);
+      turn.requiresImage = Boolean(rec?.hasNativeImages || (Array.isArray(cmd.inputImages) && cmd.inputImages.length));
+      let durationTimer = null;
+      let activeBudget = null;
+      let firstSeq = null;
+      activeTurns.set(sid, turn);
       try {
+        const defaults = defaultModel.currentSelection();
+        const selection = rec?.modelSelection || { current: { provider: cmd.provider || defaults.provider, model: cmd.model || defaults.model }, assembled: void 0 };
+        // The model-selection hooks are installed once per persistent agent;
+        // update their shared ref before each followup so a reused session can
+        // honor the model selected for this task.
+        const nextSelection = { provider: cmd.provider || defaults.provider, model: cmd.model || defaults.model,
+          ...(cmd.reasoningEffort === undefined ? {} : {reasoningEffort:cmd.reasoningEffort}) };
+        const policy = loadRunBudgetPolicy(cmd.budgetProfile || "default");
+        activeBudget = {
+          budget: policy?.budget || null,
+          configured: policy?.configured === true,
+          limits: policy?.limits || {},
+          toolPolicy: policy?.toolPolicy || null,
+          maxOutputTokens: Number.isSafeInteger(policy?.maxOutputTokens) ? policy.maxOutputTokens : null,
+          expired: false,
+          expire: () => {
+            if (activeBudget.expired) return;
+            activeBudget.expired = true;
+            rejectToolRequests(sid, "RUN_DURATION_LIMIT", "Run duration limit reached");
+            turn.cancelRequested = true;
+            turn.preflightController?.abort();
+            turn.cancelOrigin = "timeout";
+            if (turn.agent) { try { turn.agent.cancel({ kind: "hook" }); } catch { /* preserve timeout outcome */ } }
+          },
+        };
+        Object.assign(turn, activeBudget);
+        activeTurns.set(sid, turn);
+        if (policy?.limits.maxDurationMs != null) {
+          durationTimer = setTimeout(() => activeBudget.expire(), policy.limits.maxDurationMs);
+        }
+        if (cmd.reasoningEffort !== undefined) {
+          turn.preflightController = new AbortController();
+          await ctx.get("llm").resolveCallConfig(nextSelection,turn.preflightController.signal);
+        }
+        if (turn.cancelRequested || activeBudget.expired) throw new LlmError("Run canceled before selection",activeBudget.expired ? "RUN_DURATION_LIMIT" : "RUN_CANCELLED");
+        selection.current = nextSelection;
+        selection.assembled = void 0;
         if (!rec) {
-          const selection = defaultModel.currentSelection();
-          const provider = cmd.provider || selection.provider;
-          const model = cmd.model || selection.model;
+          const provider = selection.current.provider;
+          const model = selection.current.model;
           const { agent } = await agents.create({
             sessionId: SessionId("session-" + sid),
             meta: { cwd: process.cwd() },
-            agentOptions: { provider, model },
+            agentOptions: { provider, model, ...(activeBudget.maxOutputTokens ? { maxTokens: activeBudget.maxOutputTokens } : {}) },
             setup: (agentCtx) => {
-              installModelSelection(agentCtx, { current: { provider, model }, assembled: void 0 });
+              // Native DSH tools traverse this seam too. Binding is by the
+              // live Agent object, not a caller-supplied session/Run string.
+              agentCtx.on('tools/execute', (execution, next) => guardNativeToolExecution(activeTurns.get(sid), execution, next));
+              // Admit each model request before the adapter can send it. A
+              // configured cost cap without trusted estimate evidence fails closed.
+              agentCtx.on("agent/request", async (_payload, next) => {
+                const active = activeTurns.get(sid);
+                if (!active?.budget || active.configured !== true) {
+                  throw budgetAdmissionError("RUN_BUDGET_CONFIG_INVALID", "Run model budget is unavailable");
+                }
+                const admission = active.budget.admit({ type: "model" });
+                if (!admission.allowed) {
+                  if (admission.code === "RUN_DURATION_LIMIT") active.expire?.();
+                  throw budgetAdmissionError(admission.code, "Run model request was denied by the configured budget");
+                }
+                try {
+                  const config = { ...await next() };
+                  if(active.requiresImage){
+                    const info=await ctx.get('llm').resolveModelInfo(config.provider,config.model);
+                    if(!info.inputModalities?.includes('image'))throw budgetAdmissionError('NATIVE_IMAGE_MODEL_UNSUPPORTED');
+                    active.nativeImageCapabilityChecked=true;
+                  }
+                  // Agent instances survive multiple Run policies. Apply this
+                  // turn's output bound to the actual provider request too.
+                  if (Number.isSafeInteger(active.maxOutputTokens)) config.maxTokens = active.maxOutputTokens;
+                  else delete config.maxTokens;
+                  if (activeTurns.get(sid)?.recordModelIntents) {
+                    await requestParentTool(sid, "northstar.model_request_intent", {
+                      model: config.model, provider: config.provider,
+                      turn: _payload.turn, step: _payload.step,
+                      maxTokens: Number.isSafeInteger(config.maxTokens) ? config.maxTokens : null,
+                    });
+                  }
+                  admission.settle();
+                  return config;
+                } catch (error) {
+                  admission.settle();
+                  throw error;
+                }
+              });
+              // Cordis waterfalls wrap earlier listeners around later ones.
+              // Keep selection inside admission so awaited next() returns the
+              // current model before its durable intent is checked by the host.
+              installModelSelection(agentCtx, selection);
+              // Cap retries requested by any DSH recovery hook. The provider's
+              // own retryPolicy is separately set to zero for the controlled trial.
+              agentCtx.on("agent/request-error", async (_payload, next) => {
+                const action = await next();
+                if (action?.kind !== "retry") return action;
+                const active = activeTurns.get(sid);
+                if (!active?.budget || active.configured !== true) return undefined;
+                const admission = active.budget.admit({ type: "retry" });
+                if (!admission.allowed) {
+                  if (admission.code === "RUN_DURATION_LIMIT") active.expire?.();
+                  return undefined;
+                }
+                admission.settle();
+                return action;
+              });
               // M1 探针：注册一个与业务线无关的 demo 工具，验证「对话 → 真实 tool/call → tool/result」链路
-              agentCtx.tools.register(defineTool({
+              registerRunTool(agentCtx, sid, "get_current_time", {
                 name: "get_current_time",
                 description: "返回当前精确时间、本地日期和星期几。当用户询问「现在几点 / 今天日期 / 今天星期几 / 当前时间」时使用此工具。",
                 parameters: {},
@@ -300,11 +597,11 @@ function apply(ctx) {
                   const localDate = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
                   return { now: d.toISOString(), localDate, weekday: WEEKDAYS[d.getDay()] };
                 },
-              }));
+              });
 
               // media.route：文件路由 skill。按 taskType 选择 PowerTokens 生成模型，
               // 返回结果（图片/视频）URL。DSH 进程已注入 POWERTOKENS_API_KEY。
-              agentCtx.tools.register(defineTool({
+              registerRunTool(agentCtx, sid, "media_route", {
                 name: "media_route",
                 description:
                   "根据用户上传的图片和文字描述，选择 PowerTokens 里合适的生成模型（文生图/图生图/文生视频/图生视频），生成并返回结果图片或视频的 URL。" +
@@ -340,6 +637,18 @@ function apply(ctx) {
                       kind: { type: "string" },
                       url: { type: "string" },
                       elapsedMs: { type: "number" },
+                      // Host-owned local artifact receipt. The native tool SDK
+                      // validates output before the Agent can record its media.
+                      managed: {
+                        type: "object",
+                        properties: {
+                          rel: { type: "string" },
+                          mime: { type: "string" },
+                          size: { type: "number" },
+                          sha256: { type: "string" },
+                        },
+                        additionalProperties: false,
+                      },
                     },
                     additionalProperties: false,
                   },
@@ -351,15 +660,45 @@ function apply(ctx) {
                   },
                 },
                 async execute(args) {
-                  const result = await callMediaRoute({}, args || {});
-                  if (result && result.url) mediaRouteResults.push({ type: result.kind, url: result.url });
-                  lastMediaRouteModel = result && result.model ? String(result.model) : null;
+                  // The trusted built-in media tool crosses to the parent so it
+                  // can attach durable run identity and budget admission. Keep
+                  // the original JSON arguments intact; arbitrary tools cannot
+                  // select this fixed RPC name through this code path.
+                  const result = await requestParentTool(sid, "media.route", args || {});
+                  const turn = activeTurns.get(sid);
+                  if (turn && result && result.url) turn.mediaRouteResults.push({ type: result.kind, url: result.url });
+                  if (turn) turn.lastMediaRouteModel = result && result.model ? String(result.model) : null;
                   return result;
                 },
-              }));
+              });
+
+              registerRunTool(agentCtx, sid, "csv_analyze", {
+                name: "csv_analyze",
+                description: "仅当用户已上传当前 CSV，且明确给出列号与数据起始行时，对指定列做精确求和、有效数值计数、最小值或最大值。不要猜表头、列号或日期；sourceRef 和 sourceSha256 必须取自当前 CSV 文档元数据。",
+                parameters: {
+                  sourceRef: { type: "string", required: true },
+                  sourceSha256: { type: "string", required: true },
+                  operation: { type: "string", enum: ["sum", "count", "min", "max"], required: true },
+                  column: { type: "number", required: true },
+                  startRow: { type: "number", required: true },
+                },
+                output: {
+                  schema: { type: "object", properties: {
+                    kind: { type: "string" }, result: { type: "string" },
+                    valueCount: { type: "number" }, source: { type: "object", additionalProperties: true },
+                    selection: { type: "object", additionalProperties: true },
+                    evidence: { type: "object", additionalProperties: true },
+                    artifact: { type: "object", additionalProperties: true },
+                  }, additionalProperties: false },
+                  render: (_args, value) => [{ type: "text", text: JSON.stringify(value) }],
+                },
+                async execute(args) {
+                  return requestParentTool(sid, "csv.analyze", args || {});
+                },
+              });
 
               // ga.query：查询已授权 GA4 真实指标，outputType=report，结果透传前端抽屉。
-              agentCtx.tools.register(defineTool({
+              registerRunTool(agentCtx, sid, "ga_query", {
                 name: "ga_query",
                 description: "查询已授权 GA4 property 的真实指标。metrics/dimensions 使用 GA4 API 名称；dateRange 使用 YYYY-MM-DD、today、yesterday 或 NdaysAgo；用户要求整理成表格时设置 format=table。对应业务工具「ga.query」。",
                 parameters: {
@@ -388,15 +727,17 @@ function apply(ctx) {
                   },
                 },
                 async execute(args) {
-                  if (!currentTenantId) throw new Error("ga.query 需要 tenantId");
-                  const report = await gaQueryExecutor(args || {}, { tenantId: currentTenantId });
-                  if (report && typeof report === "object") reportResults.push(report);
+                  const turn = activeTurns.get(sid);
+                  if (!turn?.tenantId) throw new Error("ga.query 需要 tenantId");
+                  const executor = ctx.get("persistentRunnerExecutors")?.gaQuery || ((input) => requestParentTool(sid, "ga.query", input));
+                  const report = await executor(args || {}, { tenantId: turn.tenantId });
+                  if (turn && report && typeof report === "object") turn.reportResults.push(report);
                   return report;
                 },
-              }));
+              });
 
               // attribution.query：查询归因漏斗/素材表现（真实数据来自业务线只读接口）。
-              agentCtx.tools.register(defineTool({
+              registerRunTool(agentCtx, sid, "attribution_query", {
                 name: "attribution_query",
                 description: "查询指定时间范围内的归因漏斗和素材表现。当用户询问广告归因、转化漏斗、素材投放效果、各平台/国家表现时使用此工具。对应业务工具「attribution.query」。",
                 parameters: {
@@ -410,13 +751,15 @@ function apply(ctx) {
                   render: (_args, value) => [{ type: "text", text: typeof value === "string" ? value : JSON.stringify(value) }],
                 },
                 async execute(args) {
-                  if (!currentTenantId) throw new Error("attribution.query 需要 tenantId");
-                  return attributionQuery(args || {}, currentTenantId);
+                  const turn = activeTurns.get(sid);
+                  if (!turn?.tenantId) throw new Error("attribution.query 需要 tenantId");
+                  const executor = ctx.get("persistentRunnerExecutors")?.attributionQuery || ((input) => requestParentTool(sid, "attribution.query", input));
+                  return executor(args || {}, turn.tenantId);
                 },
-              }));
+              });
 
               // attribution.quality：只读分析归因埋点质量，outputType=report，结果透传前端抽屉。
-              agentCtx.tools.register(defineTool({
+              registerRunTool(agentCtx, sid, "attribution_quality", {
                 name: "attribution_quality",
                 description: "只读分析当前租户真实归因事件的六类关键事件覆盖率、user_id完整率及已导入sGTM日志的有效ID重复率；返回评分、问题与规则建议。当用户询问归因埋点质量、事件覆盖、数据完整度时使用此工具。对应业务工具「attribution.quality」。",
                 parameters: {
@@ -452,15 +795,17 @@ function apply(ctx) {
                   },
                 },
                 async execute(args) {
-                  if (!currentTenantId) throw new Error("attribution.quality 需要 tenantId");
-                  const report = await attributionQuality(args || {}, currentTenantId);
-                  if (report && typeof report === "object") reportResults.push(report);
+                  const turn = activeTurns.get(sid);
+                  if (!turn?.tenantId) throw new Error("attribution.quality 需要 tenantId");
+                  const executor = ctx.get("persistentRunnerExecutors")?.attributionQuality || ((input) => requestParentTool(sid, "attribution.quality", input));
+                  const report = await executor(args || {}, turn.tenantId);
+                  if (turn && report && typeof report === "object") turn.reportResults.push(report);
                   return report;
                 },
-              }));
+              });
 
               // tracking_quality_audit：埋点质量 AI 分析，outputType=report，结果透传前端抽屉。
-              agentCtx.tools.register(defineTool({
+              registerRunTool(agentCtx, sid, "tracking_quality_audit", {
                 name: "tracking_quality_audit",
                 description: "只读审计当前工作区的真实事件适配统计，按 Token 业务模板（saas_token_marketplace）返回埋点质量评分、问题列表与整改建议；无数据不评高分。当用户询问埋点质量、事件适配质量、事件 ID / 时间戳兜底情况时使用此工具。对应业务 skill「tracking_quality_audit」。",
                 parameters: {
@@ -497,46 +842,108 @@ function apply(ctx) {
                   },
                 },
                 async execute(args) {
-                  if (!currentTenantId) throw new Error("tracking_quality_audit 需要 tenantId");
-                  const report = await trackingQualityAudit(currentTenantId);
-                  if (report && typeof report === "object") reportResults.push(report);
+                  const turn = activeTurns.get(sid);
+                  if (!turn?.tenantId) throw new Error("tracking_quality_audit 需要 tenantId");
+                  const executor = ctx.get("persistentRunnerExecutors")?.trackingQualityAudit || (() => requestParentTool(sid, "tracking_quality_audit", args || {}));
+                  const report = await executor(turn.tenantId);
+                  if (turn && report && typeof report === "object") turn.reportResults.push(report);
                   return report;
                 },
-              }));
+              });
             },
           });
           await agent.whenIdle();
-          rec = { agent };
+          rec = { agent, modelSelection: selection };
           agentMap.set(sid, rec);
           sessionKey.set(agent.session, sid);
+          turn.agent = agent;
+          if (activeBudget.expired || turn.cancelRequested) { try { agent.cancel({ kind: activeBudget.expired || turn.cancelOrigin === "shutdown" ? "hook" : "user" }); } catch { /* preserve timeout outcome */ } }
         }
 
         const agent = rec.agent;
-        const firstSeq = agent.session.seq;
-        mediaRouteResults = [];
-        lastMediaRouteModel = null;
-        reportResults = [];
-        agent.followup(createUserMessage({
-          content: [{ type: "text", text: task + "\n\n[系统提示] " + MEDIA_NO_LINK_NOTE }],
-          source: { kind: "user" },
-        }));
+        turn.agent = agent;
+        firstSeq = agent.session.seq;
+        if (activeBudget.expired) {
+          rejectToolRequests(sid, "RUN_DURATION_LIMIT", "Run duration limit reached");
+          const usageEvidence = collectResponseUsage(agent.session.events, firstSeq);
+          emit({ type: "done", sessionId: sid, ok: false, text: "", canceled: true, stopReason: "timeout", error: "Run duration limit reached", usage: usageEvidence.usage, usageEvidence, modelIdentity: collectModelIdentity(agent.session.events, firstSeq), budget: safeBudgetSummary(activeBudget), ms: Date.now() - t0 });
+          return;
+        }
+        if (turn.cancelRequested) {
+          const usageEvidence = collectResponseUsage(agent.session.events, firstSeq);
+          const shutdown = turn.cancelOrigin === "shutdown";
+          emit({ type: "done", sessionId: sid, ok: false, code: shutdown ? "RUN_INTERRUPTED" : "RUN_CANCELLED", error: shutdown ? RUNNER_FAILURE_MESSAGES.RUN_INTERRUPTED : "Run was cancelled by the parent request", text: "", canceled: !shutdown, reason: shutdown ? "shutdown" : "user", usage: usageEvidence.usage, usageEvidence, modelIdentity: collectModelIdentity(agent.session.events, firstSeq), budget: safeBudgetSummary(activeBudget), ms: Date.now() - t0 });
+          return;
+        }
+        const userMessage = await nativeImageMessage({attachments:ctx.get('attachments'),
+          text:task + "\n\n[系统提示] " + MEDIA_NO_LINK_NOTE, images:cmd.inputImages ?? []});
+        turn.newNativeImageCount=userMessage.content.filter(block=>block.type==='image').length;
+        if(turn.cancelRequested||activeBudget.expired)throw new LlmError('Run cancelled before image dispatch',activeBudget.expired?'RUN_DURATION_LIMIT':'RUN_CANCELLED');
+        agent.followup(userMessage);
+        if(userMessage.content.some(block=>block.type==='image'))rec.hasNativeImages=true;
         await agent.whenIdle();
         await sessions.flush(agent.session);
         const outcome = summarize(agent.session.events, firstSeq);
+        rejectToolRequests(sid, "TASK_FINISHED", "DSH task finished before the parent response arrived");
+        const stopRequested = activeBudget.expired || turn.cancelOrigin === "user" || ["user", "parent"].includes(outcome.reason?.kind);
+        let failure = null;
+        if (activeBudget.expired) {
+          failure = { code: "RUN_DURATION_LIMIT", message: RUNNER_FAILURE_MESSAGES.RUN_DURATION_LIMIT };
+        } else if (turn.cancelOrigin === "shutdown") {
+          failure = { code: "RUN_INTERRUPTED", message: RUNNER_FAILURE_MESSAGES.RUN_INTERRUPTED };
+        } else if (turn.cancelOrigin === "user" || ["user", "parent"].includes(outcome.reason?.kind)) {
+          const by = turn.cancelOrigin === "user" ? "parent request" : outcome.reason.kind;
+          failure = { code: "RUN_CANCELLED", message: "Agent turn was cancelled (" + by + ")" };
+        } else if (RUNNER_FAILURE_MESSAGES[outcome.reason?.error?.code]) {
+          const code = outcome.reason.error.code;
+          failure = { code, message: RUNNER_FAILURE_MESSAGES[code] };
+        } else if (outcome.reason?.kind === "aborted") {
+          failure = {
+            code: "AGENT_TURN_ABORTED",
+            message: "Agent turn aborted by the runtime or upstream service; diagnostic details were withheld",
+          };
+        } else if (outcome.reason?.kind === "hook") {
+          failure = { code: "AGENT_HOOK_ABORTED", message: "Agent turn was interrupted by a runtime hook" };
+        } else if (outcome.reason?.kind !== "completed") {
+          failure = {
+            code: "AGENT_TURN_INCOMPLETE",
+            message: "Agent turn ended without completion (reason=" + String(outcome.reason?.kind || "unknown").slice(0, 80) + ")",
+          };
+        } else if (!outcome.text.trim()) {
+          failure = { code: "EMPTY_ASSISTANT_RESPONSE", message: "Agent turn completed without producing assistant text" };
+        }
         emit({
           type: "done", sessionId: sid,
-          ok: outcome.reason?.kind === "completed" || outcome.text !== "",
+          ok: failure === null,
+          code: failure?.code,
+          error: failure?.message,
           text: outcome.text,
-          media: mediaRouteResults.length ? mediaRouteResults : null,
-          report: reportResults.length ? reportResults : null,
-          usage: outcome.usage ?? null,
-          reason: outcome.reason?.kind ?? null,
-          reasonDetail: outcome.reason?.error ? { code: outcome.reason.error.code, message: outcome.reason.error.message } : null,
-          canceled: !!(outcome.reason && (outcome.reason.kind === "user" || outcome.reason.kind === "parent" || outcome.reason.kind === "hook")),
+          media: turn.mediaRouteResults.length ? turn.mediaRouteResults : null,
+          report: turn.reportResults.length ? turn.reportResults : null,
+          usage: outcome.usageEvidence.usage,
+          usageEvidence: outcome.usageEvidence,
+          modelIdentity: outcome.modelIdentity,
+          imageInput: {kind:'dsh-native-images-v1',newImageCount:turn.newNativeImageCount||0,
+            capabilityChecked:turn.nativeImageCapabilityChecked===true},
+          budget: safeBudgetSummary(activeBudget),
+          reason: activeBudget.expired ? "timeout" : outcome.reason?.kind ?? null,
+          reasonDetail: failure,
+          canceled: stopRequested,
+          stopReason: activeBudget.expired ? "timeout" : undefined,
           ms: Date.now() - t0,
         });
       } catch (e) {
-        emit({ type: "done", sessionId: sid, ok: false, error: String(e && e.message || e), ms: Date.now() - t0 });
+        rejectToolRequests(sid, "TASK_FAILED", "DSH task ended before the parent response arrived");
+        const usageEvidence = firstSeq == null ? collectResponseUsage([], 0) : collectResponseUsage(rec?.agent?.session?.events || [], firstSeq);
+        const code = activeBudget?.expired ? "RUN_DURATION_LIMIT" : turn.cancelOrigin === "shutdown" ? "RUN_INTERRUPTED" : turn.cancelOrigin === "user" ? "RUN_CANCELLED" : (RUNNER_FAILURE_MESSAGES[e?.code] ? e.code : "RUN_TASK_FAILED");
+        const error = activeBudget?.expired ? RUNNER_FAILURE_MESSAGES.RUN_DURATION_LIMIT
+          : turn.cancelOrigin === "shutdown" ? RUNNER_FAILURE_MESSAGES.RUN_INTERRUPTED
+            : turn.cancelOrigin === "user" ? "Run was cancelled by the parent request"
+            : (RUNNER_FAILURE_MESSAGES[code] || "Agent task failed before a complete response; diagnostic details were withheld");
+        emit({ type: "done", sessionId: sid, ok: false, code, canceled: activeBudget?.expired === true || turn.cancelOrigin === "user", stopReason: activeBudget?.expired ? "timeout" : undefined, error, usage: usageEvidence.usage, usageEvidence, modelIdentity: firstSeq == null ? collectModelIdentity([], 0) : collectModelIdentity(rec?.agent?.session?.events || [], firstSeq), budget: safeBudgetSummary(activeBudget), ms: Date.now() - t0 });
+      } finally {
+        if (durationTimer) clearTimeout(durationTimer);
+        if (activeTurns.get(sid) === turn) activeTurns.delete(sid);
       }
     }
 
@@ -554,9 +961,14 @@ function apply(ctx) {
     /** P1-4：按 sessionId 优雅取消当前 turn（agent.cancel 会中止正在跑的一轮）。 */
     function handleAbort(cmd) {
       const sid = String(cmd.sessionId || "").trim();
+      rejectToolRequests(sid, "SESSION_ABORTED", "Parent tool request was cancelled");
+      const turn = activeTurns.get(sid);
+      if (turn) { turn.cancelRequested = true; turn.cancelOrigin = "user"; turn.preflightController?.abort(); }
       const rec = agentMap.get(sid);
       if (rec) {
         try { rec.agent.cancel({ kind: "user" }); } catch (e) { /* 忽略 */ }
+        emit({ type: "aborted", sessionId: sid });
+      } else if (turn) {
         emit({ type: "aborted", sessionId: sid });
       } else {
         emit({ type: "aborted", sessionId: sid, note: "no-agent" });
@@ -564,23 +976,67 @@ function apply(ctx) {
     }
 
     function shutdown() {
-      emit({ type: "bye" });
-      const exit = ctx.get("appExit");
-      if (typeof exit === "function") exit(0);
-      else process.exit(0);
+      if (shutdownPromise) return shutdownPromise;
+      shutdownRequested = true;
+      rejectToolRequests(null, "PROCESS_CLOSED", "DSH process is closing");
+      for (const turn of activeTurns.values()) {
+        turn.cancelRequested = true;
+        turn.preflightController?.abort();
+        if (!turn.cancelOrigin) turn.cancelOrigin = "shutdown";
+        if (turn.agent) { try { turn.agent.cancel({ kind: "hook" }); } catch { /* continue drain */ } }
+      }
+      shutdownPromise = (async () => {
+        while (sessionQueues.size) {
+          await Promise.allSettled([...sessionQueues.values()]);
+          await Promise.resolve();
+        }
+        await Promise.allSettled([...agentMap.values()].map((rec) => sessions.flush(rec.agent.session)));
+        emit({ type: "bye" });
+        const exit = ctx.get("appExit");
+        if (typeof exit === "function") exit(0);
+        else process.exit(0);
+      })();
+      return shutdownPromise;
+    }
+
+    function enqueueSessionCommand(cmd) {
+      const sid = String(cmd.sessionId || "").trim();
+      if (!sid) {
+        Promise.resolve().then(() => handleLine(cmd)).catch(() => emitControlError("RUNNER_QUEUE_FAILED"));
+        return;
+      }
+      const prior = sessionQueues.get(sid) || Promise.resolve();
+      const current = prior.catch(() => {}).then(() => handleLine(cmd));
+      sessionQueues.set(sid, current);
+      current.then(
+        () => { if (sessionQueues.get(sid) === current) sessionQueues.delete(sid); },
+        () => {
+          emitControlError("RUNNER_QUEUE_FAILED", safeSessionId(sid));
+          if (sessionQueues.get(sid) === current) sessionQueues.delete(sid);
+        },
+      );
     }
 
     async function handleLine(cmd) {
+      if (cmd.protocolVersion !== RPC_PROTOCOL_VERSION) {
+        emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
+          code: "PROTOCOL_VERSION_MISMATCH", message: "Parent protocol version mismatch" });
+        return;
+      }
       switch (cmd.type) {
         case "task": await handleTask(cmd); return;
-        case "close": await handleClose(cmd); return;
-        default: emit({ type: "error", message: "unknown cmd: " + cmd.type }); return;
+        case "close": {
+          const sid = String(cmd.sessionId || "").trim();
+          rejectToolRequests(sid, "SESSION_CLOSED", "DSH session is closing");
+          await handleClose(cmd);
+          return;
+        }
+        default: emitControlError("PARENT_COMMAND_UNSUPPORTED", safeSessionId(cmd.sessionId)); return;
       }
     }
 
-    // stdin 顺序消费（task/close 排队；abort/ping/exit 立即处理，不被运行中的 task 阻塞）
+    // stdin line parser; task/close are queued per session, while RPC/abort/control frames stay immediate.
     let buf = "";
-    let queue = Promise.resolve();
     process.stdin.setEncoding("utf8");
     process.stdin.on("data", (chunk) => {
       buf += chunk;
@@ -590,21 +1046,39 @@ function apply(ctx) {
         buf = buf.slice(idx + 1);
         if (!line) continue;
         let cmd;
-        try { cmd = JSON.parse(line); } catch (e) { emit({ type: "error", message: "bad json: " + line }); continue; }
+        try { cmd = JSON.parse(line); } catch { emitControlError("PARENT_FRAME_INVALID"); continue; }
+        if (!cmd || typeof cmd !== "object" || Array.isArray(cmd)) { emitControlError("PARENT_FRAME_INVALID"); continue; }
+        if (shutdownRequested) continue;
+        // RPC replies must bypass the task/close queue: handleTask can be awaiting
+        // agent.whenIdle(), which itself may be waiting for this exact reply.
+        if (cmd.type === "tool_response") { handleToolResponse(cmd); continue; }
+        if (cmd.protocolVersion !== RPC_PROTOCOL_VERSION) {
+          emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
+            code: "PROTOCOL_VERSION_MISMATCH", message: "Parent protocol version mismatch" });
+          continue;
+        }
         // P1-4：取消命令立即生效（否则会被当前正在 await whenIdle 的 task 卡住）
         if (cmd.type === "abort") { handleAbort(cmd); continue; }
+        if (cmd.type === "close") {
+          rejectToolRequests(String(cmd.sessionId || "").trim(), "SESSION_CLOSED", "DSH session is closing");
+        }
+        if (cmd.type === "describe_model") { void handleModelInfo(cmd); continue; }
         if (cmd.type === "ping") { emit({ type: "pong" }); continue; }
-        if (cmd.type === "exit") { shutdown(); continue; }
-        queue = queue.then(() => handleLine(cmd)).catch((e) => emit({ type: "error", message: String(e && e.message || e) }));
+        if (cmd.type === "exit") { void shutdown(); continue; }
+        if (cmd.type === "close") rejectToolRequests(String(cmd.sessionId || "").trim(), "SESSION_CLOSED", "DSH session is closing");
+        if (cmd.type === "task" || cmd.type === "close") { enqueueSessionCommand(cmd); continue; }
+        emitControlError("PARENT_COMMAND_UNSUPPORTED", safeSessionId(cmd.sessionId));
       }
     });
-    process.stdin.on("end", () => { queue.then(() => shutdown()); });
+    process.stdin.on("end", () => {
+      void shutdown();
+    });
 
-    emit({ type: "ready" });
-  })().catch((e) => {
-    emit({ type: "error", message: String(e && e.message || e) });
+    emit({ type: "ready", runner: name, capabilities: RPC_CAPABILITIES });
+  })().catch(() => {
+    emitControlError("RUNNER_SETUP_FAILED");
     process.exit(1);
   });
 }
 
-export { name, inject, apply };
+export { name, inject, apply, safeBudgetSummary, guardNativeToolExecution };

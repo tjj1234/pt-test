@@ -29,6 +29,10 @@ test('real product server exposes only Google login and does not seed default cr
  const oldForgot=await fetch(origin+'/forgot',{redirect:'manual'});assert.equal(oldForgot.status,302);assert.equal(oldForgot.headers.get('location'),'/login');
  const settings=fs.readFileSync(path.join(root,'shell/public/settings.html'),'utf8');assert.doesNotMatch(settings,/修改登录密码|pwWrap|change-password/);
  const stop=await fetch(origin+'/__test_shutdown',{method:'POST',headers:{'x-shutdown-token':shutdown}});assert.equal(stop.status,200);await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error('server did not shut down')),3000);child.once('exit',()=>{clearTimeout(timer);resolve();});});
+ const logText=fs.readdirSync(path.join(dir,'logs')).filter(name=>name.startsWith('app-')).map(name=>fs.readFileSync(path.join(dir,'logs',name),'utf8')).join('\n');
+ assert.match(logText,/"event":"provider_reconciliation_started","status":"configured"/,'legacy scalar reconciliation worker starts');
+ assert.match(logText,/"event":"external_operations_worker_started","status":"configured"/,'multi-operation reconciliation worker starts');
+ assert.match(logText,/"event":"shutdown_complete"/,'shutdown completes after both workers drain');
  const dbmod=require('../../shell/db.cjs');const reopened=await dbmod.open({dataDir:path.join(dir,'db')});
  try{assert.equal((await reopened.db.query('SELECT count(*)::int AS count FROM users')).rows[0].count,0,'Google-only startup must not seed a local password user');}
  finally{await reopened.close();}

@@ -1,0 +1,13 @@
+{
+  "observedAt": "2026-10-28T08:24:26.755Z",
+  "endpoint": "GET https://api.powertokens.ai/v1/models",
+  "httpStatus": 200,
+  "modelCount": 82,
+  "modelFields": ["id", "object", "created", "owned_by", "supported_endpoint_types"],
+  "pricingReturned": false,
+  "credentialSource": "user-provided-test-key-via-non-echo-stdin",
+  "credentialPersisted": false,
+  "providerPostCount": 0,
+  "scope": "authenticated-directory-visibility-only",
+  "limitations": ["not-model-runtime-verification", "not-media-task-permission", "not-price-or-charge-proof", "not-product-end-to-end"]
+}

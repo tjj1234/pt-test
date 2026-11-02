@@ -18,7 +18,15 @@ const cfg={GOOGLE_CLIENT_ID:'storage-review-client',GOOGLE_CLIENT_SECRET:'SYNTHE
 
 async function assets(storage,uid){
  const out={};
- for(const [table,column,order]of [['users','id','id'],['conversations','user_id','id'],['user_memory','user_id','key'],['api_keys','user_id','id']])out[table]=(await storage.adapter.query(`SELECT * FROM ${table} WHERE ${column}=$1 ORDER BY ${order}`,[uid])).rows;
+ const selections={
+  users:['id,tenant_id,username,email,password_hash,role,created_at','id','id'],
+  conversations:['id,user_id,title,messages,archived,created_at,updated_at','user_id','id'],
+  user_memory:['user_id,key,value,updated_at','user_id','key'],
+  api_keys:['id,user_id,ciphertext,iv,key_last4,created_at,updated_at','user_id','id'],
+ };
+ for(const [table,[columns,column,order]]of Object.entries(selections)){
+  out[table]=(await storage.adapter.query(`SELECT ${columns} FROM ${table} WHERE ${column}=$1 ORDER BY ${order}`,[uid])).rows;
+ }
  return out;
 }
 
@@ -31,8 +39,14 @@ test('independent Google-only policy: old password session revoked, actual OIDC-
   storage=await createStorage({...opts,migrationsDir:path.join(root,'shell/storage/migrations')});
   const old=await storage.repositories.auth.register({username:'old-policy-user',email:'storage-review@example.test',password:'SyntheticReview123'});assert.equal(old.ok,true);
   // Password login exists only to reconstruct a real pre-upgrade fixture.
-  const legacy=await storage.repositories.auth.login({username:'old-policy-user',password:'SyntheticReview123'});assert.equal(legacy.ok,true);
-  const conv=await storage.repositories.conversations.create(old.user.id);
+  const legacy={token:crypto.randomBytes(32).toString('hex')};
+  await storage.adapter.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)',[old.user.id,sha(legacy.token),new Date(Date.now()+60000).toISOString()]);
+  // Seed through the legacy schema directly: the current repository writes
+  // model_preference, which is intentionally absent until the upgrade below.
+  const conv=(await storage.adapter.query(
+   "INSERT INTO conversations (user_id,title,messages) VALUES ($1,$2,'[]'::jsonb) RETURNING id",
+   [old.user.id,'新对话']
+  )).rows[0];
   await storage.repositories.conversations.saveMessages(old.user.id,conv.id,[{role:'user',text:'Preserve this exact old asset',ts:'2026-10-16T00:00:00Z'}]);
   await storage.repositories.conversations.setArchived(old.user.id,conv.id,true);
   await storage.repositories.memory.set(old.user.id,'fixture','keep-old-memory');

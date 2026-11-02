@@ -100,7 +100,7 @@ const localStorage = {
 class EventStub { constructor(t, o) { this.type = t; Object.assign(this, o || {}); } }
 
 /* ---------------- 内存版后端 ---------------- */
-const db = { usageBody: null, usageMode: "ok", summaryBody: null, summaryMode: "ok" };
+const db = { usageBody: null, usageMode: "ok", summaryBody: null, summaryMode: "ok", externalOperationsBody: null, externalOperationsNextPage: null };
 function res(obj, code) {
   return {
     ok: (code || 200) < 400, status: code || 200,
@@ -130,6 +130,11 @@ async function fakeFetch(url) {
   if (u.indexOf("/api/usage/tool-calls") === 0) {
     if (db.usageMode === "404") return res({ ok: false, error: "Not Found" }, 404);
     return res(db.usageBody);
+  }
+  if (u.indexOf("/api/usage/external-operations") === 0) {
+    return res(u.includes("afterOperationId=")
+      ? (db.externalOperationsNextPage || { ok: true, operations: [], nextCursor: null, hasMore: false })
+      : (db.externalOperationsBody || { ok: true, operations: [], nextCursor: null, hasMore: false }));
   }
   if (u === "/api/tools") return res({ ok: true, tools: [] });
   if (u === "/api/skills") return res({ ok: true, skills: [] });
@@ -171,6 +176,11 @@ const cardValue = (label) => {
   return null;
 };
 const modelBlocks = () => ctx.document.querySelector("#usageModels").children.length;
+const modelRows = () => {
+  const host = ctx.document.querySelector("#usageModels");
+  const card = host.children[0];
+  return card && card.children ? card.children.slice(1) : [];
+};
 
 console.log("\n[1] 卡片区分「无记录(暂缺)」「有记录但真是 0」「有真实值」");
 {
@@ -204,6 +214,24 @@ console.log("\n[2] 模型分布只在有数据时渲染");
   run(`bizUsageRenderModels({ byModel: [] })`);
   ok("无模型数据时不渲染", modelBlocks() === 0, String(modelBlocks()));
 }
+{
+  run(`bizUsageRenderCards({ today: { totalTokens: 99, count: 2, coverage: "partial" }, month: { totalTokens: null, count: 1, coverage: "unknown" } })`);
+  ok("partial且total已知的卡片显式标记覆盖不完整", cardValue("今日 Tokens") === "99（覆盖不完整）", cardValue("今日 Tokens"));
+  ok("unknown aggregate显示暂缺而非0", cardValue("本月 Tokens") === "暂缺", cardValue("本月 Tokens"));
+  run(`bizUsageRenderCards({ today: { totalTokens: null, count: 8, coverage: "partial", totalSemantics: "legacy_unclassified" }, month: { totalTokens: null, count: 9, coverage: "partial", totalSemantics: "mixed" } })`);
+  ok("legacy/mixed summary以部分数据呈现而不显示历史混合total", cardValue("今日 Tokens") === "部分数据" && cardValue("本月 Tokens") === "部分数据", cardValue("今日 Tokens") + "/" + cardValue("本月 Tokens"));
+  run(`bizUsageRenderModels({ byModel: [
+    { model: "partial-model", totalTokens: 99, calls: 2, coverage: "partial" },
+    { model: "unknown-model", totalTokens: null, calls: 1, coverage: "unknown" },
+    { model: "zero-model", totalTokens: 0, calls: 1, coverage: "complete" },
+    { model: "mixed-model", totalTokens: null, calls: 2, coverage: "partial", totalSemantics: "mixed" }
+  ] })`);
+  const rows = modelRows();
+  ok("partial模型不展示已知total且图表宽度为0", rows[0]?.children[2]?.textContent === "部分数据" && !rows[0]?.children[2]?.textContent.includes("99") && rows[0]?.children[1]?.children[0]?.style.cssText.includes("width:0%"), rows[0]?.children[2]?.textContent);
+  ok("unknown模型显示暂缺且不伪造0", rows[1]?.children[2]?.textContent === "暂缺" && rows[1]?.children[1]?.children[0]?.style.cssText.includes("width:0%"), rows[1]?.children[2]?.textContent);
+  ok("真实零仍明确显示0 tok", rows[2]?.children[2]?.textContent === "0 tok", rows[2]?.children[2]?.textContent);
+  ok("mixed模型不展示混合total且图表宽度为0", rows[3]?.children[2]?.textContent === "部分数据" && rows[3]?.children[1]?.children[0]?.style.cssText.includes("width:0%"), rows[3]?.children[2]?.textContent);
+}
 
 console.log("\n[3] bizLoadUsage 拉 tool-calls + summary，状态行只报调用次数");
 {
@@ -211,9 +239,19 @@ console.log("\n[3] bizLoadUsage 拉 tool-calls + summary，状态行只报调用
   db.usageBody = { ok: true, calls: [mkCall(0), mkCall(1)] };
   db.summaryMode = "ok";
   db.summaryBody = { ok: true, summary: { today: { totalTokens: 300, count: 2 }, month: { totalTokens: 300, count: 2 }, byModel: [{ model: "deepseek-chat", totalTokens: 300, calls: 2 }] } };
+  db.externalOperationsBody = { ok: true, operations: [{ runId: "run-a", operationKey: "image:poster", provider: "powertokens", taskId: "task-a", status: "pending_query", queryAttempts: 2, observedAt: "2026-10-22T01:02:03.000Z", cost: null, currency: null, costCoverage: "unknown" }], nextCursor: "cursor-a", hasMore: true };
+  db.externalOperationsNextPage = { ok: true, operations: [{ runId: "run-b", operationKey: "video:clip", provider: "powertokens", taskId: "task-b", status: "completed", queryAttempts: 1, observedAt: "2026-10-22T02:02:03.000Z", cost: null, currency: null, costCoverage: "unknown" }], nextCursor: null, hasMore: false };
   await run("bizLoadUsage()");
   ok("状态行显示调用次数（不再混 token 汇总）", usageStatus() === "2 次调用", usageStatus());
   ok("卡片显示今日汇总", cardValue("今日 Tokens") === "300", cardValue("今日 Tokens"));
+  const table = ctx.document.querySelector("#usageExternalOperations").children[0];
+  const cells = (table?.children?.[1]?.children || []).flatMap(row => row.children || []).map(cell => String(cell.textContent));
+  ok("媒体操作表展示 Run/操作键/provider/task/状态/查单次数", ["run-a", "image:poster", "powertokens", "task-a", "等待查单", "2"].every(value => cells.includes(value)), cells.join("|"));
+  ok("媒体费用与币种明确显示 unknown", cells.includes("unknown（待 PT 对账）") && cells.includes("unknown"), cells.join("|"));
+  await run("bizLoadMoreExternalOperations()");
+  const pagedCells = (ctx.document.querySelector("#usageExternalOperations").children[0]?.children?.[1]?.children || []).flatMap(row => row.children || []).map(cell => String(cell.textContent));
+  ok("加载下一页后保留首屏并追加后续操作", ["task-a", "task-b"].every(value => pagedCells.includes(value)), pagedCells.join("|"));
+  ok("末页隐藏加载更多按钮", ctx.document.querySelector("#usageExternalMore").hidden === true, String(ctx.document.querySelector("#usageExternalMore").hidden));
 }
 {
   db.usageBody = { ok: true, calls: [] };

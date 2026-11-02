@@ -1,0 +1,597 @@
+Captured: 2026-10-28T18:23:29+09:00
+HEAD: b09b1e13720cd16cd7538999d4c63386920b367c
+Branch: feature/northstar-phase1-refactor-20261016
+Command: git -c core.quotePath=false status --short
+Entries: 590; tracked changed: 67; staged: 0; untracked entries (may group dirs): 523
+Not a recursive file count. No credentials or file contents captured.
+
+ M .github/workflows/ci.yml
+ M .gitignore
+ M analytics/start.cjs
+ M business/attribution/ga-connector/executor.js
+ M business/media/powertokens.cjs
+ M docs/refactor/WORKLOG.md
+ M docs/refactor/evidence/T00-dependencies.md
+ M docs/refactor/evidence/T06-capabilities.md
+ M docs/北极星一期Agent完整开发任务包-v1.0.md
+ M docs/北极星一期生产级重构完整任务包-v2.0.md
+ M scripts/northstar-preflight.mjs
+ M scripts/run-regression.mjs
+ M shell/auth-google.cjs
+ M shell/auth.cjs
+ M shell/conversations.cjs
+ M shell/db.cjs
+ M shell/dsh-settings.yaml
+ M shell/memory.cjs
+ M shell/model-catalog.cjs
+ M shell/models/capabilities.cjs
+ M shell/package-lock.json
+ M shell/package.json
+ M shell/persistent-runner.mjs
+ M shell/public/app.js
+ M shell/public/chat-media.js
+ M shell/public/index.html
+ M shell/public/styles.css
+ M shell/runtime/artifacts.cjs
+ M shell/runtime/contract.cjs
+ M shell/runtime/dsh-adapter.cjs
+ M shell/runtime/session-scheduler.cjs
+ M shell/server.cjs
+ M shell/storage/index.cjs
+ M shell/tasks/execution.cjs
+ M shell/tasks/store.cjs
+ M shell/tenant.cjs
+ M shell/tool-calls.cjs
+ M shell/workspace/index.cjs
+ M tests/attribution/a7-acceptance.test.js
+ M tests/attribution/wire-funnel-collect.test.js
+ M tests/helpers/app-harness.mjs
+ M tests/helpers/dom-stub.mjs
+ M tests/regression/artifacts-test.mjs
+ M tests/regression/c2-dsh-env-isolation-test.mjs
+ M tests/regression/google-auth-routes-review-test.mjs
+ M tests/regression/google-auth-test.mjs
+ M tests/regression/google-login-integration-review-test.mjs
+ M tests/regression/google-login-server-test.mjs
+ M tests/regression/mock-dsh-runner.mjs
+ M tests/regression/model-capabilities-review-test.mjs
+ M tests/regression/model-capabilities-test.mjs
+ M tests/regression/model-catalog-test.mjs
+ M tests/regression/northstar-preflight-test.mjs
+ M tests/regression/session-scheduler-test.mjs
+ M tests/regression/storage-google-policy-review-test.mjs
+ M tests/regression/storage-upgrade-test.mjs
+ M tests/regression/task-execution-test.mjs
+ M tests/regression/task-store-review-test.mjs
+ M tests/regression/task-store-test.mjs
+ M tests/regression/ui-archive-readonly-test.mjs
+ M tests/regression/ui-artifact-preview-test.mjs
+ M tests/regression/ui-chat-doc-upload-frontend-test.mjs
+ M tests/regression/ui-chat-media-route-step-test.mjs
+ M tests/regression/ui-chat-media-upload-test.mjs
+ M tests/regression/ui-conversation-isolation-test.mjs
+ M tests/regression/ui-model-switch-test.mjs
+ M tests/regression/ui-usage-token-summary-test.mjs
+?? .playwright-cli/
+?? 10月23日.md
+?? "Claude outputs/"
+?? HANDOFF.md
+?? __u_brand_accept_result.txt
+?? docs/dsh-profile-snapshot/run-persistent/
+?? docs/refactor/ACCEPTANCE-STATUS-20261018.md
+?? docs/refactor/DSH-CAPABILITY-REUSE-AUDIT-20261027.md
+?? docs/refactor/EXTERNAL-DEPENDENCIES.md
+?? docs/refactor/F1-PTVIDEO-PROPOSAL-REVIEW-20261027.md
+?? docs/refactor/FUNCTION-DELIVERY-REPLAN-20261024.md
+?? docs/refactor/GEMINI-DOCEXPORT-CANDIDATE-PACKAGE-20261026.md
+?? docs/refactor/GEMINI-DOCEXPORT-INPUT-GUARD-PACKAGE-20261026.md
+?? docs/refactor/GEMINI-F1-ASSET-INGEST-HARDENING-20261026.md
+?? docs/refactor/GEMINI-F1-MEDIA-ASSET-PACKAGE-20261025.md
+?? docs/refactor/GEMINI-F1-PTVIDEO-ENGINE-HARDENING-PACKAGE-20261027.md
+?? docs/refactor/GEMINI-F1-PTVIDEO-ENGINE-R2-PACKAGE-20261027.md
+?? docs/refactor/GEMINI-F1-PTVIDEO-ENGINE-R3-PACKAGE-20261027.md
+?? docs/refactor/GEMINI-F1-PTVIDEO-RESULT-GUARD-PACKAGE-20261028.md
+?? docs/refactor/GEMINI-F2-CSV-COLUMN-SELECTION-PACKAGE-20261026.md
+?? docs/refactor/GEMINI-F3-PRICE-SNAPSHOT-SELECTION-PACKAGE-20261027.md
+?? docs/refactor/GEMINI-F3-PT-CONSUME-NORMALIZER-PACKAGE-20261028.md
+?? docs/refactor/GEMINI-MEDIA-RESERVATION-RECONCILIATION-PACKAGE-20261028.md
+?? docs/refactor/GEMINI-RELEASE-ARCHIVE-PREFLIGHT-PACKAGE-20261028.md
+?? docs/refactor/HANDOFF-20261026-F1.md
+?? docs/refactor/INCREMENTAL-AGENT-DELIVERY-GATE-20261024.md
+?? docs/refactor/OPS-CANDIDATE34-PYTHON-READONLY-20261028.md
+?? docs/refactor/OPS-CATALOG-CACHE-R5-ACTIVATE-20261028.md
+?? docs/refactor/OPS-CATALOG-CACHE-R5-PREFLIGHT-20261027.md
+?? docs/refactor/OPS-CATALOG-CACHE-R5-VERIFY-20261028.md
+?? docs/refactor/OPS-F1-CACHE-SHAPE-REQUEST-20261027.md
+?? docs/refactor/OPS-F1-CATALOG-READONLY-REQUEST-20261027.md
+?? docs/refactor/OPS-R5-IDLE-DB-CONNECTION-20261028.md
+?? docs/refactor/PT-KEY-USAGE-API-REQUEST-DRAFT-20261026.md
+?? docs/refactor/RELEASE-20261030-READINESS.md
+?? docs/refactor/T05-SECURITY-STATUS.md
+?? docs/refactor/T07-T09-IMPLEMENTATION-GAPS.md
+?? docs/refactor/T07-TASK-ROUTER-API.md
+?? docs/refactor/T08-INPUT-CONTRACT.md
+?? docs/refactor/T16-PACKAGING-AUDIT.md
+?? docs/refactor/candidates/
+?? docs/refactor/evidence/DOCEXPORT-candidate-gemini-20261026.md
+?? docs/refactor/evidence/DOCEXPORT-input-guard-gemini-20261026.md
+?? docs/refactor/evidence/DOCEXPORT-main-review-20261026.md
+?? docs/refactor/evidence/F1-candidate34-draft-20261028.md
+?? docs/refactor/evidence/F1-controlled-media-durable-admission-20261028.md
+?? docs/refactor/evidence/F1-controlled-media-profile-r3-20261028.md
+?? docs/refactor/evidence/F1-current-key-directory-delta-20261026.md
+?? docs/refactor/evidence/F1-current-key-directory-matrix-20261024.json
+?? docs/refactor/evidence/F1-current-key-directory-matrix-20261025.json
+?? docs/refactor/evidence/F1-dsh-model-identity-20261025.md
+?? docs/refactor/evidence/F1-fat-browser-readonly-20261027.md
+?? docs/refactor/evidence/F1-friday-package-reuse-audit-20261028.md
+?? docs/refactor/evidence/F1-host-bound-run-budget-contract-20261025.md
+?? docs/refactor/evidence/F1-live-catalog-readonly-20261028.json
+?? docs/refactor/evidence/F1-live-test-price-review-20261028.md
+?? docs/refactor/evidence/F1-media-asset-ingest-gemini-20261025.md
+?? docs/refactor/evidence/F1-media-qualification-audit-20261024.md
+?? docs/refactor/evidence/F1-media-qualification-matrix-20261025.md
+?? docs/refactor/evidence/F1-media-reservation-release-review-20261028.md
+?? docs/refactor/evidence/F1-pi-ai-same-model-observation-20261025.patch
+?? docs/refactor/evidence/F1-pt-live-probes-20261024.md
+?? docs/refactor/evidence/F1-ptvideo-engine-hardening-gemini-20261027.md
+?? docs/refactor/evidence/F1-ptvideo-engine-r2-gemini-20261027.md
+?? docs/refactor/evidence/F1-ptvideo-engine-r3-gemini-20261027.md
+?? docs/refactor/evidence/F1-ptvideo-main-bridge-review-20261028.md
+?? docs/refactor/evidence/F1-ptvideo-r2-main-counterexamples-20261027.json
+?? docs/refactor/evidence/F1-ptvideo-result-guard-gemini-20261028.md
+?? docs/refactor/evidence/F1-ptvideo-result-guard-main-review-20261028.md
+?? docs/refactor/evidence/F1-r2-cache-schema-backport-20261027.md
+?? docs/refactor/evidence/F1-r2-cache-schema-main-review-20261027.md
+?? docs/refactor/evidence/F1-r2-cache-schema-offline-repro-20261027.json
+?? docs/refactor/evidence/F1-r2-cache-shape-operator-summary-20261027.json
+?? docs/refactor/evidence/F1-r5-catalog-activation-browser-20261028.md
+?? docs/refactor/evidence/F1-release-latency-audit-20261024.md
+?? docs/refactor/evidence/F1-reviewed-media-qualification-builder-20261025.md
+?? docs/refactor/evidence/F1-ui-run-chain-audit-20261024.md
+?? docs/refactor/evidence/F2-csv-analysis-result-candidate-20261026.md
+?? docs/refactor/evidence/F2-csv-column-selection-gemini-20261026.md
+?? docs/refactor/evidence/F2-csv-http-sdk-main-review-20261027.md
+?? docs/refactor/evidence/F3-PT-BILLING-LOG-SAMPLES-20261027.md
+?? docs/refactor/evidence/F3-price-catalog-and-call-binding-20261027.md
+?? docs/refactor/evidence/F3-price-snapshot-selection-gemini-20261027.md
+?? docs/refactor/evidence/HANDOFF-git-status-20261028.txt
+?? docs/refactor/evidence/MEDIA-reservation-reconciliation-gemini-20261028.md
+?? docs/refactor/evidence/MEDIA-reservation-reconciliation-main-review-20261028.md
+?? docs/refactor/evidence/RELEASE-archive-preflight-gemini-20261028.md
+?? docs/refactor/evidence/T02-account-disable-20261022.md
+?? docs/refactor/evidence/T02-login-disable-serialization-20261022.md
+?? docs/refactor/evidence/T03-AC03-upstream-stop-disclosure-20261022.md
+?? docs/refactor/evidence/T03-AC04-idempotency-key-recovery-20261022.md
+?? docs/refactor/evidence/T03-AC04-storage-fail-closed-candidate26-20261022.md
+?? docs/refactor/evidence/T03-T11-media-timeout-and-truncated-reply-20261022.md
+?? docs/refactor/evidence/T03-browser-disconnect-recovery-20261022.md
+?? docs/refactor/evidence/T03-browser-refresh-20261019.jsonl
+?? docs/refactor/evidence/T03-failure-diagnostic-http-replay-20261022.md
+?? docs/refactor/evidence/T03-heartbeat-sse-postgres-20261019.md
+?? docs/refactor/evidence/T03-idempotent-ambiguous-post-retry-20261022.md
+?? docs/refactor/evidence/T03-preheader-ack-loss-ui-20261022.md
+?? docs/refactor/evidence/T03-rpc-provider-budget-20261018.md
+?? docs/refactor/evidence/T03-run-interrupted-terminal-state-candidate27-20261022.md
+?? docs/refactor/evidence/T04-adapter-abort-drain-20261020.md
+?? docs/refactor/evidence/T04-adapter-abort-drain-test-timing-20261022.md
+?? docs/refactor/evidence/T05-BYOK-host-gateway-design-review-20261022.md
+?? docs/refactor/evidence/T05-child-isolation-review-20261022.md
+?? docs/refactor/evidence/T06-paginated-current-key-http-router-20261022.md
+?? docs/refactor/evidence/T06-qualification-override-20261022.md
+?? docs/refactor/evidence/T07-conversation-model-20261019.md
+?? docs/refactor/evidence/T07-manual-router-error-reasons-20261022.md
+?? docs/refactor/evidence/T08-T09-AC08-10-21-audit-20261022.md
+?? docs/refactor/evidence/T08-T09-audit-continuation-20261022.md
+?? docs/refactor/evidence/T08-T09-independent-review-20261022.md
+?? docs/refactor/evidence/T08-input-audit-20261020.md
+?? docs/refactor/evidence/T09-csv-source-20261019.md
+?? docs/refactor/evidence/T09-deterministic-csv-analysis-20261022.md
+?? docs/refactor/evidence/T09-document-analysis-gap-audit-20261020.md
+?? docs/refactor/evidence/T10-artifact-fifo-openat-20261022.md
+?? docs/refactor/evidence/T10-artifact-tenant-symlink-audit-20261022.md
+?? docs/refactor/evidence/T10-linux-amd64-candidate17-20261022.md
+?? docs/refactor/evidence/T10-openat-leaf-race-regression-20261022.md
+?? docs/refactor/evidence/T11-failed-run-ui-20261020.md
+?? docs/refactor/evidence/T11-heartbeat-usage-design-20261023.md
+?? docs/refactor/evidence/T11-locked-sdk-zero-usage-20261023.md
+?? docs/refactor/evidence/T11-run-budget-event-limits-20261022.md
+?? docs/refactor/evidence/T11-usage-evidence-20261020.md
+?? docs/refactor/evidence/T12-memory-context-budget-20261021.md
+?? docs/refactor/evidence/T12-memory-session-invalidation-20261022.md
+?? docs/refactor/evidence/T12-untrusted-upload-memory-boundary-20261022.md
+?? docs/refactor/evidence/T12-zero-budget-boundary-20261022.md
+?? docs/refactor/evidence/T13-T14-AC15-integration-audit-20261022.md
+?? docs/refactor/evidence/T13-T14-profile-fail-closed-regression-20261022.md
+?? docs/refactor/evidence/T13-runtime-registry-observability-probe-20261022.md
+?? docs/refactor/evidence/T13-skill-release-audit-20261020.md
+?? docs/refactor/evidence/T13-skill-release-snapshot-primitives-20261022.md
+?? docs/refactor/evidence/T13-workspace-provisioning-regression-20261022.md
+?? docs/refactor/evidence/T14-profile-and-source-audit-20261020.md
+?? docs/refactor/evidence/T15-AC18-local-workflow-audit-20261022.md
+?? docs/refactor/evidence/T15-actions-and-required-checks-audit-20261022.md
+?? docs/refactor/evidence/T15-ci-gate-audit-20261020.md
+?? docs/refactor/evidence/T15-ci-token-permissions-20261021.md
+?? docs/refactor/evidence/T15-isolated-postgres-ci-gate-20261022.md
+?? docs/refactor/evidence/T15-legacy-pglite-fixture-repair-20261022.md
+?? docs/refactor/evidence/T15-local-attribution-recheck-20261022.md
+?? docs/refactor/evidence/T15-local-ci-execution-20261022.md
+?? docs/refactor/evidence/T15-postgres-runner-review-20261022.md
+?? docs/refactor/evidence/T15-ui-archive-readonly-harness-20261022.md
+?? docs/refactor/evidence/T16-Arborist-dependency-manifest-20261023.md
+?? docs/refactor/evidence/T16-T18-candidate07-rollback-health-gate-20261022.md
+?? docs/refactor/evidence/T16-candidate33-r2-input-binding-audit-20261023.md
+?? docs/refactor/evidence/T16-dependency-closure-linux-amd64-node22.23.4-portable-r4.json
+?? docs/refactor/evidence/T16-dependency-closure-linux-amd64-node22.23.4.json
+?? docs/refactor/evidence/T17-candidate-lockfile-binding-regression-20261022.md
+?? docs/refactor/evidence/T17-config-error-secret-redaction-20261022.md
+?? docs/refactor/evidence/T17-local-profile-config-evidence-20261022.md
+?? docs/refactor/evidence/T17-lockfile-endpoint-provenance-20261022.md
+?? docs/refactor/evidence/T18-deployment-recovery-audit-20261020.md
+?? docs/refactor/evidence/T18-dirfd-primitives-20261022.md
+?? docs/refactor/evidence/T18-synthetic-backup-restore-20261022.md
+?? docs/refactor/evidence/assets/
+?? docs/refactor/evidence/candidate18-budget-summary-release-20261022.md
+?? docs/refactor/evidence/candidate19-package-verification-20261022.md
+?? docs/refactor/evidence/candidate20-package-verification-20261022.md
+?? docs/refactor/evidence/candidate21-package-verification-20261022.md
+?? docs/refactor/evidence/candidate22-package-verification-20261022.md
+?? docs/refactor/evidence/candidate23-package-verification-20261022.md
+?? docs/refactor/evidence/candidate28-package-verification-20261022.md
+?? docs/refactor/evidence/candidate33-model-catalog-diagnostics-draft-20261023.md
+?? docs/refactor/evidence/candidate33-model-catalog-diagnostics-draft-r1-20261023.md
+?? docs/refactor/evidence/candidate33-model-catalog-diagnostics-draft-r2-20261023.md
+?? docs/refactor/evidence/candidate33-model-catalog-diagnostics-draft-r3-20261023.md
+?? docs/refactor/evidence/candidate33-model-catalog-diagnostics-draft-r4-20261023.md
+?? docs/refactor/evidence/candidate33-r2-handoff-status-20261023.md
+?? docs/refactor/evidence/candidate33-r2-typeerror-stage-hypotheses-20261023.md
+?? docs/refactor/evidence/candidate33-r3-diagnostic-runbook-draft-20261023.md
+?? docs/refactor/evidence/candidate33-r3-failure-stage.patch
+?? docs/refactor/evidence/candidate33-r4-diagnostic-runbook-draft-20261023.md
+?? docs/refactor/evidence/candidate33-r4-portable-closure-20261023.md
+?? docs/refactor/evidence/parallel-acceptance-slices-20261022.md
+?? docs/refactor/北极星analytics-unit格式错误核对-20261021.md
+?? docs/refactor/北极星analytics-unit补全section并重启-20261021.md
+?? docs/refactor/北极星analytics切换到r3并启动-20261021.md
+?? docs/refactor/北极星analytics服务首次启动-20261021.md
+?? docs/refactor/北极星analytics本机启动失败诊断-20261021.md
+?? docs/refactor/北极星r2单独解压命令-20261021.md
+?? docs/refactor/北极星r2发布目录权限与锁文件核对-20261021.md
+?? docs/refactor/北极星r2解压结果只读核对-20261021.md
+?? docs/refactor/北极星r3修正analytics运行目录并部署-20261021.md
+?? docs/refactor/北极星r4-shell单次启动与健康检查-20261021.md
+?? docs/refactor/北极星r4官方迁移器一次性执行-20261021.md
+?? docs/refactor/北极星r4目标机只读基线采集-20261023.md
+?? docs/refactor/北极星r4目标机只读文件与健康采集-20261023.md
+?? docs/refactor/北极星r4补齐CSV模块并启动shell-20261021.md
+?? docs/refactor/北极星r4迁移器失败后状态核查-20261021.md
+?? docs/refactor/北极星r4迁移器逐文件追踪执行-20261021.md
+?? docs/refactor/北极星r4部署文件指纹核对-20261021.md
+?? docs/refactor/北极星r5修复迁移AppleDouble并继续受控部署-20261021.md
+?? docs/refactor/北极星shell-node-postgres回滚复现-20261021.md
+?? docs/refactor/北极星shell-postgres迁移失败诊断-20261021.md
+?? docs/refactor/北极星shell-r3服务首次启动-20261021.md
+?? docs/refactor/北极星shell-systemd环境回滚探测-20261021.md
+?? docs/refactor/北极星shell启动后状态确认-20261021.md
+?? docs/refactor/北极星shell模块缺失错误诊断-20261021.md
+?? docs/refactor/北极星shell状态命令无输出处理-20261021.md
+?? docs/refactor/北极星shell迁移SQL只读回滚探测-20261021.md
+?? docs/refactor/北极星shell迁移完整前置流程回滚复现-20261021.md
+?? docs/refactor/北极星shell重复失败立即停止-20261021.md
+?? docs/refactor/北极星发布包r2替换步骤-20261021.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261021.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-02.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-03.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-04.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-05.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-06.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-07.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-08.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-09.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-10.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-11.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-12.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-13.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-14.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-15.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-16.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-17.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-18.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-19.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-20.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-21.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-22.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-23.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-24.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-25.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-26.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-27.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-28.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-29.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-30.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-31.md
+?? docs/refactor/北极星受控试运行部署命令清单-20261022-candidate-32.md
+?? docs/refactor/北极星模型资格阻塞修复计划-20261021.md
+?? docs/refactor/北极星环境文件核对-20261021-2.md
+?? docs/refactor/北极星环境配置补项-20261021-3.md
+?? docs/refactor/北极星诊断部署清单-20261023-candidate-33-draft-r2.md
+?? docs/refactor/北极星部署当前步骤-20261021.md
+?? docs/给Codex-媒体生成Skill接入提案-20261027.md
+?? image.png
+?? release-artifacts/
+?? scripts/__pycache__/
+?? scripts/audit-northstar-candidate34-draft.py
+?? scripts/audit-northstar-candidate34-r2-draft.py
+?? scripts/audit-northstar-candidate34-r3-draft.py
+?? scripts/audit-t16-candidate33-r2-input-binding.py
+?? scripts/audit-t16-candidate33-r3.py
+?? scripts/audit-t16-candidate33-r4.py
+?? scripts/northstar-catalog-cache-r5-activate.py
+?? scripts/northstar-catalog-cache-shape.cjs
+?? scripts/northstar-data-backup.cjs
+?? scripts/northstar-dependency-closure.cjs
+?? scripts/northstar-dsh-manifest.mjs
+?? scripts/northstar-price-catalog.cjs
+?? scripts/northstar-profile-snapshot.mjs
+?? scripts/northstar-profile.cjs
+?? scripts/northstar-r5-idle-check.cjs
+?? scripts/northstar-release-archive-preflight-candidate.py
+?? scripts/package-northstar-candidate18.py
+?? scripts/package-northstar-candidate19.py
+?? scripts/package-northstar-candidate20.py
+?? scripts/package-northstar-candidate21.py
+?? scripts/package-northstar-candidate22.py
+?? scripts/package-northstar-candidate23.py
+?? scripts/package-northstar-candidate24.py
+?? scripts/package-northstar-candidate25.py
+?? scripts/package-northstar-candidate26.py
+?? scripts/package-northstar-candidate27.py
+?? scripts/package-northstar-candidate28.py
+?? scripts/package-northstar-candidate29.py
+?? scripts/package-northstar-candidate30.py
+?? scripts/package-northstar-candidate31.py
+?? scripts/package-northstar-candidate32.py
+?? scripts/package-northstar-candidate33-r1.py
+?? scripts/package-northstar-candidate33-r2.py
+?? scripts/package-northstar-candidate33-r3.py
+?? scripts/package-northstar-candidate33-r4.py
+?? scripts/package-northstar-candidate33.py
+?? scripts/package-northstar-candidate34-draft.py
+?? scripts/package-northstar-candidate34-r2-draft.py
+?? scripts/package-northstar-candidate34-r3-draft.py
+?? scripts/package-northstar-catalog-cache-r5.py
+?? scripts/prepare-northstar-candidate33-r4-final-unit.py
+?? scripts/regression-plan.mjs
+?? scripts/test-t16-candidate33-npmrc-drift.py
+?? scripts/verify-a7-scope.mjs
+?? shell/attachments/
+?? shell/db-migrations/014_run_external_reconciliation.sql
+?? shell/db-migrations/015_run_external_operations.sql
+?? shell/db-migrations/016_chat_usage_response_evidence.sql
+?? shell/db-migrations/017_conversation_execution_leases.sql
+?? shell/db-migrations/018_conversation_model_preference.sql
+?? shell/db-migrations/019_account_disable.sql
+?? shell/db-migrations/020_chat_usage_total_semantics.sql
+?? shell/db-migrations/021_text_price_catalogs.sql
+?? shell/db-migrations/022_controlled_media_grants.sql
+?? shell/db-migrations/023_controlled_media_reservation_release.sql
+?? shell/exports/
+?? shell/media/
+?? shell/models/catalog-cache.cjs
+?? shell/models/media-route-admission.cjs
+?? shell/models/media-task-router.cjs
+?? shell/models/reviewed-media-apply.cjs
+?? shell/models/reviewed-media-qualification.cjs
+?? shell/models/task-router.cjs
+?? shell/northstar-limits.conf
+?? shell/runtime/artifact-open.cjs
+?? shell/runtime/backup-fs.cjs
+?? shell/runtime/bootstrap-policy.cjs
+?? shell/runtime/csv-run-artifact.cjs
+?? shell/runtime/data-backup.cjs
+?? shell/runtime/dsh-installation.cjs
+?? shell/runtime/dsh-release-manifest.json
+?? shell/runtime/profile-dependencies.cjs
+?? shell/runtime/profile-lifecycle.cjs
+?? shell/runtime/profile-paths.cjs
+?? shell/runtime/run-budget-csv.json
+?? shell/runtime/run-budget-media.json
+?? shell/runtime/run-budget.json
+?? shell/runtime/settings-upgrade.cjs
+?? shell/runtime/settings-version.cjs
+?? shell/runtime/usage.cjs
+?? shell/skills/
+?? shell/tasks/budget.cjs
+?? shell/tasks/chat-request.cjs
+?? shell/tasks/controlled-media-admission.cjs
+?? shell/tasks/csv-analysis-adapter.cjs
+?? shell/tasks/csv-run-handler.cjs
+?? shell/tasks/csv-tool-definition.cjs
+?? shell/tasks/external-operations-store.cjs
+?? shell/tasks/external-operations-worker.cjs
+?? shell/tasks/host-tool-handler.cjs
+?? shell/tasks/lease-recovery-sweep.cjs
+?? shell/tasks/media-grant-store-candidate.cjs
+?? shell/tasks/media-reservation-reconciliation-candidate.cjs
+?? shell/tasks/media-reservation-release-candidate.cjs
+?? shell/tasks/media-run-handler.cjs
+?? shell/tasks/memory-run-invalidation.cjs
+?? shell/tasks/provider-adapters.cjs
+?? shell/tasks/provider-reconciliation-worker.cjs
+?? shell/tasks/provider-reconciliation.cjs
+?? shell/tasks/queued-run-dispatcher.cjs
+?? shell/tasks/run-budget-event.cjs
+?? shell/tasks/session-runs.cjs
+?? shell/usage/
+?? tests/probes/f1-run-review-browser-fixture.mjs
+?? tests/probes/media-grant-postgres-review-20261028.mjs
+?? tests/probes/media-reservation-release-postgres-review-20261028.mjs
+?? tests/probes/northstar-app-artifact-integrity-20261020.mjs
+?? tests/probes/northstar-browser-harness.mjs
+?? tests/probes/northstar-clean-release.mjs
+?? tests/probes/northstar-local-http-smoke-20261020.mjs
+?? tests/probes/northstar-r2-catalog-cache-repro.cjs
+?? tests/probes/northstar-t08-fake-provider-image-shape.mjs
+?? tests/probes/northstar-t08-persistent-runner-fake-provider.mjs
+?? tests/probes/northstar-t08-upload-to-runner-jsonl.mjs
+?? tests/probes/ptvideo-r2-main-review.py
+?? tests/probes/t04-abort-timeout-escalation-20261020.mjs
+?? tests/probes/t05-child-byok-readable-negative-probe.mjs
+?? tests/probes/t13-dsh-runtime-registry-probe.mjs
+?? tests/regression/__pycache__/
+?? tests/regression/analytics-scoped-token-test.mjs
+?? tests/regression/artifact-openat-test.mjs
+?? tests/regression/catalog-cache-r5-activation-test.py
+?? tests/regression/chat-model-snapshot-test.mjs
+?? tests/regression/chat-rate-limit-by-account-test.mjs
+?? tests/regression/chat-request-attachments-test.mjs
+?? tests/regression/chat-transport-retry-budget-test.mjs
+?? tests/regression/chat-usage-failure-accounting-test.mjs
+?? tests/regression/conversation-model-preference-http-test.mjs
+?? tests/regression/conversation-model-preference-test.mjs
+?? tests/regression/csv-analysis-test.mjs
+?? tests/regression/csv-column-profile-test.mjs
+?? tests/regression/csv-document-http-test.mjs
+?? tests/regression/csv-export-test.mjs
+?? tests/regression/csv-parser-test.mjs
+?? tests/regression/csv-source-test.mjs
+?? tests/regression/docexport-candidate-test.mjs
+?? tests/regression/docexport-input-guard-candidate-test.mjs
+?? tests/regression/dsh-adapter-error-frame-test.mjs
+?? tests/regression/dsh-bootstrap-policy-test.mjs
+?? tests/regression/dsh-cli-profile-ready-test.mjs
+?? tests/regression/dsh-installation-test.mjs
+?? tests/regression/dsh-parent-rpc-test.mjs
+?? tests/regression/dsh-runtime-release-test.mjs
+?? tests/regression/external-operations-store-test.mjs
+?? tests/regression/external-operations-worker-test.mjs
+?? tests/regression/f1-budget-policy-change-test.mjs
+?? tests/regression/f1-candidate34-draft-artifact-test.mjs
+?? tests/regression/f1-catalog-cache-r5-artifact-test.mjs
+?? tests/regression/f1-catalog-cache-shape-probe-test.mjs
+?? tests/regression/f1-controlled-media-admission-test.mjs
+?? tests/regression/f1-dsh-model-switch-identity-test.mjs
+?? tests/regression/f1-media-asset-ingest-candidate-test.mjs
+?? tests/regression/f1-media-base-url-test.mjs
+?? tests/regression/f1-media-catalog-scope-test.mjs
+?? tests/regression/f1-media-gateway-consistency-test.mjs
+?? tests/regression/f1-media-runner-host-test.mjs
+?? tests/regression/f1-model-identity-evidence-test.mjs
+?? tests/regression/f1-model-media-matrix-test.mjs
+?? tests/regression/f1-model-media-task-http-test.mjs
+?? tests/regression/f1-pt-media-csp-http-test.mjs
+?? tests/regression/f1-ptvideo-result-guard-candidate-test.mjs
+?? tests/regression/f1-r2-cache-schema-backport-test.mjs
+?? tests/regression/f1-reviewed-media-apply-test.mjs
+?? tests/regression/f1-reviewed-media-qualification-test.mjs
+?? tests/regression/f1-ui-media-history-test.mjs
+?? tests/regression/f1-ui-media-http-history-test.mjs
+?? tests/regression/f1-ui-run-review-link-test.mjs
+?? tests/regression/f2-csv-analysis-adapter-test.mjs
+?? tests/regression/f2-csv-analysis-result-candidate-test.mjs
+?? tests/regression/f2-csv-column-selection-candidate-test.mjs
+?? tests/regression/f2-csv-host-rpc-test.mjs
+?? tests/regression/f2-csv-http-sdk-integration-test.mjs
+?? tests/regression/f2-csv-real-sdk-runner-test.mjs
+?? tests/regression/f2-csv-run-artifact-test.mjs
+?? tests/regression/f2-csv-run-handler-test.mjs
+?? tests/regression/f2-csv-run-source-test.mjs
+?? tests/regression/f3-bound-text-estimate-test.mjs
+?? tests/regression/f3-price-catalog-store-test.mjs
+?? tests/regression/f3-price-snapshot-selection-candidate-test.mjs
+?? tests/regression/f3-text-cost-estimate-test.mjs
+?? tests/regression/host-tool-handler-test.mjs
+?? tests/regression/lease-recovery-sweep-test.mjs
+?? tests/regression/media-external-usage-http-test.mjs
+?? tests/regression/media-grant-store-candidate-test.mjs
+?? tests/regression/media-reservation-reconciliation-candidate-test.mjs
+?? tests/regression/media-reservation-release-candidate-test.mjs
+?? tests/regression/media-result-url-boundary-test.mjs
+?? tests/regression/media-route-admission-run-test.mjs
+?? tests/regression/media-route-admission-test.mjs
+?? tests/regression/media-run-lifecycle-test.mjs
+?? tests/regression/media-subprocess-submission-boundary-test.mjs
+?? tests/regression/memory-change-cancel-http-test.mjs
+?? tests/regression/memory-change-cancels-active-runs-test.mjs
+?? tests/regression/memory-context-budget-test.mjs
+?? tests/regression/memory-session-invalidation-http-test.mjs
+?? tests/regression/memory-untrusted-upload-boundary-http-test.mjs
+?? tests/regression/memory-zero-budget-test.mjs
+?? tests/regression/model-catalog-diagnostics-test.mjs
+?? tests/regression/model-catalog-failure-stage-test.mjs
+?? tests/regression/model-catalog-lifecycle-test.mjs
+?? tests/regression/northstar-backup-fs-test.mjs
+?? tests/regression/northstar-data-backup-test.mjs
+?? tests/regression/northstar-dsh-manifest-test.mjs
+?? tests/regression/persistent-runner-control-errors-test.mjs
+?? tests/regression/persistent-runner-parallel-test.mjs
+?? tests/regression/persistent-runner-real-sdk-rpc-probe.mjs
+?? tests/regression/powertokens-video-engine-hardening-r2-test.py
+?? tests/regression/powertokens-video-engine-hardening-r3-test.py
+?? tests/regression/powertokens-video-engine-hardening-test.py
+?? tests/regression/profile-dependencies-test.mjs
+?? tests/regression/profile-lifecycle-test.mjs
+?? tests/regression/profile-maintenance-cli-test.mjs
+?? tests/regression/profile-paths-test.mjs
+?? tests/regression/profile-startup-failure-test.mjs
+?? tests/regression/ptvideo-bridge-test.mjs
+?? tests/regression/ptvideo-main-engine-test.mjs
+?? tests/regression/ptvideo-main-engine-test.py
+?? tests/regression/ptvideo-worker-test.py
+?? tests/regression/queued-run-conversation-serialization-test.mjs
+?? tests/regression/queued-run-recovery-test.mjs
+?? tests/regression/regression-plan-test.mjs
+?? tests/regression/release-archive-preflight-candidate-test.py
+?? tests/regression/release-archive-preflight-main-review-test.mjs
+?? tests/regression/response-usage-test.mjs
+?? tests/regression/run-budget-event-test.mjs
+?? tests/regression/run-budget-summary-test.mjs
+?? tests/regression/run-sse-multi-instance-postgres-test.mjs
+?? tests/regression/session-runs-test.mjs
+?? tests/regression/settings-maintenance-cli-test.mjs
+?? tests/regression/settings-upgrade-cli-test.mjs
+?? tests/regression/settings-upgrade-test.mjs
+?? tests/regression/settings-version-test.mjs
+?? tests/regression/skill-release-snapshot-test.mjs
+?? tests/regression/storage-init-cleanup-test.mjs
+?? tests/regression/t03-cancelling-crash-recovery-test.mjs
+?? tests/regression/t03-chat-http-same-key-disconnect-replay-test.mjs
+?? tests/regression/t03-child-manual-check-stop-http-test.mjs
+?? tests/regression/t03-child-manual-check-ui-test.mjs
+?? tests/regression/t03-external-manual-check-process-restart-test.mjs
+?? tests/regression/t03-external-operation-lock-order-postgres-test.mjs
+?? tests/regression/t03-lease-recovery-sweep-test.mjs
+?? tests/regression/t03-lost-ack-completed-replay-test.mjs
+?? tests/regression/t03-media-timeout-no-resubmit-test.mjs
+?? tests/regression/t03-ui-preheader-ack-loss-real-chat-retry-test.mjs
+?? tests/regression/t04-adapter-abort-drain-test.mjs
+?? tests/regression/t04-cancel-releases-conversation-lease-sibling-pglite-test.mjs
+?? tests/regression/t04-conversation-lease-pglite-fencing-test.mjs
+?? tests/regression/t10-artifact-history-persistence-test.mjs
+?? tests/regression/t10-artifact-openat-leaf-race-test.mjs
+?? tests/regression/t10-artifact-openat-nonregular-test.mjs
+?? tests/regression/t10-artifact-tenant-symlink-audit-test.mjs
+?? tests/regression/t11-run-budget-event-persistence-test.mjs
+?? tests/regression/t13-t14-profile-fail-closed-test.mjs
+?? tests/regression/t16-candidate17-ustar-release-test.mjs
+?? tests/regression/t16-candidate18-ustar-release-test.mjs
+?? tests/regression/t16-candidate19-ustar-release-test.mjs
+?? tests/regression/t16-candidate28-ustar-release-test.mjs
+?? tests/regression/t16-candidate30-ustar-release-test.mjs
+?? tests/regression/t16-candidate31-ustar-release-test.mjs
+?? tests/regression/t16-candidate32-ustar-release-test.mjs
+?? tests/regression/t16-dependency-closure-manifest-test.cjs
+?? tests/regression/t17-candidate-lockfile-provenance-test.mjs
+?? tests/regression/t17-profile-dependency-config-test.mjs
+?? tests/regression/task-budget-provider-test.mjs
+?? tests/regression/task-heartbeat-boundary-review-test.mjs
+?? tests/regression/task-lease-postgres-review-test.mjs
+?? tests/regression/task-router-budget-test.mjs
+?? tests/regression/task-sse-observer-review-test.mjs
+?? tests/regression/task-store-postgres-integration-test.mjs
+?? tests/regression/tool-calls-usage-evidence-test.mjs
+?? tests/regression/ui-run-resume-review-test.mjs
+?? tests/regression/usage-dsh-sdk-shape-test.mjs
+?? "wb copy/"
+?? 交付-目录缓存修复-r5-20261027/
+?? 北极星总文档-v1.10_1.md

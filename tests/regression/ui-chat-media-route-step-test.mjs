@@ -4,7 +4,7 @@
  * 覆盖 app.js 中 media_route 工具调用步骤（开始 / 结束 / 失败）的友好化处理：
  *   - text2image / image2image  -> { text: "🎨 正在生成图片…" }
  *   - text2video / image2video  -> { text: "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的" }
- *   - 失败步骤 isError          -> { text: "⚠️ 图片生成失败，可以重新试一次" } / "⚠️ 视频生成失败，可以重新试一次"
+ *   - 失败步骤 isError          -> 提醒先查运行记录，不能直接引导重提未知付费任务
  *   - 成功结束步骤（isError:false）-> { skip: true }（渲染块据此不冒那行多余的「🔧 media_route」）
  *   - 其他工具（归因查询 attribution_query / ga_query）-> null（走通用渲染，不美化）
  *   - 友好文案绝不暴露原始参数：断言返回值里不含 prompt 原文、不含图片 URL、不含内部工具名 media_route
@@ -118,8 +118,8 @@ const run = (src) => vm.runInContext(src, ctx);
 
 const IMG = "🎨 正在生成图片…";
 const VID = "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的";
-const ERR_IMG = "⚠️ 图片生成失败，可以重新试一次";
-const ERR_VID = "⚠️ 视频生成失败，可以重新试一次";
+const ERR_IMG = "⚠️ 图片处理未完成，外部任务状态可能未确认。请先到「用量与日志」核对，再决定是否重新发起。";
+const ERR_VID = "⚠️ 视频处理未完成，外部任务状态可能未确认。请先到「用量与日志」核对，再决定是否重新发起。";
 
 /* 真实链路下发给前端的 step 形状（照抄，不臆造）：
  *   开始：{ name, args }          —— args 是 **JSON 字符串**（基座 stringify 后下发）
@@ -175,15 +175,15 @@ ok("图片文案不含内部工具名 media_route", !imgMsg.toLowerCase().includ
 
 console.log("\n[9] media_route 失败（图片类）-> 图片友好报错（真实顺序：先开始、后结束）");
 evalStep(startStep("text2image"));                 // 开始步骤记住类型
-ok("text2image 失败 -> 『图片生成失败，可以重新试一次』", evalStep(endStep(true, "生成失败")).text === ERR_IMG);
+ok("text2image 失败 -> 先核对运行记录", evalStep(endStep(true, "生成失败")).text === ERR_IMG);
 evalStep(startStep("image2image"));
-ok("image2image 失败 -> 『图片生成失败，可以重新试一次』", evalStep(endStep(true, "生成失败")).text === ERR_IMG);
+ok("image2image 失败 -> 先核对运行记录", evalStep(endStep(true, "生成失败")).text === ERR_IMG);
 
 console.log("\n[10] media_route 失败（视频类）-> 视频友好报错");
 evalStep(startStep("text2video"));
-ok("text2video 失败 -> 『视频生成失败，可以重新试一次』", evalStep(endStep(true, "生成失败")).text === ERR_VID);
+ok("text2video 失败 -> 先核对运行记录", evalStep(endStep(true, "生成失败")).text === ERR_VID);
 evalStep(startStep("image2video"));
-ok("image2video 失败 -> 『视频生成失败，可以重新试一次』", evalStep(endStep(true, "生成失败")).text === ERR_VID);
+ok("image2video 失败 -> 先核对运行记录", evalStep(endStep(true, "生成失败")).text === ERR_VID);
 
 console.log("\n[11] 失败文案绝不暴露内部信息");
 evalStep(startStep("text2video", { prompt: "SECRET_PROMPT_ERR", inputImageUrl: "https://secret.host/e.png" }));
@@ -191,7 +191,7 @@ const errMsg = evalStep(endStep(true, "内部错误 SECRET_PROMPT_ERR")).text;
 ok("失败文案不含 prompt 原文", !errMsg.includes("SECRET_PROMPT_ERR"), errMsg);
 ok("失败文案不含图片 URL", !errMsg.includes("secret.host"), errMsg);
 ok("失败文案不含内部工具名 media_route", !errMsg.toLowerCase().includes("media_route"), errMsg);
-ok("失败文案明确是『视频生成失败』", errMsg.includes("视频生成失败"), errMsg);
+ok("失败文案要求先核对且不引导直接重试", errMsg.includes("用量与日志") && !errMsg.includes("可以重新试一次"), errMsg);
 
 console.log("\n[12] 关键回归：args 是字符串时必须也能识别（以前 args.taskType 恒 undefined，视频提示从未生效）");
 ok("args 为 JSON 字符串 -> 能识别视频", evalStep({ name: "media_route", args: '{"taskType":"text2video"}' }).text === VID);

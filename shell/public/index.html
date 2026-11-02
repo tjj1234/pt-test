@@ -248,7 +248,7 @@
     <!-- ============ 对话（多对话窗口：左对话列表 + 右聊天区） ============ -->
     <section class="view" id="v-chat">
       <div class="chat-pane">
-        <!-- 产出预览面板（B2）：Agent 生成了 PDF / HTML / md 时自动在这里打开。
+        <!-- 产出预览面板（B2）：Agent 生成了 PDF / HTML / md / CSV 时自动在这里打开。
              宽度的显示/隐藏由 JS 控制（hidden 时不占布局）；md 走前端渲染，pdf/html 走 iframe。 -->
         <aside class="art-pane" id="artPane" hidden aria-label="产出预览">
           <div class="art-head">
@@ -260,7 +260,7 @@
             <button class="art-btn" id="artClose" type="button" title="关闭预览">×</button>
           </div>
           <div class="art-body" id="artBody"></div>
-          <div class="art-empty" id="artEmpty" hidden>还没有可预览的产出。让 Agent 生成一份 PDF / HTML / md 文档，会自动显示在这里。</div>
+          <div class="art-empty" id="artEmpty" hidden>还没有可预览的产出。Agent 生成的 PDF / HTML / md 文档或 CSV 文件会显示在这里。</div>
         </aside>
 
         <div class="chat-main">
@@ -292,16 +292,17 @@
             <!-- 已附加的文本文档（.txt/.md/.csv）：发送时随 documents 数组一起提交，正文由后端注入上下文 -->
             <div class="doc-list" id="docList" hidden></div>
             <input type="file" id="imgInput" hidden>
-            <input type="file" id="docInput" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv" multiple hidden>
+            <input type="file" id="docInput" accept=".txt,.md,.csv,.docx,.xlsx,.pptx,text/plain,text/markdown,text/csv,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple hidden>
             <input type="file" id="mediaInput" accept="video/*,audio/*" multiple hidden>
             <button class="composer-add-btn" id="imgBtn" type="button" title="添加参考图"><span class="ico" data-ico="plus"></span></button>
-            <button class="composer-add-btn doc" id="docBtn" type="button" title="上传文档（.txt / .md / .csv，单文件 ≤5MB）"><span class="ico" data-ico="fileText"></span></button>
+            <button class="composer-add-btn doc" id="docBtn" type="button" title="上传文档（文本≤5MB，DOCX/XLSX/PPTX≤20MB）"><span class="ico" data-ico="fileText"></span></button>
             <button class="composer-add-btn media" id="mediaBtn" type="button" title="上传音视频（mp4 / webm / mov / mp3 / wav / m4a，单文件 ≤50MB），发送后气泡里可直接播放"><span class="ico" data-ico="music"></span></button>
             <!-- 已附加的音视频（.mp4/.mp3/…）：发送时随 media 数组一起提交，气泡里渲染成播放器 -->
             <div class="media-list" id="mediaList" hidden></div>
             <textarea id="ta" rows="1" placeholder="输入问题，或用 @引用数据面板内容… (Enter 发送 / Shift+Enter 换行)"></textarea>
             <div class="foot-bar">
               <div class="model-switcher" id="modelSwitcher">
+                <label id="reasoningControl" hidden>推理 <select id="reasoningSelect" aria-label="推理强度"></select></label>
                 <button class="ms-btn" id="msBtn" type="button" title="切换模型">
                   <span class="ico" data-ico="sparkle"></span>
                   <span class="ms-btn-t" id="msBtnName">—</span>
@@ -366,6 +367,9 @@
       <div id="usageCards" style="display:flex;gap:12px;flex-wrap:wrap;margin:12px 0"></div>
       <div id="usageModels" style="margin:12px 0"></div>
       <p id="usageStatus" role="status"></p><div id="usageList" style="overflow:auto"></div>
+      <h4>近期媒体外部操作</h4><p>显示任务状态与查单记录；provider 费用及币种暂不可确认。</p>
+      <p id="usageExternalStatus" role="status"></p><div id="usageExternalOperations" style="overflow:auto"></div>
+      <button type="button" class="toolbar-btn" id="usageExternalMore" hidden>加载更多媒体操作</button>
     </div></section>
   </main>
 </div>

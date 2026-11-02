@@ -1,0 +1,71 @@
+{
+  "auditReportVersion": "1.0.0",
+  "taskPackage": "GEMINI-SKILL-LOADER-AUDIT-PACKAGE-20261101.md",
+  "observedAt": "2026-11-01T02:10:00+09:00",
+  "auditScope": "PM Skill Release and Native DSH Loader Integration",
+  "conclusion": "NATIVE_GAP_IDENTIFIED_WITH_MINIMAL_HOST_SOLUTION_PROPOSED",
+  "summary": "Locked DSH packages (@deepseek-ai/dsh-skill 0.1.1-rc.2, @deepseek-ai/dsh-skill-filesystem 0.1.1-rc.2, @deepseek-ai/dsh-tool-skill 0.1.1-rc.2) provide mature catalog scanning and <skill_content> rendering, but LACK native versioning, contentHash parameters, and run-pinning. Modifying SKILL.md on disk causes content hash drift during an active Run. A minimal host integration solution using immutable release directories (releases/{skillId}/{version}/) combined with release-snapshot.cjs pinning and a host Manifest completely closes this gap without re-inventing a skill engine.",
+  "packagesAudited": [
+    {
+      "name": "@deepseek-ai/dsh-skill",
+      "version": "0.1.1-rc.2",
+      "sha256": "5402787cbc95b4586e2c3aa4b0129e91094ad368b428aa19bcbbd8553bbfa9d7",
+      "role": "SkillRegistry service (ctx.skills)"
+    },
+    {
+      "name": "@deepseek-ai/dsh-skill-filesystem",
+      "version": "0.1.1-rc.2",
+      "sha256": "1aea87781ba5b4d44c7cfd6184d933a1c171a3fd2791456b65ebfc8b255f1221",
+      "role": "FileSystemSkillProvider local directory scanner"
+    },
+    {
+      "name": "@deepseek-ai/dsh-tool-skill",
+      "version": "0.1.1-rc.2",
+      "sha256": "61b911101e8dc354b279576f8f19b5bbba0ce80a2c05661d196ee66ece4b5744",
+      "role": "Cordis tool plugin exposing skill tool and slash invocation"
+    },
+    {
+      "name": "shell/skills/release-snapshot.cjs",
+      "version": "1.0.0",
+      "sha256": "257dbcb713fdf7772e41f05848da4de970c4c51a22ee1e56d5719ba3c08ef487",
+      "role": "Host release content identity builder and Run pin generator"
+    }
+  ],
+  "nativeGapsIdentified": {
+    "versionPinning": {
+      "status": "REAL_GAP",
+      "nativeApi": "ctx.skills.get(name, options)",
+      "finding": "Native DSH loader only addresses skills by string name. It has no version or contentHash parameter in its public API."
+    },
+    "contentHashDrift": {
+      "status": "REAL_GAP",
+      "nativeBehavior": "Disk file edits immediately take effect on subsequent ctx.skills.get() calls",
+      "finding": "Native loader does not snapshot skill instruction bodies per-Run. Modifying SKILL.md during a session alters the instructions seen by the model."
+    },
+    "disableAndRevocation": {
+      "status": "REAL_GAP",
+      "nativeBehavior": "All valid SKILL.md files in customSkillDirs are discovered",
+      "finding": "Native DSH provides no disableSkill(id) or revokeSkill(id) persistent API; exclusion relies on directory mutation or host manifest gating."
+    },
+    "permissionBoundary": {
+      "status": "PROTECTED_BY_DESIGN",
+      "nativeBehavior": "Only renders <skill_content> block into context",
+      "finding": "Tool authorization is owned by ctx.tools (ToolRuntime). Metadata or text inside SKILL.md cannot self-authorize OS or bash tools."
+    }
+  },
+  "proposedHostIntegrationSeam": {
+    "releaseStorage": "workspaces/{tenantId}/.dsh/skills-releases/{skillId}/{version}/SKILL.md",
+    "manifestContract": "skills-manifest.json with { [skillId]: { activeVersion, status: 'active'|'disabled'|'revoked' } }",
+    "runPersistence": "Run.pinnedSkills = pinSkillReleases([...])",
+    "loaderMount": "FileSystemSkillProvider configured with customSkillDirs pointing to exact pinned version directories per-Run",
+    "heatSessionRevocation": "cancelActiveRunsForMemoryChange / revision invalidation signal when Manifest status changes"
+  },
+  "probeExecution": {
+    "command": "node tests/probes/skill-loader-native-audit-20261101.mjs",
+    "exitCode": 0,
+    "totalTests": 7,
+    "passedTests": 7,
+    "failedTests": 0,
+    "testedInIsolatedTmpDir": true
+  }
+}

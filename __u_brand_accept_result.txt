@@ -1,0 +1,17 @@
+PASS C1 shell/public 全量 html/js 无「北极星」
+PASS C2 index.html title 为新品牌
+PASS C3 侧边栏品牌为新品牌
+PASS C4 首页问候语标题为新品牌
+PASS C5 首页问候语副标题已简化
+PASS C6 状态面板文案已去掉「北极星」
+PASS C7 技能卡片容器仍在
+PASS C8 技能详情容器仍在
+PASS C9 ga-connect.js 仍被引入
+PASS C10 技能三态判定函数仍在
+PASS C11 按需连接引导仍在
+FAIL C12 设置页无 GA 残留
+FAIL C13 设置页两张卡片纵向排列
+PASS C14 共享 GA 连接模块存在
+PASS C15 app.js 语法可解析
+
+RESULT 13/15 PASS  (2 FAIL)

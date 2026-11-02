@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
@@ -10,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const { createStorage } = require('../../shell/storage/index.cjs');
+const { sha256 } = require('../../shell/auth.cjs');
 async function freePort() { const server = createServer(); await new Promise((r, j) => server.once('error', j).listen(0, '127.0.0.1', r)); const port = server.address().port; await new Promise((r) => server.close(r)); return port; }
 
 test('independent integration: upgrade denies legacy password sessions/routes; callback provisions before cookie', { timeout: 30000 }, async () => {
@@ -28,8 +30,8 @@ test('independent integration: upgrade denies legacy password sessions/routes; c
     const secondRegistered = await storage.repositories.auth.register({ username: 'second-review', email: 'second@example.test', password: 'SecondReview123' });
     assert.equal(secondRegistered.ok, true);
     secondTenantId = secondRegistered.user.tenant_id;
-    const legacy = await storage.repositories.auth.login({ username: 'legacy-review', password: 'LegacyReview123' });
-    assert.equal(legacy.ok, true);
+    const legacy = { token: crypto.randomBytes(32).toString('hex') };
+    await storage.adapter.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)', [registered.user.id, sha256(legacy.token), new Date(Date.now() + 60_000).toISOString()]);
     await storage.close(); storage = null;
     const port = await freePort();
     const origin = 'http://127.0.0.1:' + port;
@@ -38,7 +40,9 @@ test('independent integration: upgrade denies legacy password sessions/routes; c
     // PGlite sessions, migration, workspace initialization and Cookie responses remain real.
     const preload = path.join(tmp, 'verified-identity-fixture.cjs');
     fs.writeFileSync(preload, `const Module=require('node:module'); const load=Module._load; const crypto=require('node:crypto'); let stateNo=0;
-Module._load=function(name,parent,isMain){ const loaded=load.apply(this,arguments); if(parent?.filename.endsWith('auth-google-routes.cjs') && name==='./auth-google.cjs') return {...loaded,createGoogleAuth:async({db})=>({begin:async()=>({authorizationUrl:'https://accounts.google.com/o/oauth2/v2/auth?state='+(++stateNo===1?'fixture-state':'fixture-state-'+stateNo)}),callback:async({code})=>{const username=code==='second-user'?'second-review':'legacy-review';const user=(await db.query("SELECT id,username,email,role,tenant_id FROM users WHERE username=$1",[username])).rows[0]; const token=crypto.randomBytes(32).toString('base64url');const expiresAt=new Date(Date.now()+60000).toISOString();await db.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)',[user.id,crypto.createHash('sha256').update(token).digest('hex'),expiresAt]);return {ok:true,user,token,expiresAt};}})}; if(parent?.filename.endsWith('/server.cjs') && name==='./tenant.cjs') return {...loaded,runDshForUser:async(userId,question,options)=>{if(question==='hold worker')await new Promise(resolve=>setTimeout(resolve,1200));return loaded.runDshForUser(userId,question,options);}}; return loaded;};`);
+Module._load=function(name,parent,isMain){ const loaded=load.apply(this,arguments);
+if(parent?.filename.endsWith('/server.cjs')&&name==='./models/dsh-configured-catalog.cjs')return {...loaded,configuredModels:()=>["fixture-chat", "fixture-unverified"]};
+ if(parent?.filename.endsWith('auth-google-routes.cjs') && name==='./auth-google.cjs') return {...loaded,createGoogleAuth:async({db})=>({begin:async()=>({authorizationUrl:'https://accounts.google.com/o/oauth2/v2/auth?state='+(++stateNo===1?'fixture-state':'fixture-state-'+stateNo)}),callback:async({code})=>{const username=code==='second-user'?'second-review':'legacy-review';const user=(await db.query("SELECT id,username,email,role,tenant_id FROM users WHERE username=$1",[username])).rows[0]; const token=crypto.randomBytes(32).toString('base64url');const expiresAt=new Date(Date.now()+60000).toISOString();await db.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)',[user.id,crypto.createHash('sha256').update(token).digest('hex'),expiresAt]);return {ok:true,user,token,expiresAt};}})}; if(parent?.filename.endsWith('/server.cjs') && name==='./model-catalog.cjs') return {...loaded,getCatalog:async()=>({models:[{id:'fixture-chat',chat:true,capabilityStatus:'supported',runtimeStatus:'verified',availability:'present',permission:true,localPolicy:{enabled:true,tasks:['textChat']},tasks:{textChat:{value:true}},inputModalities:{value:['text']},outputModalities:{value:['text']},states:{textChat:{adapted:true,endpointCompatible:true,verified:true,autoEligible:true}}},{id:'fixture-unverified',chat:null,capabilityStatus:'unknown',runtimeStatus:'unadapted',availability:'present',states:{textChat:{verified:false,autoEligible:false}}}],get availability(){return {status:'available',modelIds:require('node:fs').existsSync(${JSON.stringify(path.join(tmp, 'no-models'))})?[]:['fixture-chat','fixture-unverified']};},syncedAt:Date.now()}),routeModelFor:()=> 'fixture-chat',pickDefaultModel:()=> 'fixture-chat'}; if(parent?.filename.endsWith('/server.cjs') && name==='./tenant.cjs') return {...loaded,runDshForUser:async(userId,question,options)=>{if(question==='hold worker')await new Promise(resolve=>setTimeout(resolve,1200));return loaded.runDshForUser(userId,question,options);}}; return loaded;};`);
     const env = { PATH: process.env.PATH, HOME: tmp, PT_DB_DIR: dbDir, PT_MASTER_KEY_FILE: path.join(tmp, 'key'), PT_LOG_DIR: path.join(tmp, 'logs'), PT_SHELL_PORT: String(port), PT_LISTEN_HOST: '127.0.0.1', PT_TEST_SHUTDOWN_TOKEN: stopToken, PT_KEY_LIVE_VERIFY: '0', PT_CHAT_DRYRUN: '1', PT_RUNS_GLOBAL: '1', GOOGLE_CLIENT_ID: 'fixture-client', GOOGLE_CLIENT_SECRET: 'fixture-secret', GOOGLE_REDIRECT_URI: origin + '/api/auth/google/callback' };
     child = spawn(process.execPath, ['--require', preload, 'shell/server.cjs', '--port', String(port)], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = ''; child.stdout.on('data', (b) => output += b); child.stderr.on('data', (b) => output += b);
@@ -71,6 +75,9 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     assert.equal(me.status, 200);
     assert.equal((await me.json()).user.id, registered.user.id);
     const authCookie = session.split(';')[0];
+    const directMedia = await fetch(origin + '/api/tools/media.route/execute', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ args: { taskType: 'text2image', prompt: 'controlled fixture' } }) });
+    assert.equal(directMedia.status, 409, 'paid media tools require a durable Run and cannot use the standalone HTTP executor');
+    assert.equal((await directMedia.json()).code, 'RUN_REQUIRED');
     const keySaved = await fetch(origin + '/api/auth/key', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'fixture-pt-key' }) });
     assert.equal(keySaved.status, 200);
     const createdConversation = await fetch(origin + '/api/conversations', { method: 'POST', headers: { Cookie: authCookie } });
@@ -94,6 +101,36 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
       await new Promise((r) => setTimeout(r, 20));
     }
     assert.equal(run.state, 'completed');
+    const runDetail = await (await fetch(origin + '/api/runs/' + runId, { headers: { Cookie: authCookie } })).json();
+    assert.deepEqual(runDetail.externalOperations, { operations: [], nextCursor: null, hasMore: false }, 'Run detail exposes a bounded first page of durable operations');
+    const operationPage = await (await fetch(origin + '/api/runs/' + runId + '/operations?limit=1', { headers: { Cookie: authCookie } })).json();
+    assert.deepEqual(operationPage.operations, []);
+    assert.equal(operationPage.hasMore, false);
+    const usagePageResponse = await fetch(origin + '/api/runs/' + runId + '/usage?limit=1', { headers: { Cookie: authCookie } });
+    assert.equal(usagePageResponse.status, 200, 'the Run owner can read the per-response usage page');
+    const usagePage = await usagePageResponse.json();
+    assert.equal(usagePage.runId, runId);
+    assert.equal(Array.isArray(usagePage.responses), true);
+    assert.equal(usagePage.responses.every((response) => response.cost === null && response.costCoverage === 'unknown'), true,
+      'the usage page does not present an unpriced response as free or estimated');
+    const usageCsvResponse = await fetch(origin + '/api/runs/' + runId + '/usage.csv?limit=1', { headers: { Cookie: authCookie } });
+    assert.equal(usageCsvResponse.status, 200);
+    assert.match(usageCsvResponse.headers.get('content-type') || '', /text\/csv/);
+    assert.match(usageCsvResponse.headers.get('content-disposition') || '', /attachment/);
+    assert.match(await usageCsvResponse.text(), /run_id,response_seq,selected_model/);
+    const fullUsageCsvResponse = await fetch(origin + '/api/runs/' + runId + '/usage-all.csv', { headers: { Cookie: authCookie } });
+    assert.equal(fullUsageCsvResponse.status, 200);
+    assert.match(fullUsageCsvResponse.headers.get('content-disposition') || '', /run-usage\.csv/);
+    assert.match(await fullUsageCsvResponse.text(), /run_id,response_seq,selected_model/);
+    fs.writeFileSync(path.join(tmp, 'no-models'), 'controlled unavailable snapshot');
+    const noModel = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-no-eligible-model' }, body: JSON.stringify({ conversationId, message: 'force-no-model' }) });
+    assert.match(await noModel.text(), /"code":"NO_ELIGIBLE_MODEL"/, 'AUTO with no verified candidate fails visibly before DSH fallback');
+    fs.unlinkSync(path.join(tmp, 'no-models'));
+    const rejectedSelection = await fetch(origin + '/api/models/select', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'fixture-unverified' }) });
+    assert.equal(rejectedSelection.status, 409, 'unknown capability and unverified runtime cannot be selected for explicit execution');
+    assert.equal((await rejectedSelection.json()).code, 'MODEL_NOT_EXECUTABLE');
+    const verifiedSelection = await fetch(origin + '/api/models/select', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ model: 'fixture-chat' }) });
+    assert.equal(verifiedSelection.status, 200, 'known capability and verified runtime remain explicitly selectable');
     const runEvents = await fetch(origin + '/api/runs/' + runId + '/events', { headers: { Cookie: authCookie } });
     const eventPage = await runEvents.json();
     assert.ok(eventPage.events.some((event) => event.type === 'delta'));
@@ -118,12 +155,37 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     assert.equal(secondCallback.status, 303);
     const secondCookie = secondCallback.headers.get('set-cookie').split(';')[0];
     assert.equal((await fetch(origin + '/api/runs/' + runId, { headers: { Cookie: secondCookie } })).status, 404, 'a different tenant cannot read the first user run');
+    assert.equal((await fetch(origin + '/api/runs/' + runId + '/operations', { headers: { Cookie: secondCookie } })).status, 404, 'a different tenant cannot list the first user Run operations');
+    assert.equal((await fetch(origin + '/api/runs/' + runId + '/usage', { headers: { Cookie: secondCookie } })).status, 404,
+      'a different tenant cannot list the first user Run usage');
+    assert.equal((await fetch(origin + '/api/runs/' + runId + '/usage.csv', { headers: { Cookie: secondCookie } })).status, 404,
+      'a different tenant cannot export the first user Run usage');
+    assert.equal((await fetch(origin + '/api/runs/' + runId + '/usage-all.csv', { headers: { Cookie: secondCookie } })).status, 404,
+      'a different tenant cannot export all of the first user Run usage');
     const secondConversationResponse = await fetch(origin + '/api/conversations', { method: 'POST', headers: { Cookie: secondCookie } });
     const secondConversationId = (await secondConversationResponse.json()).id;
     const holdingResponse = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-hold' }, body: JSON.stringify({ conversationId, message: 'hold worker' }) });
     const holdingRunId = holdingResponse.headers.get('x-agent-run-id');
     assert.ok(holdingRunId, 'running chat immediately exposes its run ID');
     const holdingFrames = holdingResponse.text();
+    const crossTenantStop = await fetch(origin + '/api/chat/stop', { method: 'POST', headers: { Cookie: secondCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ runId: holdingRunId }) });
+    assert.equal(crossTenantStop.status, 404, 'a different tenant cannot stop a run by ID');
+    const crossTenantConversationStop = await fetch(origin + '/api/chat/stop', { method: 'POST', headers: { Cookie: secondCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId }) });
+    assert.equal(crossTenantConversationStop.status, 404, 'a different tenant cannot select a conversation for stopping');
+    const sameUserConversationResponse = await fetch(origin + '/api/conversations', { method: 'POST', headers: { Cookie: authCookie } });
+    const sameUserConversationId = (await sameUserConversationResponse.json()).id;
+    const sameUserQueued = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-same-user-other-session' }, body: JSON.stringify({ conversationId: sameUserConversationId, message: 'other session queue' }) });
+    assert.equal(sameUserQueued.status, 200, 'another conversation from the same user is accepted and queued under the existing scheduler quota');
+    const sameUserQueuedRunId = sameUserQueued.headers.get('x-agent-run-id');
+    const ambiguousStop = await fetch(origin + '/api/chat/stop', { method: 'POST', headers: { Cookie: authCookie } });
+    assert.equal(ambiguousStop.status, 409, 'legacy stop without conversationId rejects ambiguity across active sessions');
+    assert.equal((await ambiguousStop.json()).code, 'CONVERSATION_ID_REQUIRED');
+    const targetedStop = await fetch(origin + '/api/chat/stop', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json' }, body: JSON.stringify({ conversationId: sameUserConversationId }) });
+    assert.equal(targetedStop.status, 200);
+    assert.equal((await targetedStop.json()).runId, sameUserQueuedRunId, 'conversation stop selects only the requested queued run');
+    assert.equal((await (await fetch(origin + '/api/runs/' + holdingRunId, { headers: { Cookie: authCookie } })).json()).run.state, 'running', 'stopping the second session leaves the first session running');
+    assert.equal((await (await fetch(origin + '/api/runs/' + sameUserQueuedRunId, { headers: { Cookie: authCookie } })).json()).run.state, 'cancelled');
+    assert.match(await sameUserQueued.text(), /"stopped":true/);
     const queuedResponse = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: secondCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-queued' }, body: JSON.stringify({ conversationId: secondConversationId, message: 'queued and cancel' }) });
     assert.equal(queuedResponse.status, 200);
     const queuedRunId = queuedResponse.headers.get('x-agent-run-id');
@@ -148,8 +210,12 @@ Module._load=function(name,parent,isMain){ const loaded=load.apply(this,argument
     const crossLogout = await fetch(origin + '/api/auth/logout', { method: 'POST', headers: { Cookie: session.split(';')[0], Origin: 'https://attacker.example' } });
     assert.equal(crossLogout.status, 403);
     assert.equal(crossLogout.headers.get('set-cookie'), null);
+    const shutdownSse = await fetch(origin + '/api/chat', { method: 'POST', headers: { Cookie: authCookie, 'Content-Type': 'application/json', 'Idempotency-Key': 'integration-chat-shutdown-active-sse' }, body: JSON.stringify({ conversationId, message: 'hold worker' }) });
+    assert.equal(shutdownSse.status, 200, 'shutdown fixture keeps an active SSE response open');
+    const childExit = new Promise((resolve) => child.once('exit', resolve));
     await fetch(origin + '/__test_shutdown', { method: 'POST', headers: { 'x-shutdown-token': stopToken } });
-    await new Promise((r) => child.once('exit', r));
+    await Promise.race([childExit, new Promise((_, reject) => setTimeout(() => reject(new Error('server shutdown waited indefinitely on active SSE: ' + output.slice(-2500))), 5000))]);
+    await shutdownSse.text();
   } finally {
     if (child && child.exitCode === null) { child.kill('SIGTERM'); await new Promise((r) => child.once('exit', r)); }
     if (storage) await storage.close();

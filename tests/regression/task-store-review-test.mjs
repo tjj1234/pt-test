@@ -25,19 +25,21 @@ test('independent: forged identity/scope and concurrent differing claims remain 
  const forged={userId:f.a.userId,tenantId:f.b.tenantId};
  for(const who of [f.b,forged]){
   await assert.rejects(s1.getRun(who,id),{code:'NOT_FOUND'});await assert.rejects(s1.transition(who,id,'running',0),{code:'NOT_FOUND'});
-  await assert.rejects(s1.recordExternalIntent(who,id,{provider:'x',operationKey:'x',expectedRevision:0}),{code:'NOT_FOUND'});
+  await assert.rejects(s1.recordExternalIntent(who,id,{provider:'x',operationKey:'x',expectedRevision:0,leaseOwner:'review-worker'}),{code:'NOT_FOUND'});
   assert.equal((await s1.listRuns(who)).runs.length,0);assert.deepEqual(await s1.recoverInterrupted(who),[]);
  }
  await assert.rejects(s1.appendEvent(f.a,id,{conversationId:randomUUID(),type:'delta',payload:{}}),{code:'EVENT_SCOPE_MISMATCH'});
  assert.deepEqual((await s1.eventsAfter(f.a,id)).events.map(x=>x.seq),[1]);
 });
 test('independent: external intent survives restart and does not create a replacement submission',async t=>{
- const f=await fixture(t);let s=f.store();let r=(await s.createRun(f.a,f.input())).run;r=await s.transition(f.a,r.runId,'running',0);
- r=await s.recordExternalIntent(f.a,r.runId,{provider:'fixture',operationKey:'persist-before-send',expectedRevision:r.revision});
+ const f=await fixture(t);let s=f.store();let r=(await s.createRun(f.a,f.input(),{owner:'review-worker',ttlMs:30000})).run;r=await s.transition(f.a,r.runId,'running',0,'review-worker');
+ r=await s.recordExternalIntent(f.a,r.runId,{provider:'fixture',operationKey:'persist-before-send',expectedRevision:r.revision,leaseOwner:'review-worker'});
  await f.reopen();s=f.store();const before=await s.getRun(f.a,r.runId);assert.equal(before.externalOperationKey,'persist-before-send');
  await s.recoverInterrupted(f.a);const recovered=await s.getRun(f.a,r.runId);assert.equal(recovered.externalState,'unknown');
- await assert.rejects(s.recordExternalIntent(f.a,r.runId,{provider:'fixture',operationKey:'new-key',expectedRevision:recovered.revision}),{code:'EXTERNAL_INTENT_EXISTS'});
- assert.deepEqual(await s.getRun(f.a,r.runId),recovered);assert.equal((await s.createRun(f.a,f.input())).run.runId,r.runId);
+ await s.acquireLease(f.a,r.runId,'review-worker',30000);
+ const beforeRejectedReplay=await s.getRun(f.a,r.runId);
+ await assert.rejects(s.recordExternalIntent(f.a,r.runId,{provider:'fixture',operationKey:'new-key',expectedRevision:recovered.revision,leaseOwner:'review-worker'}),{code:'EXTERNAL_INTENT_EXISTS'});
+ assert.deepEqual(await s.getRun(f.a,r.runId),beforeRejectedReplay);assert.equal((await s.createRun(f.a,f.input())).run.runId,r.runId);
  assert.equal((await f.storage.adapter.query('SELECT count(*)::int AS n FROM agent_runs')).rows[0].n,1);
 });
 test('independent: startup recovery interrupts abandoned work and preserves user confirmation state',async t=>{
@@ -72,8 +74,22 @@ test('independent: duplicate logical done must not append a second terminal even
  assert.equal((await s.eventsAfter(f.a,r.runId)).events.filter(x=>x.type==='done').length,1,'duplicate append must not create second terminal event');
 });
 test('independent: deleting conversation cannot erase unresolved external intent',async t=>{
- const f=await fixture(t),s=f.store();let r=(await s.createRun(f.a,f.input())).run;r=await s.transition(f.a,r.runId,'running',0);r=await s.recordExternalIntent(f.a,r.runId,{provider:'fixture',operationKey:'paid-submit-intent',expectedRevision:r.revision});
+ const f=await fixture(t),s=f.store();let r=(await s.createRun(f.a,f.input(),{owner:'review-worker',ttlMs:30000})).run;r=await s.transition(f.a,r.runId,'running',0,'review-worker');r=await s.recordExternalIntent(f.a,r.runId,{provider:'fixture',operationKey:'paid-submit-intent',expectedRevision:r.revision,leaseOwner:'review-worker'});
  try{await f.storage.repositories.conversations.remove(f.a.userId,f.conv.id);}catch(e){assert.ok(['23503','CONVERSATION_HAS_ACTIVE_RUNS','RUN_ACTIVE'].includes(e.code),'delete must be intentionally blocked');return;}
  const rows=(await f.storage.adapter.query('SELECT run_id,external_operation_key FROM agent_runs WHERE run_id=$1',[r.runId])).rows;
  assert.equal(rows.length,1,'conversation cascade deleted durable paid-operation intent');assert.equal(rows[0].external_operation_key,'paid-submit-intent');
+});
+test('independent: unknown submission retains executor lease until terminal settlement',async t=>{
+ const f=await fixture(t),s=f.store(),owner='submission-owner';
+ let r=(await s.createRun(f.a,f.input(),{owner,ttlMs:30000})).run;
+ r=await s.transition(f.a,r.runId,'running',r.revision,owner);
+ r=await s.recordExternalIntent(f.a,r.runId,{provider:'fixture',operationKey:'unknown-preserve',expectedRevision:r.revision,leaseOwner:owner});
+ await assert.rejects(s.recordExternalReconciliation(f.a,r.runId,{expectedRevision:r.revision,leaseOwner:owner,outcome:'provider_state_unknown',observedAt:new Date().toISOString(),preserveLease:true}),{code:'CONTRACT_INVALID'});
+ r=await s.recordExternalReconciliation(f.a,r.runId,{expectedRevision:r.revision,leaseOwner:owner,outcome:'unknown_submission',observedAt:new Date().toISOString(),preserveLease:true});
+ assert.equal(r.externalState,'manual_check');
+ await s.renewLease(f.a,r.runId,owner,30000);
+ r=await s.transition(f.a,r.runId,'failed',r.revision,owner);
+ assert.equal(r.reconciliation,'needs_reconciliation');
+ assert.equal((await f.storage.adapter.query('SELECT lease_owner FROM agent_runs WHERE run_id=$1',[r.runId])).rows[0].lease_owner,null);
+ assert.equal((await s.claimExternalReconciliation(f.a,r.runId,'other-worker')).acquired,false);
 });

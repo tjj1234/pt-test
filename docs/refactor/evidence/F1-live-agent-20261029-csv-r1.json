@@ -1,0 +1,55 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T08:46:17.699Z",
+  "models": [],
+  "runs": [],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "csv": {
+    "sourceSha256": "f275f72265467e0a442e5ca2e5023d3996e3a2b7b17bcc2cde701323cec7bafb",
+    "previewType": "decimal",
+    "previewSourceBound": true,
+    "status": "completed",
+    "runId": "70a6a87a-e740-4cbf-ac08-991904bec522",
+    "streamTail": "47c3f0f2e1a8a6.csv\"],\"csvSelections\":[{\"column\":1,\"startRow\":2,\"headerRow\":1,\"sourceRef\":\"/uploads/d5b4126c-b38a-471d-9225-8e05c0d5f9cc/f6eddac876a099fc1947c3f0f2e1a8a6.csv\",\"sourceSha256\":\"f275f72265467e0a442e5ca2e5023d3996e3a2b7b17bcc2cde701323cec7bafb\"}],\"documentEvidence\":[{\"ref\":\"/uploads/d5b4126c-b38a-471d-9225-8e05c0d5f9cc/f6eddac876a099fc1947c3f0f2e1a8a6.csv\",\"size\":13,\"sha256\":\"f275f72265467e0a442e5ca2e5023d3996e3a2b7b17bcc2cde701323cec7bafb\"}]},{\"ts\":\"2026-10-29T08:46:36.024Z\",\"role\":\"assistant\",\"text\":\"已完成所选amount列的求和计算，该列有效数值总和为4，对应的CSV分析结果工件已生成，可访问路径：/csv-results/70a6a87a-e740-4cbf-ac08-991904bec522/7a791072-50c4-40a7-9ac2-b0ebffd9bda3.csv。\",\"runId\":\"70a6a87a-e740-4cbf-ac08-991904bec522\",\"steps\":[{\"args\":\"\\\"{\\\\\\\"column\\\\\\\":1,\\\\\\\"operation\\\\\\\":\\\\\\\"sum\\\\\\\",\\\\\\\"sourceRef\\\\\\\":\\\\\\\"/uploads/d5b4126c-b38a-471d-9225-8e05c0d5f9cc/f6eddac876a099fc1947c3f0f2e1a8a6.csv\\\\\\\",\\\\\\\"sourceSha256\\\\\\\":\\\\\\\"f275f72265467e0a442e5ca2e5023d3996e3a2b7b17…(截断)\",\"name\":\"csv_analyze\",\"result\":\"{\\\"kind\\\":\\\"csv_analysis\\\",\\\"source\\\":{\\\"ref\\\":\\\"/uploads/d5b4126c-b38a-471d-9225-8e05c0d5f9cc/f6eddac876a099fc1947c3f0f2e1a8a6.csv\\\",\\\"sha256\\\":\\\"f275f72265467e0a442e5ca2e5023d3996e3a2b7b17bcc2cde701323cec7bafb\\\"},\\\"selection\\\":{\\\"operation\\\":\\\"sum\\\",\\\"column\\\":1,\\\"startRow\\\":2},\\\"result\\\":\\\"4\\\",\\\"valueCount\\\":3,\\\"evidence\\\":{\\\"sources\\\":[{\\\"row\\\":2,\\\"column\\\":1,\\\"sourceLine\\\":2,\\\"sourceColumn\\\":1},{\\\"row\\\":3,\\\"column\\\":1,\\\"sourceLine\\\":3,\\\"sou…(截断)\",\"isError\":false,\"modelName\":null,\"durationMs\":66}],\"artifacts\":[{\"rel\":\"csv-results/70a6a87a-e740-4cbf-ac08-991904bec522/7a791072-50c4-40a7-9ac2-b0ebffd9bda3.csv\",\"url\":\"/api/artifact?p=csv-results%2F70a6a87a-e740-4cbf-ac08-991904bec522%2F7a791072-50c4-40a7-9ac2-b0ebffd9bda3.csv\",\"kind\":\"csv\",\"name\":\"7a791072-50c4-40a7-9ac2-b0ebffd9bda3.csv\",\"size\":488,\"mtime\":1793263590393.4119}]}],\"reply\":\"已完成所选amount列的求和计算，该列有效数值总和为4，对应的CSV分析结果工件已生成，可访问路径：/csv-results/70a6a87a-e740-4cbf-ac08-991904bec522/7a791072-50c4-40a7-9ac2-b0ebffd9bda3.csv。\",\"turns\":1}\n\n",
+    "artifact": {
+      "rel": "csv-results/70a6a87a-e740-4cbf-ac08-991904bec522/7a791072-50c4-40a7-9ac2-b0ebffd9bda3.csv",
+      "sha256": "bfb5d0ab69cd62de0e4d7a3f6db08db8f984e0f25cc32a4e120467486e4cfd5d"
+    },
+    "budgets": [
+      {
+        "limits": {
+          "maxRetries": 0,
+          "maxToolCalls": 1,
+          "maxDurationMs": 180000,
+          "maxModelCalls": 2,
+          "maxOutputTokens": 512,
+          "maxToolCallsPerKey": 1
+        },
+        "snapshot": {
+          "retries": 0,
+          "elapsedMs": 13658.504792,
+          "toolCalls": 1,
+          "costStatus": "unlimited",
+          "modelCalls": 2,
+          "clockStatus": "monotonic",
+          "policyStatus": "configured",
+          "duplicateToolCalls": 1
+        }
+      }
+    ],
+    "download": {
+      "status": 200,
+      "byteCount": 488,
+      "sha256": "bfb5d0ab69cd62de0e4d7a3f6db08db8f984e0f25cc32a4e120467486e4cfd5d",
+      "mime": "text/csv; charset=utf-8",
+      "containsSum4": true
+    },
+    "anonymousStatus": 401,
+    "historyArtifact": true
+  },
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T08:46:36.071Z"
+}

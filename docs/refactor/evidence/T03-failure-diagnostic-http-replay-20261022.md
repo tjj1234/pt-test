@@ -1,0 +1,7 @@
+# T03 failed-run diagnostic over HTTP, persistence, and replay — 2026-10-22
+
+**Local acceptance slice: PASS.** Extended `tests/regression/t03-chat-http-same-key-disconnect-replay-test.mjs` with a real local shell HTTP server, isolated PGlite database, and fake DSH runner. On the diagnostic path, the runner returns `ok:false`, code `AGENT_TURN_ABORTED`, and a safe concrete error category. The first SSE observer disconnects after headers; the same `Idempotency-Key` attaches to the durable Run while the fake runner is held; after release, the replayed terminal frame contains the same `code` and `error`. The `/api/runs/:id/events` terminal `done` record persists both values, the Run reaches `failed`, and the fake runner starts once.
+
+Command: `node --test tests/regression/t03-chat-http-same-key-disconnect-replay-test.mjs` — **1/1 PASS** when run with loopback permission. The default sandbox attempt failed before fixture startup with `listen EPERM`; escalation retry passed. The fixture uses a fake runner and PGlite; it makes no provider call and cannot explain the target host's “hello” incident.
+
+The local HTTP evidence closes the previously missing assertion for failure diagnostics surviving terminal persistence and same-key replay. It does not replace target DSH child stdout/stderr, online Run IDs, PT billing evidence, or T03/T11 end-to-end acceptance. Those remain with the maintainer. T00–T18 and AC01–AC24 aggregate states are unchanged.

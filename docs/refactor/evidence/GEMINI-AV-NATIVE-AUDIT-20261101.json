@@ -1,0 +1,129 @@
+{
+  "auditReportVersion": "1.0.0",
+  "taskPackage": "GEMINI-AV-NATIVE-AUDIT-PACKAGE-20261101.md",
+  "observedAt": "2026-11-01T01:37:00+09:00",
+  "auditScope": "Audio/Video Understanding via locked DSH & Host Runtime",
+  "conclusion": "BLOCKED_ON_NATIVE_ADAPTER_AND_ATTACHMENT_SUPPORT",
+  "summary": "Locked DSH packages (@deepseek-ai/dsh-attachment 0.1.1-rc.2, @deepseek-ai/dsh-llm 0.1.1-rc.2, @deepseek-ai/dsh-llm-pi-ai 0.1.1-rc.2) and underlying @earendil-works/pi-ai 0.82.1 provide NO native audio/video input block types, NO audio/video attachment storage, and NO audio/video wire serialization. Host metadata (capabilities.cjs) exposes tasks but has no active adapter endpoint mappings for audio/video understanding. Any audio/video blocks passed to the adapter are either rejected by admission gates or silently dropped by userContent(), resulting in 0 wire bytes sent.",
+  "packagesAudited": [
+    {
+      "name": "@deepseek-ai/dsh-attachment",
+      "version": "0.1.1-rc.2",
+      "sha256": "ee9c9653937896c36814a107f24a37ea3ed11f8ccdd57afb78c0d729fd8b37ba",
+      "role": "Durable attachment seam & admission gate"
+    },
+    {
+      "name": "@deepseek-ai/dsh-attachment-local",
+      "version": "0.1.1-rc.2",
+      "sha256": "207ac2fb21254ba93ad585b147bd80a6ff869f28cbf731abcfdbc3a0645fa0f6",
+      "role": "Local storage implementation & image limit enforcer"
+    },
+    {
+      "name": "@deepseek-ai/dsh-llm",
+      "version": "0.1.1-rc.2",
+      "sha256": "252de11f9af2a92e2e2eb26dc4e80f7b6313586a96ffce16069435b536952cf6",
+      "role": "Core message types and block assembler"
+    },
+    {
+      "name": "@deepseek-ai/dsh-llm-pi-ai",
+      "version": "0.1.1-rc.2",
+      "sha256": "b50f77d01dbdffbee612f9969903952c131956e5b28d806c7c82a7f715753f89",
+      "role": "DSH to pi-ai provider adapter"
+    },
+    {
+      "name": "@earendil-works/pi-ai",
+      "version": "0.82.1",
+      "sha256": "955aa1caab4c875fc7755abe7cacbf9002d9875c471e8d5af245e495ae1d4596",
+      "role": "Underlying multi-provider LLM transport & wire serializer"
+    }
+  ],
+  "hostFilesAudited": [
+    {
+      "path": "shell/runtime/native-image-message.mjs",
+      "sha256": "4c5bf16a38c8a46af69d8d8786360756b68f05cd1de9c254168b1d4107e43c65",
+      "role": "Host message builder for native attachments"
+    },
+    {
+      "path": "shell/models/capabilities.cjs",
+      "sha256": "773d4bdd06553f95ee5d97abf922287aa97922c1c6f017f07ff0aedcdc2f42e7",
+      "role": "PT catalog metadata normalization and eligibility state machine"
+    },
+    {
+      "path": "shell/models/dsh-configured-catalog.cjs",
+      "sha256": "e5a0c715d53db46ea215140d6cf82b0caab007a0a5935432b463b6d9f321fe7b",
+      "role": "Constrains catalog adaptations to active DSH profiles"
+    },
+    {
+      "path": "shell/persistent-runner.mjs",
+      "sha256": "855dc3c8a1dfb18ed01ce392dcc231283c9086efdf362fc240fdf8413835a254",
+      "role": "Host agent runner and RPC dispatcher"
+    }
+  ],
+  "evidenceMatrix": {
+    "nativeMessageBlockRepresentation": {
+      "status": "REAL_GAP",
+      "nativeAvailability": false,
+      "hostWiring": "None",
+      "sourceLocation": "shell/node_modules/@deepseek-ai/dsh-llm/lib/types/types.d.ts:40-60",
+      "finding": "ContentBlockMap only defines 'text' | 'reasoning' | 'image' | 'tool-call' | 'tool-result'. No AudioBlock or VideoBlock types exist in DSH LLM."
+    },
+    "attachmentLayerRepresentation": {
+      "status": "REAL_GAP",
+      "nativeAvailability": false,
+      "hostWiring": "None (nativeImageMessage restricted to images)",
+      "sourceLocation": "shell/node_modules/@deepseek-ai/dsh-attachment/lib/index.js:116",
+      "finding": "AttachmentStore strictly checks mediaTypes ['image/png', 'image/jpeg', 'image/webp', 'image/gif']. Audio and video MIME types throw AttachmentError with code UNSUPPORTED_IMAGE_TYPE."
+    },
+    "adapterWireFields": {
+      "status": "REAL_GAP",
+      "nativeAvailability": false,
+      "hostWiring": "None",
+      "sourceLocation": "shell/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js:819-825",
+      "finding": "pi-ai openai-completions serializer only generates type: 'image_url'. No input_audio or video fields exist. In dsh-llm-pi-ai userContent(), unrecognized blocks hit default: break and are omitted."
+    },
+    "transcodingAndFrameExtraction": {
+      "status": "HOST_WIRING_REQUIRED",
+      "nativeAvailability": false,
+      "hostWiring": "Pre-processing pipeline required (ASR for audio, ffmpeg keyframe extraction for video)",
+      "sourceLocation": "shell/persistent-runner.mjs:878-883",
+      "finding": "To support AV understanding with current locked DSH, host must preprocess audio via Speech-to-Text (ASR) into text blocks, and preprocess video via keyframe extraction into native image blocks."
+    },
+    "timestampProvenanceAndPrecision": {
+      "status": "REAL_GAP",
+      "nativeAvailability": false,
+      "hostWiring": "None",
+      "sourceLocation": "N/A (No temporal grounding structures in DSH or pi-ai)",
+      "finding": "No native timestamping, subtitle alignment, or chunked audio offset markers exist in the model message protocol."
+    },
+    "uploadAndStreamLimits": {
+      "status": "REAL_GAP",
+      "nativeAvailability": false,
+      "hostWiring": "Image limits only: 4 images, 10MB decoded limit",
+      "sourceLocation": "shell/runtime/native-image-message.mjs:6",
+      "finding": "MAX_IMAGES=4, MAX_BYTES=10MB enforced for images. No streaming audio or large video chunking infrastructure exists in host runtime."
+    },
+    "coldHistoryReplayAndSourceSha": {
+      "status": "REAL_GAP",
+      "nativeAvailability": false,
+      "hostWiring": "None",
+      "sourceLocation": "shell/node_modules/@deepseek-ai/dsh-attachment/README.md",
+      "finding": "DSH attachment service does not persist or reference audio/video objects. Session replay cannot reconstruct AV media blocks without external object store."
+    },
+    "sameKeyEligibility": {
+      "status": "REAL_GAP",
+      "nativeAvailability": false,
+      "hostWiring": "None",
+      "sourceLocation": "shell/models/capabilities.cjs:105-108",
+      "finding": "capabilities.cjs PT_TASK_ADAPTER_ENDPOINTS has no entry for audioUnderstanding or videoUnderstanding. States are permanently endpointCompatible: false and autoEligible: false."
+    }
+  },
+  "probeExecution": {
+    "command": "node tests/probes/av-native-capability-audit-20261101.mjs",
+    "exitCode": 0,
+    "totalTests": 11,
+    "passedTests": 11,
+    "failedTests": 0,
+    "networkLeakCount": 0,
+    "wireBytesCapturedForAudioVideo": 0
+  }
+}

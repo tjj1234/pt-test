@@ -1,0 +1,91 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T08:36:09.198Z",
+  "models": [],
+  "runs": [
+    {
+      "taskType": "text2video",
+      "requestModel": "dreamina-seedance-2-0-mini-260615",
+      "status": "completed",
+      "at": "2026-10-29T08:36:12.790Z",
+      "runId": "54336668-9c1e-4df5-9e78-90108fc90b02",
+      "httpStatus": 200,
+      "authorization": "explicit-single-submission",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 5\ndata: {\"mediaAuthorization\":{\"runId\":\"54336668-9c1e-4df5-9e78-90108fc90b02\",\"taskType\":\"text2video\",\"expiresAt\":\"2026-10-29T08:38:13.256Z\",\"parameterSummary\":\"本次固定5秒、720P、16:9。\"}}\n\nid: 7\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成一个5秒720P 16:9的视频，内容为放在白色桌子上的蓝色陶瓷咖啡杯，带有平缓的镜头移动\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2video\\\\\\\"}\\\"\",\"name\":\"media_route\"}}\n\nid: 14\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成一个5秒720P 16:9的视频，内容为放在白色桌子上的蓝色陶瓷咖啡杯，带有平缓的镜头移动\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2video\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"已生成文生视频\",\"isError\":false}}\n\nid: 20\ndata: {\"delta\":\"已为你生成符合要求的蓝色陶瓷咖啡杯主题文生视频，任务完成。\"}\n\nid: 22\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T08:36:13.248Z\",\"role\":\"user\",\"text\":\"Use media_route exactly once with taskType text2video to generate one 5 second 720P 16:9 video of a blue ceramic coffee cup on a white table, with gentle camera movement. Actually call the video tool, then briefly confirm completion.\",\"taskType\":\"text2video\"},{\"ts\":\"2026-10-29T08:38:01.022Z\",\"role\":\"assistant\",\"text\":\"已为你生成符合要求的蓝色陶瓷咖啡杯主题文生视频，任务完成。\",\"media\":[{\"url\":\"/api/run-media/54336668-9c1e-4df5-9e78-90108fc90b02/506e863d-0154-4dd0-96ad-125054dda24a.mp4\",\"type\":\"video\"}],\"runId\":\"54336668-9c1e-4df5-9e78-90108fc90b02\",\"steps\":[{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成一个5秒720P 16:9的视频，内容为放在白色桌子上的蓝色陶瓷咖啡杯，带有平缓的镜头移动\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2video\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"已生成文生视频\",\"isError\":false,\"modelName\":\"dreamina-seedance-2-0-mini-260615\",\"durationMs\":91732}]}],\"reply\":\"已为你生成符合要求的蓝色陶瓷咖啡杯主题文生视频，任务完成。\",\"turns\":1}\n\n",
+      "externalOperations": {
+        "operations": [
+          {
+            "operationId": "3ee5a112-6f07-4eea-b5c9-d067e57e0477",
+            "runId": "54336668-9c1e-4df5-9e78-90108fc90b02",
+            "operationKey": "54336668-9c1e-4df5-9e78-90108fc90b02:a7a5c333-a8bf-4c83-88f4-cd55794eeccb",
+            "provider": "powertokens-video",
+            "status": "succeeded",
+            "taskId": "task_4bQ10dopNvaYeOufuhvYGY5be5L4ewNK",
+            "queryAttempts": 0,
+            "nextQueryAt": null,
+            "lastQuery": {
+              "reason": null,
+              "source": "host",
+              "attempt": 0,
+              "outcome": "succeeded",
+              "queried": false,
+              "observedAt": "2026-10-29T08:37:49.291Z",
+              "providerStatus": "succeeded"
+            },
+            "createdAt": "2026-10-29T08:36:24.310Z",
+            "updatedAt": "2026-10-29T08:37:49.291Z"
+          }
+        ],
+        "nextCursor": "3ee5a112-6f07-4eea-b5c9-d067e57e0477",
+        "hasMore": false
+      },
+      "managedMedia": {
+        "media": [
+          {
+            "type": "video",
+            "url": "/api/run-media/54336668-9c1e-4df5-9e78-90108fc90b02/506e863d-0154-4dd0-96ad-125054dda24a.mp4",
+            "size": 2030749,
+            "sha256": "c2da40eeaeaf8372233098851bb9c95cc3a1d9b6aad6241ecda848c29b77825f"
+          }
+        ],
+        "hasMore": false
+      },
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 1,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 2,
+            "maxOutputTokens": 512,
+            "maxToolCallsPerKey": 1
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 106388.8615,
+            "toolCalls": 1,
+            "costStatus": "unlimited",
+            "modelCalls": 2,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 1
+          }
+        }
+      ],
+      "download": {
+        "status": 200,
+        "byteCount": 2030749,
+        "sha256": "c2da40eeaeaf8372233098851bb9c95cc3a1d9b6aad6241ecda848c29b77825f",
+        "mime": "video/mp4"
+      },
+      "anonymousStatus": 401,
+      "historyManagedUrl": true
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T08:38:01.073Z"
+}

@@ -23,6 +23,9 @@ function ok(name, cond, detail) {
 // 模拟父进程（服务端）完整环境：混入一批服务端自身敏感配置。
 const SENSITIVE_KEYS = [
   "PT_SHELL_PASSWORD",
+  "PT_DASH_INTERNAL_KEY",
+  "PT_DASH_TENANT_ID",
+  "PT_DASH_TENANT_TOKEN",
   "PT_MASTER_KEY",
   "PT_DASH_TOKEN",
   "PT_MODELS_API_KEY",
@@ -41,6 +44,8 @@ const parentEnv = {
   SystemRoot: "C:\\Windows",
   POWERTOKENS_BASE_URL: "https://custom.pt.example",
   PT_DASH_INTERNAL_KEY: "internal-key",
+  PT_DASH_TENANT_ID: "mock_parent_tenant",
+  PT_DASH_TENANT_TOKEN: "mock_parent_token",
   DASH_PORT: "8095",
 };
 for (const k of SENSITIVE_KEYS) parentEnv[k] = "SECRET-" + k;
@@ -50,7 +55,6 @@ const child = buildDshChildEnv(parentEnv, {
   nodePath: "/tmp/node_path",
   powerTokensApiKey: "pt-key",
   powerTokensBaseUrl: parentEnv.POWERTOKENS_BASE_URL,
-  dashInternalKey: parentEnv.PT_DASH_INTERNAL_KEY,
   dashPort: parentEnv.DASH_PORT,
 });
 
@@ -63,8 +67,9 @@ ok("DSH_HOME 注入", child.DSH_HOME === "/tmp/dsh-home");
 ok("NODE_PATH 注入", child.NODE_PATH === "/tmp/node_path");
 ok("POWERTOKENS_API_KEY 注入", child.POWERTOKENS_API_KEY === "pt-key");
 ok("POWERTOKENS_BASE_URL 注入", child.POWERTOKENS_BASE_URL === "https://custom.pt.example");
-ok("PT_DASH_INTERNAL_KEY 注入（看板回连 HMAC）", child.PT_DASH_INTERNAL_KEY === "internal-key");
-ok("DASH_PORT 注入", child.DASH_PORT === "8095");
+ok("全局与 scoped dashboard 凭据均不下发", !child.PT_DASH_INTERNAL_KEY && !child.PT_DASH_TENANT_ID && !child.PT_DASH_TENANT_TOKEN);
+ok("mock parent 中的 scoped token 不复制", child.PT_DASH_TENANT_TOKEN === undefined);
+ok("dashboard 端口不再注入子进程", child.DASH_PORT === undefined);
 
 // ===== 3. 平台运行必需变量透传 =====
 ok("PATH 透传", child.PATH === "/usr/bin");

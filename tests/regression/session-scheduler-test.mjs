@@ -19,6 +19,24 @@ function controlled(scheduler, { runId, userId = 'u', sessionId = runId, process
   return { ...handle, started: started.promise, release: gate.resolve, reject: gate.reject, calls: () => callCount, received: () => received };
 }
 
+test('default concurrency is four Runs per account and sixteen globally', async () => {
+  const s = createSessionScheduler();
+  const sameAccount = Array.from({ length: 5 }, (_, i) => controlled(s, { runId: `default-user-${i}`, userId: 'same-account' }));
+  const otherAccounts = Array.from({ length: 13 }, (_, i) => controlled(s, { runId: `default-global-${i}`, userId: `account-${i}` }));
+  const all = [...sameAccount, ...otherAccounts];
+  await Promise.all(all.slice(0, 4).map((x) => x.started));
+  await Promise.all(otherAccounts.slice(0, 12).map((x) => x.started));
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(s.stats(), { running: 16, queued: 2, active: 18, closed: false });
+  assert.equal(sameAccount[4].calls(), 0, 'fifth Run for one account stays queued at the per-account cap');
+  assert.equal(otherAccounts[12].calls(), 0, 'seventeenth global Run stays queued at the global cap');
+  const closing = s.close();
+  all.filter((x) => x.calls()).forEach((x) => x.release('close fixture'));
+  await closing;
+  await Promise.allSettled(all.map((x) => x.result));
+  assert.deepEqual(s.stats(), { running: 0, queued: 0, active: 0, closed: true });
+});
+
 test('two sessions overlap; one session FIFO and immutable run context remain isolated', async () => {
   const s = createSessionScheduler({ perUserLimit: 2, globalLimit: 3 });
   const original = { nested: { value: 'one' }, runId: 'spoof' };

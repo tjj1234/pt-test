@@ -1,0 +1,619 @@
+--- /tmp/ptvideo-engine-SDM1L4/ptvideo/pt_video_original.py	2026-10-27 14:57:21
++++ /tmp/ptvideo-engine-SDM1L4/ptvideo/pt_video.py	2026-10-27 15:08:42
+@@ -51,6 +51,21 @@
+ import urllib.error
+ import urllib.request
+ from pathlib import Path
++import threading
++import math
++
++# ---------- cancellation token (injectable, thread-safe) ----------
++class CancellationToken:
++    """Lightweight cancellation flag. Pass to generate_for_product(); call .cancel() to stop."""
++    def __init__(self):
++        self._cancelled = threading.Event()
++    def cancel(self):
++        self._cancelled.set()
++    @property
++    def is_cancelled(self):
++        return self._cancelled.is_set()
++
++_NOT_CANCELLED = CancellationToken()  # default sentinel — never cancelled
+ 
+ SCRIPT_DIR = Path(__file__).resolve().parent
+ # 配置与任何 agent 解耦：默认放用户级目录，可用环境变量覆盖
+@@ -349,6 +364,38 @@
+         self.status = status
+         self.message = message
+         super().__init__(f"HTTP {status}: {message}")
++
++
++def classify_error(e):
++    """Map ApiError to a stable product error code; never echo raw upstream body.
++
++    Returns (code: str, user_hint: str).
++    403 is NOT asserted to mean key_invalid — it carries three semantics.
++    """
++    if not isinstance(e, ApiError):
++        return ("UPSTREAM_UNKNOWN", "上游返回异常，请稍后重试")
++    msg = (e.message or "").lower()
++    status = e.status
++    # Quota / balance — most specific first
++    if "quota" in msg or "token quota" in msg or "insufficient" in msg or "balance" in msg:
++        return ("QUOTA_INSUFFICIENT", "账户余额不足，请充值后重试")
++    if "not permitted" in msg or "no permission" in msg or "not allowed" in msg or "not have access" in msg:
++        return ("MODEL_NOT_PERMITTED", "当前 Key 无此模型权限，请在 PT 后台检查白名单")
++    if "token_invalid" in msg or "invalid token" in msg or "unauthorized" in msg:
++        return ("KEY_INVALID", "API Key 无效，请检查配置")
++    if "agreement" in msg or "asset library" in msg or "not signed" in msg or "sign the" in msg:
++        return ("SEEDANCE_AGREEMENT_REQUIRED", "需先签署 Asset Library User Agreement，详见 seedance enable 引导")
++    if "model_not_found" in msg or "model is not" in msg or "not supported" in msg or "not listed" in msg:
++        return ("MODEL_NOT_FOUND", "模型 ID 不在账号可用列表，请检查 -m 参数")
++    if "no available" in msg or "无可用渠道" in msg:
++        return ("NO_AVAILABLE_CHANNEL", "暂无可用渠道，属瞬时故障，稍后重试")
++    if status == 429:
++        return ("RATE_LIMITED", "请求频率超限（429），请稍后重试")
++    if status >= 500:
++        return ("UPSTREAM_SERVER_ERROR", f"上游服务器错误 ({status})，请稍后重试")
++    if status == 403:
++        return ("UPSTREAM_FORBIDDEN", "请求被拒（403），可能是余额、权限或 Key 问题，请查看 PT 后台")
++    return ("UPSTREAM_ERROR", f"上游返回错误 (HTTP {status})，请稍后重试")
+ 
+ 
+ def list_key_models(key, kind="all"):
+@@ -640,65 +687,143 @@
+     return tid, resp
+ 
+ 
+-def poll_task(key, task_id, interval=POLL_INTERVAL, timeout=POLL_TIMEOUT):
++# Circuit-breaker thresholds (configurable for tests)
++POLL_CB_5XX_MAX   = 8    # consecutive 5xx failures before abort
++POLL_CB_UNKN_MAX  = 40   # consecutive unknown-status polls before abort
++POLL_CB_429_MAX   = 30   # consecutive 429s before abort
++POLL_CB_429_BACKOFF_CAP = 60  # max backoff seconds for 429
++
++def poll_task(key, task_id, interval=POLL_INTERVAL, timeout=POLL_TIMEOUT,
++              _transport=None, _sleep=None, _clock=None, _cancel=None):
+     """每 interval 秒查询一次，直到 succeeded/completed 或 failed/cancelled/超时。
+     返回成功时的任务对象（含 metadata.url）。
+ 
+-    已知短板（见 docs/pitfall-archive.md A.02/A.03）：未做 429 退避 / 5xx 熔断 / 未识别状态熔断，
+-    遇网关抖动可能静默空转到 POLL_TIMEOUT。后续可加三重熔断。
++    加固（解决 pitfall-archive.md A.02/A.03）:
++    - 429 独立计数 + 指数退避（上限 POLL_CB_429_BACKOFF_CAP 秒）
++    - 连续 5xx 计数熔断（POLL_CB_5XX_MAX 次）
++    - 连续未识别状态计数熔断（POLL_CB_UNKN_MAX 次，打印原始响应摘要）
++    - 三类计数器在成功读到有效状态后各自重置
++
++    Injectable for offline testing:
++      _transport(method, path, key, timeout) -> dict  (replaces _api_call)
++      _sleep(seconds)                                  (replaces time.sleep)
++      _clock() -> float                                (replaces time.time)
++      _cancel: CancellationToken                       (cooperative cancellation)
+     """
+-    deadline = time.time() + timeout
++    _transport = _transport or (lambda method, path, key, timeout: _api_call(method, path, key, timeout=timeout))
++    _sleep     = _sleep or time.sleep
++    _clock     = _clock or time.time
++    _cancel    = _cancel or _NOT_CANCELLED
++
++    # Validate numeric config (guard against NaN/Inf/negative)
++    for name, val in [("timeout", timeout), ("interval", interval)]:
++        if not (isinstance(val, (int, float)) and math.isfinite(val) and val > 0):
++            raise ValueError(f"poll_task: {name} must be a finite positive number, got {val!r}")
++
++    deadline = _clock() + timeout
+     last_status = None
++    consec_5xx = 0
++    consec_unkn = 0
++    consec_429 = 0
++    backoff_429 = interval  # starts at poll interval, doubles each 429
++
+     while True:
++        if _cancel.is_cancelled:
++            raise ApiError(0, f"轮询已取消（调用方取消），已知 task_id={task_id}；task ID 保留，可手动复查")
++
+         try:
+-            task = _api_call("GET", VIDEO_POLL.format(id=task_id), key, timeout=30)
++            task = _transport("GET", VIDEO_POLL.format(id=task_id), key, 30)
++            # Successful HTTP — reset 5xx and 429 counters
++            consec_5xx = 0
++            consec_429 = 0
++            backoff_429 = interval
+         except ApiError as e:
+-            sys.stderr.write(f"[poll] 查询失败 {e}（{int(deadline - time.time())}s 内重试）\n")
+-            if time.time() >= deadline:
+-                raise ApiError(0, f"轮询超时（>{timeout}s），最后状态={last_status}；稍后可单独 GET /v1/videos/{task_id} 复查")
+-            time.sleep(interval)
++            remaining = int(deadline - _clock())
++            if e.status == 429:
++                consec_429 += 1
++                if consec_429 > POLL_CB_429_MAX:
++                    raise ApiError(0, f"连续 429 限流 {consec_429} 次，熔断退出；task_id={task_id} 保留")
++                wait = min(backoff_429, POLL_CB_429_BACKOFF_CAP)
++                sys.stderr.write(f"[poll] 429 限流（第 {consec_429} 次），退避 {wait:.0f}s（剩余 {remaining}s）\n")
++                if _clock() + wait >= deadline:
++                    raise ApiError(0, f"轮询超时（>{timeout}s），最后状态={last_status}；task_id={task_id}")
++                _sleep(wait)
++                backoff_429 = min(backoff_429 * 2, POLL_CB_429_BACKOFF_CAP)
++                continue
++            elif e.status >= 500:
++                consec_5xx += 1
++                if consec_5xx > POLL_CB_5XX_MAX:
++                    raise ApiError(0, f"连续 {consec_5xx} 次 5xx 错误，熔断退出；task_id={task_id} 保留，稍后可手动 GET 复查")
++                sys.stderr.write(f"[poll] {e.status} 服务器错误（第 {consec_5xx} 次/{POLL_CB_5XX_MAX}，剩余 {remaining}s）\n")
++            else:
++                sys.stderr.write(f"[poll] 查询失败 {e}（剩余 {remaining}s）\n")
++            if _clock() >= deadline:
++                raise ApiError(0, f"轮询超时（>{timeout}s），最后状态={last_status}；task_id={task_id}")
++            _sleep(interval)
+             continue
++
+         status = (task.get("status") or "").lower()
+         last_status = status
+         progress = task.get("progress")
+-        if status in ("succeeded", "completed"):
++
++        # Check result URL as strongest success signal
++        url = result_url(task)
++        if url and status in ("succeeded", "completed", "finished", "done", "ready"):
+             return task
++        if status in ("succeeded", "completed", "finished", "done", "ready"):
++            return task
+         if status in ("failed", "cancelled"):
+             err = task.get("error") or (task.get("metadata") or {}).get("error") \
+                 or f"任务结束于异常状态：{status}"
+             raise ApiError(0, str(err))
+-        bar = f"进度 {progress}%" if progress is not None else status
+-        sys.stderr.write(f"[poll] task {task_id} 状态={status} {bar}（{int(deadline - time.time())}s 内继续）\n")
+-        if time.time() >= deadline:
+-            raise ApiError(0, f"轮询超时（>{timeout}s），最后状态={status}；稍后可单独 GET /v1/videos/{task_id} 复查")
+-        time.sleep(interval)
++
++        if not status or status not in ("queued", "pending", "in_progress", "processing",
++                                        "running", "uploading", "submitted"):
++            consec_unkn += 1
++            raw_snippet = str(task)[:200]
++            sys.stderr.write(f"[poll] 未识别状态 {status!r}（第 {consec_unkn} 次/{POLL_CB_UNKN_MAX}）原始摘要: {raw_snippet}\n")
++            if consec_unkn > POLL_CB_UNKN_MAX:
++                raise ApiError(0, f"连续 {consec_unkn} 次未识别状态，熔断退出；task_id={task_id} 保留")
++        else:
++            consec_unkn = 0  # reset on recognized in-progress status
+ 
++        bar = f"进度 {progress}%" if progress is not None else (status or "unknown")
++        remaining = int(deadline - _clock())
++        sys.stderr.write(f"[poll] task {task_id} 状态={status} {bar}（剩余 {remaining}s）\n")
++        if _clock() >= deadline:
++            raise ApiError(0, f"轮询超时（>{timeout}s），最后状态={status}；task_id={task_id}")
++        _sleep(interval)
+ 
++
+ def result_url(task):
+     meta = task.get("metadata") or {}
+     return meta.get("url") or meta.get("content_url") or task.get("url")
+ 
+ 
+ def download_binary(url, path, key):
+-    req = urllib.request.Request(url, headers=_headers(key))
++    """Download result binary WITHOUT sending Authorization header.
++    Result URLs are pre-signed (image) or public CDN (video); sending Bearer
++    leaks the key and is rejected anyway. key param retained for signature
++    compatibility only — never attached to the request."""
++    # Never send key to result/CDN URLs; use anonymous User-Agent only.
++    req = urllib.request.Request(url, headers={"User-Agent": "pt-media-skill"})
++    # Disable automatic redirect following so we can inspect Location header
++    # and ensure we never forward auth to a different host.
++    class _NoRedirect(urllib.request.HTTPRedirectHandler):
++        def redirect_request(self, req, fp, code, msg, headers, newurl):
++            # Return a new request WITHOUT auth — key must not follow redirects
++            return urllib.request.Request(newurl, headers={"User-Agent": "pt-media-skill"})
++    opener = urllib.request.build_opener(_NoRedirect)
+     try:
+-        with urllib.request.urlopen(req, timeout=120) as r, open(path, "wb") as f:
++        with opener.open(req, timeout=120) as r, open(path, "wb") as f:
+             while True:
+                 chunk = r.read(DOWNLOAD_CHUNK)
+                 if not chunk:
+                     break
+                 f.write(chunk)
+         return True
+-    except urllib.error.HTTPError:
+-        # 结果地址若不需要鉴权（如图片临时签名 URL），再无 auth 试一次
+-        req2 = urllib.request.Request(url, headers={"User-Agent": "pt-media-skill"})
+-        with urllib.request.urlopen(req2, timeout=120) as r, open(path, "wb") as f:
+-            while True:
+-                chunk = r.read(DOWNLOAD_CHUNK)
+-                if not chunk:
+-                    break
+-                f.write(chunk)
+-        return True
++    except urllib.error.HTTPError as e:
++        raise ApiError(e.code, f"下载失败 HTTP {e.code}（结果链接应为预签名/公开地址，无需 Bearer）")
+ 
+ 
+ # ---------- 资产库上传（Seedance 图生视频必须先把素材上传拿 asset://）----------
+@@ -905,6 +1030,384 @@
+         sys.stderr.write("[seedance] 检测到协议未签，已重置本地标记；请签好后跑 `seedance enable`\n")
+ 
+ 
++# ============================================================
++# PUBLIC PRODUCT API
++# ============================================================
++_ALLOWED_KINDS = {"image", "video", "seedance"}
++_ALLOWED_RESOLUTIONS = {"480p", "480P", "720p", "720P", "1080p", "1080P"}
++_ALLOWED_RATIOS = {"adaptive", "16:9", "4:3", "1:1", "3:4", "9:16"}
++_ALLOWED_ASPECT_RATIOS = {"1:1", "16:9", "4:3", "3:4", "9:16", "3:2", "2:3"}
++_MAX_PROMPT_LEN = 2000
++_MAX_MODEL_ID_LEN = 128
++_MAX_ASSET_URL_LEN = 512
++_MAX_DURATION = 30
++_MIN_DURATION = 2
++_MAX_N_IMAGES = 9
++
++
++class ProductResult:
++    """Structured result returned by generate_for_product.
++    Does NOT include raw prompt, full provider body, Key, or local paths.
++    """
++    __slots__ = ("ok", "task_id", "model", "kind", "status",
++                 "result_urls", "billing_params", "error_code", "error_hint",
++                 "cost_unknown")
++
++    def __init__(self, *, ok, task_id=None, model=None, kind=None, status=None,
++                 result_urls=None, billing_params=None,
++                 error_code=None, error_hint=None):
++        self.ok = ok
++        self.task_id = task_id
++        self.model = model
++        self.kind = kind
++        self.status = status
++        self.result_urls = result_urls or []
++        self.billing_params = billing_params or {}
++        self.error_code = error_code
++        self.error_hint = error_hint
++        self.cost_unknown = True  # product cost always unknown; use F3 snapshot
++
++    def to_dict(self):
++        d = {
++            "ok": self.ok,
++            "task_id": self.task_id,
++            "model": self.model,
++            "kind": self.kind,
++            "status": self.status,
++            "result_urls": self.result_urls,
++            "billing_params": self.billing_params,
++            "cost_usd": None,   # always null — F3 price snapshot must supply
++            "cost_unknown": self.cost_unknown,
++        }
++        if not self.ok:
++            d["error_code"] = self.error_code
++            d["error_hint"] = self.error_hint
++        return d
++
++
++class ProductRequest:
++    """Input contract for generate_for_product.  All fields explicit; no defaults from config/env."""
++    __slots__ = ("model", "kind", "prompt", "duration", "resolution", "ratio",
++                 "aspect_ratio", "n", "seed", "first_frame", "last_frame",
++                 "ref_images", "no_audio", "no_prompt_extend", "watermark",
++                 "poll_timeout", "submit_timeout", "poll_interval")
++
++    def __init__(self, *, model, kind, prompt="",
++                 duration=5, resolution="720p", ratio="adaptive",
++                 aspect_ratio="1:1", n=1, seed=None,
++                 first_frame=None, last_frame=None, ref_images=None,
++                 no_audio=False, no_prompt_extend=False, watermark=False,
++                 poll_timeout=POLL_TIMEOUT, submit_timeout=SUBMIT_TIMEOUT,
++                 poll_interval=POLL_INTERVAL):
++        self.model = model
++        self.kind = kind
++        self.prompt = prompt
++        self.duration = duration
++        self.resolution = resolution
++        self.ratio = ratio
++        self.aspect_ratio = aspect_ratio
++        self.n = n
++        self.seed = seed
++        self.first_frame = first_frame
++        self.last_frame = last_frame
++        self.ref_images = ref_images or []
++        self.no_audio = no_audio
++        self.no_prompt_extend = no_prompt_extend
++        self.watermark = watermark
++        self.poll_timeout = poll_timeout
++        self.submit_timeout = submit_timeout
++        self.poll_interval = poll_interval
++
++
++def _validate_product_request(request, api_key):
++    """Validate ProductRequest before any network call. Raises ValueError on bad input."""
++    if not api_key or not isinstance(api_key, str) or not api_key.strip():
++        raise ValueError("api_key must be a non-empty string; no fallback to env or config")
++    if not request.model or not isinstance(request.model, str):
++        raise ValueError("model must be a non-empty string")
++    if len(request.model) > _MAX_MODEL_ID_LEN:
++        raise ValueError(f"model ID too long (max {_MAX_MODEL_ID_LEN} chars)")
++    if request.kind not in _ALLOWED_KINDS:
++        raise ValueError(f"kind must be one of {sorted(_ALLOWED_KINDS)}, got {request.kind!r}")
++    # Guard against auto/config model fallback
++    if request.model.lower() == "auto":
++        raise ValueError("model='auto' not allowed in product API; caller must supply exact model ID")
++    # Numeric guards
++    for name, val, lo, hi in [
++        ("duration", request.duration, _MIN_DURATION, _MAX_DURATION),
++        ("n", request.n, 1, _MAX_N_IMAGES),
++        ("poll_timeout", request.poll_timeout, 10, 7200),
++        ("submit_timeout", request.submit_timeout, 10, 600),
++        ("poll_interval", request.poll_interval, 1, 120),
++    ]:
++        if not isinstance(val, (int, float)) or not math.isfinite(val):
++            raise ValueError(f"{name} must be a finite number, got {val!r}")
++        if not (lo <= val <= hi):
++            raise ValueError(f"{name} must be in [{lo}, {hi}], got {val!r}")
++    if request.kind in ("video", "seedance"):
++        if request.resolution.upper() not in {r.upper() for r in _ALLOWED_RESOLUTIONS}:
++            raise ValueError(f"resolution must be one of {sorted(_ALLOWED_RESOLUTIONS)}")
++        if request.ratio not in _ALLOWED_RATIOS:
++            raise ValueError(f"ratio must be one of {sorted(_ALLOWED_RATIOS)}")
++    if request.kind == "image":
++        if request.aspect_ratio not in _ALLOWED_ASPECT_RATIOS:
++            raise ValueError(f"aspect_ratio must be one of {sorted(_ALLOWED_ASPECT_RATIOS)}")
++    if request.prompt and len(request.prompt) > _MAX_PROMPT_LEN:
++        raise ValueError(f"prompt too long (max {_MAX_PROMPT_LEN} chars)")
++    if request.kind == "image" and request.model.lower() == "image-01" and request.first_frame:
++        # image2image not implemented; guard against silent wrong submission
++        raise ValueError(
++            "image-01 subject_reference (image2image) is not implemented in this engine. "
++            "Only text2image is supported. image2image: unsupported."
++        )
++    # Seedance: http media must not be passed; only asset:// allowed
++    if request.kind == "seedance":
++        for url in ([request.first_frame, request.last_frame] + list(request.ref_images or [])):
++            if url and url.startswith("http"):
++                raise ValueError(
++                    f"Seedance media URL must use asset:// format (upload first with `upload` command). "
++                    f"http(s) URLs are rejected by PT for Seedance."
++                )
++    # Asset URL length guard
++    for url in ([request.first_frame, request.last_frame] + list(request.ref_images or [])):
++        if url and len(url) > _MAX_ASSET_URL_LEN:
++            raise ValueError(f"Media URL too long (max {_MAX_ASSET_URL_LEN} chars)")
++
++
++class ProductHooks:
++    """Optional hooks injected into generate_for_product.
++    All hooks are called synchronously. If a hook raises, the contract is:
++      - before_submit: exception prevents any POST (0 charges)
++      - on_task_id:    exception raises TaskIdWriteError (task_id preserved); polling stops
++      - on_result:     exception is logged but does NOT trigger re-submission
++    """
++    def before_submit(self, metadata: dict) -> None:
++        """Called before any billable POST. metadata: model, kind, endpoint, billing_params only."""
++    def on_task_id(self, task_id: str) -> None:
++        """Called immediately after receiving task_id, before first poll."""
++    def on_result(self, result: ProductResult) -> None:
++        """Called with final result; failure here must not re-submit."""
++
++
++class TaskIdWriteError(Exception):
++    """Raised when on_task_id hook fails. task_id is preserved in .task_id."""
++    def __init__(self, task_id, cause):
++        self.task_id = task_id
++        self.cause = cause
++        super().__init__(f"on_task_id hook failed for task_id={task_id}: {cause}")
++
++
++def generate_for_product(request: ProductRequest, *, api_key: str,
++                         hooks: ProductHooks = None,
++                         _transport=None, _sleep=None, _clock=None,
++                         _cancel: CancellationToken = None) -> ProductResult:
++    """
++    Stable product API entry point for the Northstar host.
++
++    Contract:
++    - api_key MUST be supplied explicitly; never falls back to env/config
++    - model MUST be an exact, whitelisted model ID (no 'auto')
++    - kind MUST be one of: image | video | seedance
++    - No file download; result_urls returned for host asset-ingest handler
++    - POST submitted at most once; timeout/cancel sets unknown/reconciliation state
++    - billing_params reflects request parameters; cost_usd always null (use F3)
++    - error_code is stable; raw upstream body never echoed
++    - image2image (image-01 subject_reference): explicitly unsupported
++    """
++    hooks = hooks or ProductHooks()
++    _cancel = _cancel or _NOT_CANCELLED
++    _clock = _clock or time.time
++    _sleep = _sleep or time.sleep
++
++    # ---- validate ----
++    try:
++        _validate_product_request(request, api_key)
++    except ValueError as e:
++        return ProductResult(ok=False, error_code="INVALID_REQUEST",
++                             error_hint=str(e), kind=request.kind, model=request.model)
++
++    billing_params = {
++        "model": request.model,
++        "kind": request.kind,
++        "duration_s": request.duration if request.kind != "image" else None,
++        "resolution": request.resolution if request.kind != "image" else None,
++        "n_images": request.n if request.kind == "image" else None,
++        "aspect_ratio": request.aspect_ratio if request.kind == "image" else None,
++    }
++
++    # ---- before_submit hook (must fire before ANY billable POST) ----
++    meta = {
++        "model": request.model,
++        "kind": request.kind,
++        "endpoint": IMAGE_ENDPOINT if request.kind == "image" else VIDEO_SUBMIT,
++        "billing_params": billing_params,
++    }
++    try:
++        hooks.before_submit(meta)
++    except Exception as e:
++        return ProductResult(ok=False, error_code="BEFORE_SUBMIT_REJECTED",
++                             error_hint=f"before_submit hook rejected: {type(e).__name__}",
++                             model=request.model, kind=request.kind)
++
++    # ---- check cancellation before submit ----
++    if _cancel.is_cancelled:
++        return ProductResult(ok=False, error_code="CANCELLED_BEFORE_SUBMIT",
++                             error_hint="Cancelled before submit; 0 charges",
++                             model=request.model, kind=request.kind)
++
++    # ---- build _transport wrapper ----
++    def _do_call(method, path, key, timeout):
++        fn = _transport or _api_call
++        if _transport:
++            return _transport(method, path, key, timeout)
++        return _api_call(method, path, key, body=None, timeout=timeout)
++
++    # ============================================================
++    # IMAGE path (synchronous)
++    # ============================================================
++    if request.kind == "image":
++        body = {
++            "model": request.model,
++            "prompt": request.prompt or "",
++            "aspect_ratio": request.aspect_ratio,
++            "n": request.n,
++        }
++        if request.seed is not None:
++            body["seed"] = request.seed
++        try:
++            if _transport:
++                resp = _transport("POST", IMAGE_ENDPOINT, api_key, request.submit_timeout)
++            else:
++                resp = _api_call("POST", IMAGE_ENDPOINT, api_key,
++                                 body=body, timeout=request.submit_timeout)
++        except ApiError as e:
++            code, hint = classify_error(e)
++            return ProductResult(ok=False, error_code=code, error_hint=hint,
++                                 model=request.model, kind="image")
++        data = resp.get("data") or []
++        urls = [it.get("url") for it in data if isinstance(it, dict) and it.get("url")]
++        if not urls:
++            return ProductResult(ok=False, error_code="IMAGE_RESULT_EMPTY",
++                                 error_hint="HTTP 200 but no result URLs in data[].url; cannot return ok:true",
++                                 model=request.model, kind="image")
++        result = ProductResult(ok=True, model=request.model, kind="image",
++                               status="completed", result_urls=urls,
++                               billing_params=billing_params)
++        try:
++            hooks.on_result(result)
++        except Exception:
++            pass  # on_result failure must not re-submit
++        return result
++
++    # ============================================================
++    # VIDEO / SEEDANCE path (async: POST then poll)
++    # ============================================================
++    force_asset = (request.kind == "seedance")
++
++    # Build media list
++    media = []
++    if request.first_frame:
++        media.append({"type": "first_frame", "url": request.first_frame})
++    if request.last_frame:
++        media.append({"type": "last_frame", "url": request.last_frame})
++    for u in (request.ref_images or []):
++        media.append({"type": "reference_image", "url": u})
++
++    if force_asset:
++        text_part = {"type": "text", "text": request.prompt or ""}
++        body_media = [text_part] + media if media else [text_part]
++        body = {
++            "model": request.model,
++            "media": body_media,
++            "size": request.resolution.upper(),
++            "ratio": request.ratio,
++            "seconds": str(request.duration),
++            "generate_audio": not request.no_audio,
++            "prompt_extend": not request.no_prompt_extend,
++            "watermark": request.watermark,
++        }
++    else:
++        body = {
++            "model": request.model,
++            "prompt": request.prompt or "",
++            "size": request.resolution.upper(),
++            "ratio": request.ratio,
++            "seconds": str(request.duration),
++            "generate_audio": not request.no_audio,
++            "prompt_extend": not request.no_prompt_extend,
++            "watermark": request.watermark,
++        }
++        if media:
++            body["media"] = media
++    if request.seed is not None:
++        body["seed"] = request.seed
++
++    # Submit — exactly once
++    task_id = None
++    try:
++        if _transport:
++            resp = _transport("POST", VIDEO_SUBMIT, api_key, request.submit_timeout)
++        else:
++            resp = _api_call("POST", VIDEO_SUBMIT, api_key, body=body,
++                             timeout=request.submit_timeout)
++        task_id = resp.get("id") or resp.get("task_id")
++        if not task_id:
++            return ProductResult(ok=False, error_code="SUBMIT_NO_TASK_ID",
++                                 error_hint="Submit returned HTTP 200 but no task_id; result unknown. DO NOT resubmit.",
++                                 model=request.model, kind=request.kind)
++    except ApiError as e:
++        code, hint = classify_error(e)
++        return ProductResult(ok=False, error_code=code, error_hint=hint,
++                             model=request.model, kind=request.kind)
++
++    # on_task_id hook — must fire BEFORE first poll; failure stops here (id preserved)
++    try:
++        hooks.on_task_id(task_id)
++    except Exception as e:
++        raise TaskIdWriteError(task_id, e)
++
++    # Poll
++    try:
++        task = poll_task(api_key, task_id,
++                         interval=request.poll_interval,
++                         timeout=request.poll_timeout,
++                         _transport=_transport,
++                         _sleep=_sleep,
++                         _clock=_clock,
++                         _cancel=_cancel)
++    except ApiError as e:
++        msg = str(getattr(e, "message", e))
++        if "取消" in msg or "Cancelled" in msg.lower():
++            return ProductResult(ok=False, error_code="CANCELLED_DURING_POLL",
++                                 error_hint=f"Cancelled; task_id={task_id} retained for reconciliation",
++                                 task_id=task_id, model=request.model, kind=request.kind,
++                                 status="unknown_cancelled")
++        if "超时" in msg or "timeout" in msg.lower():
++            return ProductResult(ok=False, error_code="POLL_TIMEOUT",
++                                 error_hint=f"Local poll timeout; task_id={task_id} retained. "
++                                             f"DO NOT resubmit; check status manually.",
++                                 task_id=task_id, model=request.model, kind=request.kind,
++                                 status="unknown_timeout")
++        code, hint = classify_error(e)
++        return ProductResult(ok=False, error_code=code, error_hint=hint,
++                             task_id=task_id, model=request.model, kind=request.kind)
++
++    url = result_url(task)
++    if not url:
++        return ProductResult(ok=False, error_code="VIDEO_RESULT_EMPTY",
++                             error_hint="Task succeeded but result URL absent; cannot return ok:true",
++                             task_id=task_id, model=request.model, kind=request.kind)
++
++    result = ProductResult(ok=True, task_id=task_id, model=request.model,
++                           kind=request.kind, status="completed",
++                           result_urls=[url], billing_params=billing_params)
++    try:
++        hooks.on_result(result)
++    except Exception:
++        pass  # on_result failure must not re-submit
++    return result
++
++
+ def cmd_generate(argv):
+     parser = argparse.ArgumentParser(prog="pt_video.py generate")
+     parser.add_argument("-m", "--model", default=None, help="模型 ID；省略或 auto = 按账号自动选")

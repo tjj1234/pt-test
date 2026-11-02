@@ -9,23 +9,24 @@
  *
  * 现在：
  *   ① 每日定时从 PT /v1/models 拉全量（不做对话能力筛选，含生成类）；
- *   ② 给每个模型标 chat 字段（是否支持多轮对话），前端靠它决定能不能聊；
+ *   ② 保留 PT 能力事实与来源；缺少明确元数据时 chat 为 null（unknown）；
  *   ③ 默认 AUTO：按用户输入简单规则路由到合适的模型，其余走默认模型。
  *
  * 三条设计取舍：
  *   · 同步失败绝不连累对话：拉不到就用上次的缓存，缓存也没有就退回 yaml 静态列表。
- *   · 全量列表只用于「展示与选择」，DSH 实际能调哪些仍由 dsh-settings.yaml 决定 ——
- *     把生成类模型塞进 DSH 配置只会让对话侧选到不能聊的模型，那是倒退。
+ *   · 目录发现、能力证据、runtime adapter 与验证状态分开；模型名/端点不能授予 AUTO 资格。
  *   · 路由规则刻意做简单（代码/长文本/推理 三类特征），PM 验收后再精细化；
  *     规则匹配不上就退回默认模型，绝不为了「显得智能」乱选。
  * ============================================================================
  */
 const fs = require("fs");
 const path = require("path");
+const capabilityModel = require("./models/capabilities.cjs");
+const scopedCache = require("./models/catalog-cache.cjs");
 
 const SHELL = __dirname;
 const REPO_ROOT = path.resolve(SHELL, "..");
-const RUNTIME = path.join(REPO_ROOT, "runtime");
+const RUNTIME = process.env.PT_RUNTIME_DIR ? path.resolve(process.env.PT_RUNTIME_DIR) : path.join(REPO_ROOT, "runtime");
 const CACHE_FILE = path.join(RUNTIME, "model-catalog.json");
 
 /** 缓存有效期：24 小时（「每日自动同步」）。 */
@@ -36,10 +37,17 @@ const AUTO_ID = "AUTO";
 
 /** 同步用的 baseURL（PT 网关）；测试可注入覆盖。 */
 const DEFAULT_BASE_URL = "https://api.powertokens.ai/v1";
+const CATALOG_FAILURE_STAGES = Object.freeze([
+  "scope", "qualification", "cache_read", "fetch_or_parse", "merge",
+  "local_update", "cache_write", "projection", "fallback_projection",
+]);
+function markCatalogStage(opts, stage) {
+  if (!CATALOG_FAILURE_STAGES.includes(stage)) return;
+  try { if (typeof opts?.onCatalogStage === "function") opts.onCatalogStage(stage); } catch { /* diagnostic observer must not affect catalog behavior */ }
+}
 
 /**
- * 生成类模型的名字特征。PT 的 /v1/models 大多带 supported_endpoint_types，
- * 但有的模型字段缺失 —— 这时靠名字兜底判定，宁可判成「不可聊天」也别让用户选了干等。
+ * 名称特征只用于 kind 展示分组，不用来判断能力或 AUTO 资格。
  */
 const GENERATIVE_KEYWORDS = [
   "seedream", "seedance", "kling", "wan", "hailuo", "vidu", "happyhorse", "mimo",
@@ -50,7 +58,7 @@ const GENERATIVE_KEYWORDS = [
 ];
 
 /** 出现这些端点类型就认为「支持多轮对话」（与 dsh-settings.yaml 里的判定口径一致）。 */
-const CHAT_ENDPOINTS = ["anthropic", "openai-response", "openai-chat", "chat", "chat-completions", "responses", "openai"];
+const CHAT_ENDPOINTS = ["anthropic", "openai-response"];
 
 /** 名字里有这些就认为「不擅长对话」（补充兜底，优先级低于端点判定）。 */
 const NON_CHAT_SUFFIX = ["-embedding", "-rerank", "-tts", "-asr", "-img", "-image", "-video", "-audio"];
@@ -84,7 +92,7 @@ function endpointsOf(raw) {
   return [];
 }
 
-/** 名字像不像生成类模型（端点信息缺失时的兜底）。 */
+/** 名字像不像生成类模型（展示分组提示，不代表已证实的任务能力）。 */
 function looksGenerative(id) {
   const s = String(id || "").toLowerCase();
   if (!s) return false;
@@ -99,18 +107,10 @@ function looksGenerative(id) {
  * 因为 PT 上绝大多数模型本来就是对话模型，标错了比漏标更烦人）。
  */
 function isChatModel(raw) {
-  const eps = endpointsOf(raw);
-  if (eps.length) {
-    for (const e of eps) for (const c of CHAT_ENDPOINTS) if (e.indexOf(c) >= 0) return true;
-    // 有端点信息但没有一个是对话端点 -> 明确不可聊
-    return false;
-  }
-  const id = modelIdOf(raw);
-  if (!id) return false;
-  return !looksGenerative(id);
+  return normalizeModel(raw)?.chat === true;
 }
 
-/** 生成类模型细分：image / video / audio / other（仅用于前端打标签，不参与路由）。 */
+/** 生成类模型细分：image / video / audio / other（仅用于展示，不证明能力）。 */
 function generativeKindOf(id) {
   const s = String(id || "").toLowerCase();
   if (!s) return null;
@@ -124,12 +124,40 @@ function generativeKindOf(id) {
 function normalizeModel(raw) {
   const id = modelIdOf(raw);
   if (!id) return null;
-  const chat = isChatModel(raw);
+  let rich;
+  try {
+    rich = capabilityModel.normalizePtRecord({ ...(raw && typeof raw === "object" ? raw : {}), id }, {
+      scopeId: "projection-only",
+      observedAt: new Date().toISOString(),
+      sourceVersion: "PT /v1/models",
+    });
+  } catch { return null; }
+  if (!rich) return null;
+  const chat = rich.tasks.textChat.value;
   return {
     id,
-    name: modelNameOf(raw, id),
+    name: rich.name || modelNameOf(raw, id),
     chat,
-    kind: chat ? "chat" : (generativeKindOf(id) || "other"),
+    kind: chat === true ? "chat" : (generativeKindOf(id) || "other"),
+    capabilityRevision: rich.capabilityRevision,
+    capabilityScopeId: rich.scopeId,
+    tasks: rich.tasks,
+    inputModalities: rich.inputModalities,
+    outputModalities: rich.outputModalities,
+    endpoints: rich.endpoints,
+    protocol: rich.protocol,
+    features: rich.features,
+    limits: rich.limits,
+    metadataFields: rich.metadataFields,
+    capabilityFields: rich.capabilityFields,
+    availability: rich.availability,
+    permission: rich.permission,
+    localPolicy: rich.localPolicy,
+    adaptations: rich.adaptations,
+    verifications: rich.verifications,
+    states: rich.states,
+    capabilityStatus: chat === null ? "unknown" : chat ? "supported" : "unsupported",
+    runtimeStatus: rich.states.textChat.verified ? "verified" : rich.states.textChat.adapted ? "adapted_unverified" : "unadapted",
   };
 }
 
@@ -160,7 +188,7 @@ function dedupeAndSort(list) {
 
 /** 从归一化列表里挑一个默认对话模型：优先设置里的，其次第一个可聊的。 */
 function pickDefaultModel(list, preferred) {
-  const chat = list.filter((m) => m.chat);
+  const chat = list.filter((m) => m && m.chat === true && (!m.capabilityRevision || m.states?.textChat?.autoEligible === true));
   if (preferred && chat.some((m) => m.id === preferred)) return preferred;
   if (chat.length) return chat[0].id;
   return list.length ? list[0].id : "";
@@ -214,8 +242,9 @@ function findByKeyword(list, keywords) {
  * 任何一步匹配不到都退回默认模型 —— 宁可保守，也不为了「显得智能」乱选。
  */
 function routeModelFor(text, list, fallback) {
-  const chat = (Array.isArray(list) ? list : []).filter((m) => m && m.chat && m.id);
-  if (!chat.length) return fallback || "";
+  const all = Array.isArray(list) ? list : [];
+  const chat = all.filter((m) => m && m.chat === true && m.id && (!m.capabilityRevision || m.states?.textChat?.autoEligible === true));
+  if (!chat.length) return all.some((m) => m && m.capabilityRevision) ? "" : (fallback || "");
   const safeFallback = fallback && chat.some((m) => m.id === fallback) ? fallback : chat[0].id;
 
   if (looksLikeCode(text)) {
@@ -243,6 +272,14 @@ function readCache() {
     if (!j || !Array.isArray(j.models)) return null;
     return j;
   } catch (e) { return null; }
+}
+
+function readScopedCache(scopeId, options = {}) {
+  return scopedCache.readScopedCache(options.cacheDir || RUNTIME, scopeId);
+}
+
+function writeScopedCache(scopeId, snapshot, options = {}) {
+  return scopedCache.writeScopedCache(options.cacheDir || RUNTIME, scopeId, snapshot);
 }
 
 function writeCache(models, meta) {
@@ -297,6 +334,151 @@ async function syncFromPt(opts) {
   }
 }
 
+function responseHasUnfollowedPages(payload) {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return false;
+  const pageObjects = [payload];
+  for (const candidate of [payload.pagination, payload.meta?.pagination]) {
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate)) pageObjects.push(candidate);
+  }
+  return pageObjects.some((page) => page.has_more === true || page.hasMore === true || page.has_next === true || page.hasNext === true ||
+    page.next_cursor != null || page.nextCursor != null || page.next_page != null || page.nextPage != null ||
+    (typeof page.next === "string" && page.next.length > 0) || (page.links && typeof page.links.next === "string" && page.links.next.length > 0));
+}
+
+async function fetchPtSnapshot(opts = {}) {
+  const apiKey = String(opts.apiKey || "").trim();
+  if (!apiKey) return { ok: false, error: "PT credential unavailable", errorCode: "PT_CREDENTIAL_UNAVAILABLE" };
+  const baseURL = String(opts.baseURL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+  const fetchImpl = typeof opts.fetchImpl === "function" ? opts.fetchImpl : (typeof fetch === "function" ? fetch : null);
+  if (!fetchImpl) return { ok: false, error: "fetch unavailable", errorCode: "FETCH_UNAVAILABLE" };
+  const controller = typeof AbortController === "function" ? new AbortController() : null;
+  const timeoutMs = Number.isSafeInteger(opts.timeoutMs) && opts.timeoutMs > 0 ? Math.min(opts.timeoutMs, 60000) : 10000;
+  let timeout;
+  try {
+    const operation = (async () => {
+      const response = await fetchImpl(baseURL + "/models", { headers: { Authorization: "Bearer " + apiKey }, ...(controller ? { signal: controller.signal } : {}) });
+      if (!response || response.ok === false) return { ok: false, error: "PT models request failed", errorCode: "PT_HTTP_ERROR", status: Number(response?.status) || null };
+      let payload;
+      try { payload = typeof response.json === "function" ? await response.json() : response; }
+      catch { return { ok: false, error: "PT models response was not valid JSON", errorCode: "PT_INVALID_RESPONSE", status: Number(response.status) || null }; }
+      const records = extractList(payload);
+      const hasUnfollowedPages = responseHasUnfollowedPages(payload);
+      // Returned IDs are trusted permission facts even on a partial page. Keep
+      // completeness separate: only a caller-verified terminal snapshot may
+      // tombstone models omitted from this response.
+      const complete = !hasUnfollowedPages && typeof opts.isCompleteSnapshot === "function" && opts.isCompleteSnapshot(payload, response) === true;
+      if (!records.length && !complete && !hasUnfollowedPages) return { ok: false, error: "PT models response has no records and no completeness evidence", errorCode: "PT_EMPTY_OR_UNRECOGNIZED_RESPONSE", status: Number(response.status) || null };
+      const version = response.headers?.get?.("etag") || response.headers?.get?.("x-api-version") || null;
+      return { ok: true, records, complete, sourceVersion: typeof version === "string" && /^[A-Za-z0-9._:+-]{1,128}$/.test(version) ? version : null };
+    })();
+    return await Promise.race([
+      operation,
+      new Promise((_, reject) => { timeout = setTimeout(() => { controller?.abort(); reject(Object.assign(new Error("PT model sync timeout"), { code: "MODEL_SYNC_TIMEOUT" })); }, timeoutMs); }),
+    ]);
+  } catch (error) {
+    return error?.code === "MODEL_SYNC_TIMEOUT"
+      ? { ok: false, error: "PT models request timed out", errorCode: "PT_TIMEOUT" }
+      : { ok: false, error: "PT models request failed", errorCode: "PT_NETWORK_ERROR" };
+  } finally { clearTimeout(timeout); }
+}
+
+const inFlightByScope = new Map();
+function expandQualificationDefaults(options, ids) {
+  const defaults = options.qualificationDefaults;
+  if (!defaults || typeof defaults !== "object") return options;
+  const expanded = { ...options };
+  if (defaults.policy) {
+    const policies = { ...(options.policies || {}) };
+    for (const id of ids) if (typeof id === "string" && id && !Object.hasOwn(policies, id)) policies[id] = defaults.policy;
+    expanded.policies = policies;
+  }
+  return expanded;
+}
+function hasExplicitTextChatTextIo(record) {
+  if (!record || typeof record !== "object" || Array.isArray(record)) return false;
+  const trustedChatEndpoint = Array.isArray(record.supported_endpoint_types) && record.supported_endpoint_types.some((endpoint) => CHAT_ENDPOINTS.includes(endpoint));
+  const capability = record.capabilities?.textChat === true || record.capabilities?.["text-chat"] === true;
+  const supported = Array.isArray(record.supported_tasks) && record.supported_tasks.some((task) => task === "textChat" || task === "text-chat");
+  const hasTextIo = (Array.isArray(record.input_modalities) ? record.input_modalities.includes("text") : trustedChatEndpoint) &&
+    (Array.isArray(record.output_modalities) ? record.output_modalities.includes("text") : trustedChatEndpoint);
+  return (capability || supported || trustedChatEndpoint) && hasTextIo;
+}
+function cacheIsStale(cache, now) {
+  return !cache || typeof cache.lastSuccessfulAt !== "string" || !Number.isFinite(Date.parse(cache.lastSuccessfulAt)) ||
+    now - Date.parse(cache.lastSuccessfulAt) > SYNC_TTL_MS;
+}
+
+async function syncScopedCatalog(scopeId, opts, previous, now) {
+  const pending = inFlightByScope.get(scopeId);
+  if (pending) return pending;
+  const promise = (async () => {
+    markCatalogStage(opts, "fetch_or_parse");
+    const fetched = await fetchPtSnapshot(opts);
+    markCatalogStage(opts, "merge");
+    let mergeOptions = {};
+    for (const key of ["permission", "policies", "adaptations", "verifications", "overrides"]) {
+      if (Object.hasOwn(opts, key)) mergeOptions[key] = opts[key];
+    }
+    if (!fetched.ok) {
+      // A stale authenticated listing cannot prove that this credential still
+      // has access; retain catalog facts but close execution permission.
+      mergeOptions.permission = null;
+      mergeOptions = expandQualificationDefaults({ ...opts, ...mergeOptions }, (previous?.models || []).map((model) => model.id));
+      const retained = capabilityModel.mergeSnapshot(previous, {
+        scopeId, observedAt: new Date(now).toISOString(), success: false, records: null,
+      }, mergeOptions);
+      const failureCount = Math.min(10, (Number(previous?.syncFailureCount) || 0) + 1);
+      const backoff = [60_000, 5 * 60_000, 30 * 60_000, 2 * 60 * 60_000, 6 * 60 * 60_000][Math.min(failureCount - 1, 4)];
+      retained.syncFailureCount = failureCount;
+      retained.nextSyncAt = new Date(now + backoff).toISOString();
+      markCatalogStage(opts, "cache_write");
+      const cacheWritten = writeScopedCache(scopeId, retained, opts);
+      return {
+        snapshot: retained,
+        error: fetched.error,
+        errorCode: cacheWritten ? (fetched.errorCode || "PT_SYNC_FAILED") : "CATALOG_CACHE_WRITE_FAILED",
+        upstreamStatus: fetched.status || null,
+        state: cacheWritten ? "sync_failed" : "cache_write_failed",
+        failureStage: cacheWritten ? "fetch_or_parse" : "cache_write",
+      };
+    }
+    // Under the user's confirmed PT contract, a model ID returned for this
+    // credential is invocation-authorized. Apply this per ID so a partial or
+    // changed directory can never authorize cached models that were not listed.
+    const listedIds = new Set(fetched.records.map((record) => modelIdOf(record)).filter(Boolean));
+    mergeOptions = expandQualificationDefaults({ ...opts, ...mergeOptions },
+      [...new Set([...(previous?.models || []).map((model) => model.id), ...listedIds])]);
+    if (opts.qualificationDefaults?.adaptation) {
+      const adaptations = { ...(mergeOptions.adaptations || {}) };
+      for (const record of fetched.records) {
+        const id = modelIdOf(record);
+        if (id && !Object.hasOwn(adaptations, id) && hasExplicitTextChatTextIo(record)) {
+          adaptations[id] = { textChat: opts.qualificationDefaults.adaptation };
+        }
+      }
+      mergeOptions.adaptations = adaptations;
+    }
+    mergeOptions.permissions = Object.fromEntries([
+      ...new Set([...(previous?.models || []).map((model) => model.id), ...listedIds]),
+    ].map((id) => [id, listedIds.has(id) ? true : null]));
+    const observedAt = new Date(now).toISOString();
+    const merged = capabilityModel.mergeSnapshot(previous, {
+      scopeId, observedAt, sourceVersion: fetched.sourceVersion, success: true,
+      complete: fetched.complete, records: fetched.records,
+    }, mergeOptions);
+    if (merged.events?.[0]?.type === "snapshot-ignored" && ["scope-mismatch", "stale-snapshot"].includes(merged.events[0].reason)) {
+      return { snapshot: previous, error: "snapshot ignored" };
+    }
+    merged.syncFailureCount = 0;
+    merged.nextSyncAt = null;
+    markCatalogStage(opts, "cache_write");
+    if (!writeScopedCache(scopeId, merged, opts)) return { snapshot: merged, error: "catalog cache write failed", errorCode: "CATALOG_CACHE_WRITE_FAILED", state: "cache_write_failed", fresh: true, failureStage: "cache_write" };
+    return { snapshot: merged, error: null, errorCode: null, upstreamStatus: null, state: "fresh", fresh: true };
+  })().finally(() => inFlightByScope.delete(scopeId));
+  inFlightByScope.set(scopeId, promise);
+  return promise;
+}
+
 /**
  * 取模型目录（主入口）：缓存新鲜就用缓存，过期就试着同步，同步失败退回旧缓存。
  * @param {object} opts
@@ -306,15 +488,106 @@ async function syncFromPt(opts) {
 async function getCatalog(opts) {
   const o = opts || {};
   const now = o.now || Date.now();
-  const cache = readCache();
+  markCatalogStage(o, "scope");
+  // Scope the endpoint that fetchPtSnapshot actually uses. Omitting the default
+  // base must not create a second credential scope beside an explicit default.
+  const scopeId = resolveCatalogScope(o);
+  if (scopeId) {
+    markCatalogStage(o, "cache_read");
+    const prior = readScopedCache(scopeId, o);
+    let snapshot = prior;
+    let syncError = null, fresh = false;
+    let syncState = prior ? "cached" : "fallback";
+    let syncErrorCode = null, upstreamStatus = null;
+    let syncFailureStage = null;
+    const backoffActive = !o.force && prior?.nextSyncAt && Number.isFinite(Date.parse(prior.nextSyncAt)) && now < Date.parse(prior.nextSyncAt);
+    if (!backoffActive && (o.force || cacheIsStale(prior, now))) {
+      const result = await syncScopedCatalog(scopeId, o, prior, now);
+      snapshot = result.snapshot;
+      syncError = result.error;
+      fresh = result.fresh === true;
+      syncState = result.state || (syncError ? "sync_failed" : "fresh");
+      syncErrorCode = result.errorCode || null;
+      upstreamStatus = result.upstreamStatus || null;
+      syncFailureStage = result.failureStage || (result.errorCode === "CATALOG_CACHE_WRITE_FAILED" ? "cache_write" : null);
+    } else if (backoffActive) {
+      syncError = "Model catalog sync is in retry backoff";
+      syncState = "backoff";
+      syncErrorCode = "CATALOG_SYNC_BACKOFF";
+    }
+    markCatalogStage(o, "local_update");
+    let localUpdates = {};
+    for (const key of ["permission", "permissions", "policies", "adaptations", "verifications", "overrides"]) {
+      if (Object.hasOwn(o, key)) localUpdates[key] = o[key];
+    }
+    if (snapshot) localUpdates = expandQualificationDefaults({ ...localUpdates, qualificationDefaults: o.qualificationDefaults },
+      (snapshot.models || []).map((model) => model.id));
+    if (snapshot && Object.keys(localUpdates).length) {
+      // Reuse the capability model's local update/revalidation rules even when
+      // TTL or retry backoff prevents a provider fetch. Revocation cannot wait
+      // for the next successful network synchronization.
+      const updated = capabilityModel.mergeSnapshot(snapshot, {
+        scopeId, observedAt: new Date(now).toISOString(), success: false, records: null,
+      }, localUpdates);
+      updated.events = snapshot.events;
+      snapshot = updated;
+      markCatalogStage(o, "cache_write");
+      if (!writeScopedCache(scopeId, snapshot, o)) {
+        syncError = syncError || "catalog local policy cache write failed";
+        syncErrorCode = syncErrorCode || "CATALOG_CACHE_WRITE_FAILED";
+        syncState = "cache_write_failed";
+        syncFailureStage = "cache_write";
+      }
+    }
+    markCatalogStage(o, "projection");
+    let models = (snapshot?.models || []).map((model) => ({
+      ...model,
+      chat: model.tasks?.textChat?.value ?? null,
+      kind: model.tasks?.textChat?.value === true ? "chat" : (generativeKindOf(model.id) || "other"),
+      capabilityStatus: model.tasks?.textChat?.value == null ? "unknown" : model.tasks.textChat.value ? "supported" : "unsupported",
+      runtimeStatus: model.states?.textChat?.verified ? "verified" : model.states?.textChat?.adapted ? "adapted_unverified" : "unadapted",
+    }));
+    // Availability comes only from the scoped successful snapshot, never from
+    // display fallbacks. A later failed refresh retains the last known evidence.
+    const knownAvailability = Boolean(snapshot?.lastSuccessfulAt && Number.isFinite(Date.parse(snapshot.lastSuccessfulAt)));
+    const availability = {
+      status: knownAvailability ? "available" : "unknown",
+      modelIds: knownAvailability ? (snapshot.models || []).filter((model) => model.availability === "present").map((model) => model.id) : [],
+    };
+    if (!models.length) {
+      markCatalogStage(o, "fallback_projection");
+      models = dedupeAndSort((o.fallback || []).map(normalizeModel).filter(Boolean).map((model) => ({ ...model, source: "static-config" })));
+    }
+    const syncedAt = snapshot?.lastSuccessfulAt ? Date.parse(snapshot.lastSuccessfulAt) : 0;
+    return {
+      models, availability, syncedAt, fresh, syncError, auto: AUTO_ID, scopeId,
+      catalogDiagnostics: {
+        state: syncState,
+        errorCode: syncErrorCode,
+        upstreamStatus,
+        lastSuccessfulAt: snapshot?.lastSuccessfulAt || null,
+        failureCount: Math.max(0, Number(snapshot?.syncFailureCount) || 0),
+        failureCountKnown: true,
+        retryAt: snapshot?.nextSyncAt || null,
+        modelCount: models.length,
+        failureStage: syncFailureStage || null,
+      },
+    };
+  }
+
+  // No credential means no previous credential-scoped cache can be trusted.
+  markCatalogStage(o, "cache_read");
+  const cache = null;
   let syncError = null;
-  let syncedAt = cache ? cache.syncedAt : 0;
-  let models = cache ? cache.models : null;
+  let syncedAt = 0;
+  let models = null;
   let fresh = false;
 
   if (o.force || isStale(cache, now)) {
+    markCatalogStage(o, "fetch_or_parse");
     const r = await syncFromPt(o);
     if (r.ok && r.models.length) {
+      markCatalogStage(o, "cache_write");
       writeCache(r.models, { syncedAt: now, source: "pt" });
       models = r.models;
       syncedAt = now;
@@ -326,11 +599,77 @@ async function getCatalog(opts) {
 
   if (!models || !models.length) {
     // 一次都没同步成功过：退回 yaml 静态列表（全部按「可聊」处理，因为那本来就是对话白名单）
+    markCatalogStage(o, "fallback_projection");
     models = dedupeAndSort((o.fallback || []).map((m) => normalizeModel(m)).filter(Boolean));
   }
 
-  return { models, syncedAt, fresh, syncError, auto: AUTO_ID };
+  return {
+    models, availability: { status: "unknown", modelIds: [] }, syncedAt, fresh, syncError, auto: AUTO_ID,
+    catalogDiagnostics: {
+      state: "fallback",
+      errorCode: syncError ? "PT_SYNC_FAILED" : null,
+      upstreamStatus: null,
+      lastSuccessfulAt: null,
+      failureCount: 0,
+      failureCountKnown: true,
+      retryAt: null,
+      modelCount: models.length,
+      failureStage: syncError ? "fetch_or_parse" : null,
+    },
+  };
 }
+
+function resolveCatalogScope(options = {}) {
+  return scopedCache.resolveScopeId({ ...options, baseURL: options.baseURL || DEFAULT_BASE_URL });
+}
+
+// A completed manual product Run can qualify exactly the model/adapter/scope
+// it exercised. Read the current cache again so a catalog revision or
+// permission change between routing and completion cannot be promoted.
+function recordManualChatVerification({ catalog, modelId, runId, budget, modelIdentity, cacheDir,task='textChat',imageInput } = {}) {
+  if(!['textChat','imageUnderstanding'].includes(task))return false;
+  if(task==='imageUnderstanding'&&(imageInput?.kind!=='dsh-native-images-v1'||imageInput.capabilityChecked!==true||
+      !Number.isSafeInteger(imageInput.newImageCount)||imageInput.newImageCount<1||imageInput.newImageCount>4))return false;
+  if (!catalog || !/^pt-scope-[a-f0-9]{64}$/.test(catalog.scopeId || '') ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(runId || '') ||
+      typeof modelId !== 'string' || budget?.snapshot?.modelCalls !== 1 ||
+      budget?.snapshot?.policyStatus !== 'configured') return false;
+  const qualify=task==='imageUnderstanding'?model=>require('./models/native-image-qualification.cjs').nativeImageCandidates({models:[model]})[0]:model=>model;
+  const routedRaw=catalog.models?.find(model => model.id === modelId);
+  const routed=routedRaw?qualify(routedRaw):null;
+  const snapshot = readScopedCache(catalog.scopeId, { cacheDir });
+  const index = snapshot?.models?.findIndex(model => model.id === modelId) ?? -1;
+  if (!routed || index < 0 || snapshot.lastSuccessfulAt == null ||
+      catalog.availability?.status !== 'available' ||
+      !catalog.availability.modelIds?.includes(modelId)) return false;
+  const current = qualify(snapshot.models[index]);
+  if (current.capabilityRevision !== routed.capabilityRevision ||
+      current.scopeId !== catalog.scopeId || current.permission !== true ||
+      current.availability !== 'present' || current.tasks?.[task]?.value !== true ||
+      current.localPolicy?.enabled !== true || !current.localPolicy.tasks?.includes(task) ||
+      current.states?.[task]?.adapted !== true || current.states?.[task]?.endpointCompatible !== true ||
+      !current.inputModalities?.value?.includes('text') || !current.outputModalities?.value?.includes('text')) return false;
+  if(task==='imageUnderstanding'&&!current.inputModalities.value.includes('image'))return false;
+  const adapter = current.adaptations?.[task];
+  if (!adapter?.adapterId || !adapter.version || !adapter.endpoint) return false;
+  const responses = modelIdentity?.responses;
+  if (!Array.isArray(responses) || responses.length !== 1 ||
+      responses[0]?.configuredModelId !== modelId ||
+      (responses[0].providerReportedModelId != null && responses[0].providerReportedModelId !== modelId)) return false;
+  const verifiedAt = new Date().toISOString();
+  const verification = { status:'passed', modelId, task, adapterId:adapter.adapterId,
+    adapterVersion:adapter.version, endpoint:adapter.endpoint, scopeId:catalog.scopeId,
+    capabilityRevision:current.capabilityRevision, source:`product-run/${runId}` , verifiedAt };
+  const updated = capabilityModel.applyLocalUpdates(current, {
+    verifications:{ [modelId]:{ ...current.verifications, [task]:verification } },
+  });
+  if (updated.states?.[task]?.verified !== true || updated.states?.[task]?.autoEligible !== true) return false;
+  snapshot.models[index] = updated;
+  return writeScopedCache(catalog.scopeId, snapshot, { cacheDir }) === true;
+}
+
+function recordManualTextChatVerification(input){return recordManualChatVerification({...input,task:'textChat'});}
+function recordManualImageUnderstandingVerification(input){return recordManualChatVerification({...input,task:'imageUnderstanding'});}
 
 module.exports = {
   AUTO_ID,
@@ -357,7 +696,14 @@ module.exports = {
   routeModelFor,
   readCache,
   writeCache,
+  readScopedCache,
+  writeScopedCache,
   isStale,
   syncFromPt,
+  fetchPtSnapshot,
+  resolveScopeId: resolveCatalogScope,
+  CATALOG_FAILURE_STAGES,
   getCatalog,
+  recordManualTextChatVerification,
+  recordManualImageUnderstandingVerification,
 };

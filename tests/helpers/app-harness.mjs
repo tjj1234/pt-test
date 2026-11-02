@@ -12,10 +12,11 @@
  *   3. 缺 DOM API 就补在这里，不要在测试里 monkey patch（否则桩会分叉）。
  */
 import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { makeDomStub } from "./dom-stub.mjs";
 
-const APP_JS = new URL("../../shell/public/app.js", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
+const APP_JS = fileURLToPath(new URL("../../shell/public/app.js", import.meta.url));
 
 export const flush = async (n = 8) => {
   for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0));
@@ -38,8 +39,9 @@ export async function bootApp(o = {}) {
   const dom = o.storage ? makeDomStubWith(o.storage) : makeDomStub();
   const db = {
     convs: Object.assign({}, o.conversations || {}),
-    chatCalls: [], archiveCalls: [], created: 0,
+    chatCalls: [], chatAttempts: 0, archiveCalls: [], created: 0,
     detail404: new Set(o.detail404 || []),  // 必须是启动前注入：启动 IIFE 会立刻尝试恢复
+    detailOverrides: Object.assign({}, o.detailOverrides || {}),
     failArchiveOps: false,         // /archive /unarchive 不真的改状态
   };
 
@@ -68,14 +70,15 @@ export async function bootApp(o = {}) {
     if (detail && method === "GET") {
       const id = decodeURIComponent(detail[1]);
       if (db.detail404.has(id)) return json({ ok: false, error: "对话不存在" }, 404);
-      const c = db.convs[id];
+      const c = Object.hasOwn(db.detailOverrides, id) ? db.detailOverrides[id] : db.convs[id];
       if (!c) return json({ ok: false, error: "对话不存在" }, 404);
       return json({ ok: true, conversation: { ...c, messages: c.messages || [] } });
     }
-    if (m === "/api/chat") { db.chatCalls.push({ body: opt2.body }); return json({ ok: true, turns: 1, messages: [] }); }
+    if (m === "/api/runs/by-idempotency-key" && method === "GET") return json({ ok: false, error: "not found" }, 404);
+    if (m === "/api/chat") { db.chatAttempts++; if (o.rejectFirstChatFetch && db.chatAttempts === 1) throw new Error("synthetic preheader network failure"); db.chatCalls.push({ body: opt2.body }); return json({ ok: true, turns: 1, messages: [] }); }
     if (m === "/api/skills") return json({ skills: [] });
     if (m === "/api/status") return json({ dashboardOk: true });
-    if (m === "/api/models") return json({ models: [] });
+    if (m === "/api/models" || m.startsWith("/api/models?")) return json(o.modelCatalogResponse || { models: [] });
     if (m === "/api/auth/key") return json({ ok: true, key: null });
     if (m === "/api/conversations/search") return json({ ok: true, conversations: [] });
     return json({ ok: true });
@@ -89,11 +92,11 @@ export async function bootApp(o = {}) {
     console: { log() {}, warn() {}, error() {} },
     ...dom,
     window: { ICONS: {}, addEventListener() {}, getSelection: () => null, open: () => null, matchMedia: () => ({ matches: false, addEventListener() {} }) },
-    location: { href: "/", search: "", hash: "", assign() {}, replace() {} },
+    location: { href: "/", search: o.search || "", hash: "", assign() {}, replace() {} },
     navigator: { clipboard: { writeText: async () => {} } },
     fetch: fetchStub,
     setInterval: () => 0, clearInterval: () => {},
-    setTimeout, clearTimeout,
+    setTimeout: o.setTimeout || setTimeout, clearTimeout,
     TextDecoder, URLSearchParams, AbortController,
     MutationObserver: class { observe() {} disconnect() {} },
     requestAnimationFrame: () => 0,

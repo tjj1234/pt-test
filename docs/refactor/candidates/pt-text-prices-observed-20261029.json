@@ -1,0 +1,18 @@
+{
+  "sourceEvidence": "Observed 2026-10-29T07:40:17Z on https://powertokens.ai/models/qwen3.8-flash and https://powertokens.ai/pricing . The qwen3.8-flash Standard text tier lists USD per 1,000,000 tokens: input 0.150; output 0.470; implicit cache hit 0.016; explicit cache hit 0.016; cache creation 0.200. The two cache-read rates agree, so the combined cacheReadTokens counter is usable for this captured tier. effectiveFrom is the observation time, not an asserted historical supplier effective date. effectiveUntil is a local 24-hour freshness bound, not a supplier expiry. Other models, request tiers, currencies and official charge records are not covered. This is a reviewed import candidate, not an activated catalog.",
+  "snapshots": [
+    {
+      "sourceUrl": "https://powertokens.ai/pricing",
+      "version": "pt-observed-20261029T074017Z",
+      "capturedAt": "2026-10-29T07:40:17Z",
+      "effectiveFrom": "2026-10-29T07:40:17Z",
+      "effectiveUntil": "2026-10-30T07:40:17Z",
+      "currency": "USD",
+      "model": "qwen3.8-flash",
+      "inputUsdPerMillion": 0.15,
+      "outputUsdPerMillion": 0.47,
+      "cacheReadUsdPerMillion": 0.016,
+      "cacheWriteUsdPerMillion": 0.2
+    }
+  ]
+}

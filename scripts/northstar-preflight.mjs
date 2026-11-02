@@ -10,6 +10,68 @@ const version = v => typeof v === 'string' && /^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)
 const exists = p => { try { return fs.statSync(p).isFile(); } catch { return false; } };
 const staticSource = p => { try { return fs.readFileSync(p, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '').replace(/\s+/g, '').replace(/'/g, '"'); } catch { return ''; } };
 const present = v => typeof v === 'string' && v.trim().length > 0;
+const RUN_PERSISTENT_FILES = [
+  'budget.cjs', 'cordis.patch.yml', 'ga-query-executor.cjs', 'northstar-patch-watch-compat.mjs',
+  'northstar-profile-dependencies.json', 'package.json', 'persistent-runner.mjs', 'pnpm-workspace.yaml', 'run-budget.json', 'run-budget-csv.json', 'run-budget-media.json',
+  'powertokens.cjs', 'presets.cjs', 'usage.cjs',
+].sort();
+function verifyRunPersistentSnapshot(root) {
+  const dir = path.join(root, 'docs/dsh-profile-snapshot/run-persistent');
+  const directoryContained = () => {
+    try {
+      const rootPath=path.resolve(root), rootStat=fs.lstatSync(rootPath), rootReal=fs.realpathSync(rootPath);
+      if(!rootStat.isDirectory()||rootStat.isSymbolicLink())return false;
+      const rel=path.relative(rootPath,dir);
+      if(!rel||rel==='..'||rel.startsWith(`..${path.sep}`)||path.isAbsolute(rel))return false;
+      let current=rootPath;
+      for(const component of rel.split(path.sep)){
+        current=path.join(current,component);
+        const stat=fs.lstatSync(current);
+        if(!stat.isDirectory()||stat.isSymbolicLink())return false;
+        const real=fs.realpathSync(current), fromRoot=path.relative(rootReal,real);
+        if(fromRoot==='..'||fromRoot.startsWith(`..${path.sep}`)||path.isAbsolute(fromRoot))return false;
+      }
+      return true;
+    } catch { return false; }
+  };
+  if(!directoryContained())return false;
+  const readFile = p => {
+    try { const s=fs.lstatSync(p); return s.isFile()&&!s.isSymbolicLink()?fs.readFileSync(p):null; } catch { return null; }
+  };
+  try {
+    const manifestBytes=readFile(path.join(dir,'northstar-profile-manifest.json'));
+    const manifest=manifestBytes&&JSON.parse(manifestBytes.toString('utf8'));
+    if(manifest?.formatVersion!==1||manifest?.rpcProtocolVersion!==1||!manifest.files||Array.isArray(manifest.files))return false;
+    const names=Object.keys(manifest.files).sort();
+    if(names.join('\0')!==RUN_PERSISTENT_FILES.join('\0'))return false;
+    const actualNames=fs.readdirSync(dir).filter(n=>n!=='README.md'&&n!=='northstar-profile-manifest.json').sort();
+    if([...actualNames,'northstar-profile-manifest.json'].sort().join('\0')!==[...RUN_PERSISTENT_FILES,'northstar-profile-manifest.json'].sort().join('\0'))return false;
+    for(const [name,hash] of Object.entries(manifest.files)){
+      if(!/^[a-f0-9]{64}$/.test(hash))return false;
+      const bytes=readFile(path.join(dir,name));
+      if(!bytes||crypto.createHash('sha256').update(bytes).digest('hex')!==hash)return false;
+    }
+    const pkg=JSON.parse(readFile(path.join(dir,'package.json')).toString('utf8'));
+    const dependencies=JSON.parse(readFile(path.join(dir,'northstar-profile-dependencies.json')).toString('utf8'));
+    if(pkg.name!=='dsh-profile-run-persistent'||!Array.isArray(pkg.dsh?.profile?.bundles)||
+       dependencies.schemaVersion!==1||!dependencies.bundles||Array.isArray(dependencies.bundles))return false;
+    const bundleNames=Object.keys(dependencies.bundles).sort();
+    if(bundleNames.join('\0')!==[...pkg.dsh.profile.bundles].sort().join('\0')||
+       bundleNames.join('\0')!==Object.keys(pkg.dependencies||{}).sort().join('\0'))return false;
+    const lockBytes=readFile(path.join(root,'shell/package-lock.json'));
+    const npmrcBytes=readFile(path.join(root,'shell/.npmrc'));
+    if(!lockBytes||!npmrcBytes||dependencies.shellLockfileSha256!==crypto.createHash('sha256').update(lockBytes).digest('hex')||
+       dependencies.shellNpmrcSha256!==crypto.createHash('sha256').update(npmrcBytes).digest('hex'))return false;
+    const currentLock=JSON.parse(lockBytes.toString('utf8'));
+    for(const name of bundleNames){
+      const dep=dependencies.bundles[name];
+      const locked=currentLock.packages?.[`node_modules/${name}`];
+      if(!dep||!locked||dep.version!==locked.version||dep.resolved!==locked.resolved||dep.integrity!==locked.integrity||
+         pkg.dependencies[name]!==dep.version)return false;
+    }
+    return true;
+  } catch { return false; }
+}
 
 function migrations(dir) {
   try {
@@ -50,9 +112,6 @@ export function inspectPreflight({ root = DEFAULT_ROOT, env = process.env } = {}
     storageSource.includes('constDEFAULT_MIGRATIONS_DIR=path.join(__dirname,"..","db-migrations");') &&
     storageSource.includes('constmigrationsDir=opts.migrationsDir||DEFAULT_MIGRATIONS_DIR;') &&
     storageSource.includes('migrationsDir,');
-  const profile = path.join(root,'docs/dsh-profile-snapshot');
-  const profilePkg = readJson(path.join(profile,'package.json'));
-  const profileName = profilePkg?.dsh?.profile?.name;
   const checks = {
     mockDisabled: env.PT_MOCK_DSH !== '1' && env.PT_CHAT_DRYRUN !== '1',
     vendorPresent: !!vendor && exists(vendor),
@@ -61,7 +120,7 @@ export function inspectPreflight({ root = DEFAULT_ROOT, env = process.env } = {}
     installedEntryPresent: exists(entry),
     installedVersionMatchesLock: !!installedVersion && installedVersion === version(locked?.version),
     migrationDefaultMetadataAligned,
-    productionProfileSnapshotMetadataPresent: profileName === 'run-persistent' && exists(path.join(profile,'cordis.patch.yml')),
+    runPersistentSourceSnapshotComplete: verifyRunPersistentSnapshot(root),
   };
   return {
     schemaVersion: 2, scope: 'offline-static-only',
@@ -81,7 +140,7 @@ export function inspectPreflight({ root = DEFAULT_ROOT, env = process.env } = {}
       'Google source and local integration evidence are inspected statically; no Google service, credential or callback registration is checked.',
       'Migration checks inspect expected literal defaults only, not executed control flow or database state.',
       'Legacy migration directory is a retained snapshot; differing content is informational.',
-      'Profile snapshot presence cannot prove deployed configuration matches.'],
+      'run-persistent snapshot is source-generated candidate metadata; it does not prove deployed configuration or loaded bundles match.'],
   };
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

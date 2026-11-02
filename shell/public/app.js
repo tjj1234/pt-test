@@ -3,6 +3,95 @@ const chat = $("#chat"), ta = $("#ta"), send = $("#send"), stopBtn = $("#stop"),
 const convListEl = $("#convList"), newBtn = $("#newConv");
 let dashLoaded = false;
 const state = { list: [], activeId: null, loadedId: null, busy: false, unread: {} };
+// A request belongs to its conversation for its full browser lifecycle. Switching
+// sessions changes composer/stop controls without cancelling or overwriting the prior stream.
+const chatRunsByConversation = new Map();
+const upstreamMayRunForRuns = new Set();
+const manualCheckHistoryByConversation = new Set();
+const MANUAL_CHECK_HISTORY_NOTICE = "历史提示：外部任务状态未确认，需在运行记录中核对；当前状态以运行记录为准。";
+function showManualCheckHistory(conversationId) {
+  if (!isViewing(conversationId) || !manualCheckHistoryByConversation.has(conversationId)) return;
+  bubbleSys(MANUAL_CHECK_HISTORY_NOTICE);
+  if (!chatRunsByConversation.has(conversationId)) manualCheckHistoryByConversation.delete(conversationId);
+}
+const ACTIVE_RUNS_KEY = "ptActiveRuns.v1";
+const PENDING_SUBMISSIONS_KEY = "ptPendingChatSubmissions.v1";
+const pendingSubmissionRecoveries = new Set();
+function rememberedRuns() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(ACTIVE_RUNS_KEY) || "[]");
+    return Array.isArray(value) ? value.filter((item) => item &&
+      /^[A-Za-z0-9_-]{1,128}$/.test(item.conversationId) && /^[A-Za-z0-9_-]{1,128}$/.test(item.runId)).slice(-100) : [];
+  } catch { return []; }
+}
+function rememberRun(conversationId, runId) {
+  try { sessionStorage.setItem(ACTIVE_RUNS_KEY, JSON.stringify([...rememberedRuns().filter((item) => item.conversationId !== conversationId), { conversationId, runId }])); } catch { /* browser storage may be disabled */ }
+}
+function forgetRun(conversationId, runId) {
+  try { sessionStorage.setItem(ACTIVE_RUNS_KEY, JSON.stringify(rememberedRuns().filter((item) => item.conversationId !== conversationId || item.runId !== runId))); } catch { /* storage may be disabled */ }
+}
+function pendingSubmissions() {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(PENDING_SUBMISSIONS_KEY) || "[]");
+    return Array.isArray(value) ? value.filter((item) => item && /^[A-Za-z0-9_-]{1,128}$/.test(item.conversationId) && /^[A-Za-z0-9_-]{1,128}$/.test(item.idempotencyKey)).slice(-100) : [];
+  } catch { return []; }
+}
+function rememberPendingSubmission(conversationId, idempotencyKey) {
+  try {
+    sessionStorage.setItem(PENDING_SUBMISSIONS_KEY, JSON.stringify([...pendingSubmissions().filter((item) => item.conversationId !== conversationId), { conversationId, idempotencyKey }]));
+    return true;
+  } catch { return false; /* never submit a paid request without its recovery key */ }
+}
+function forgetPendingSubmission(conversationId, idempotencyKey) {
+  try { sessionStorage.setItem(PENDING_SUBMISSIONS_KEY, JSON.stringify(pendingSubmissions().filter((item) => item.conversationId !== conversationId || item.idempotencyKey !== idempotencyKey))); } catch { /* browser storage may be disabled */ }
+}
+function holdPendingSubmission(conversationId, idempotencyKey) {
+  const current = chatRunsByConversation.get(conversationId);
+  if (!current || current.pendingSubmissionKey !== idempotencyKey) chatRunsByConversation.set(conversationId, { pendingSubmissionKey: idempotencyKey });
+  syncConversationBusy();
+}
+function resumePendingSubmissions() {
+  const recoveries = [];
+  for (const item of pendingSubmissions()) {
+    const current = chatRunsByConversation.get(item.conversationId);
+    if (current && current.pendingSubmissionKey !== item.idempotencyKey) continue;
+    if (pendingSubmissionRecoveries.has(item.idempotencyKey)) continue;
+    pendingSubmissionRecoveries.add(item.idempotencyKey);
+    holdPendingSubmission(item.conversationId, item.idempotencyKey);
+    if (state.activeId === item.conversationId) composerNotice("正在核对上次请求的 Run 状态；确认前请勿重复发送。", "err");
+    recoveries.push((async () => {
+      let foundRunId = null;
+      try {
+        for (let attempt = 0; attempt < 180 && !foundRunId; attempt++) {
+          try {
+            const response = await fetch("/api/runs/by-idempotency-key", { credentials: "same-origin", headers: { "Idempotency-Key": item.idempotencyKey } });
+            if (response.ok) {
+              const result = await response.json();
+              if (result && result.runId && result.conversationId === item.conversationId) foundRunId = result.runId;
+            }
+          } catch { /* transient lookup failure; keep the conversation locked */ }
+          if (!foundRunId && attempt < 179) await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        if (!foundRunId) {
+          if (state.activeId === item.conversationId) composerNotice("请求状态仍未确认，请勿重发；稍后刷新继续核对或联系维护者。", "err");
+          return;
+        }
+        forgetPendingSubmission(item.conversationId, item.idempotencyKey);
+        const lock = chatRunsByConversation.get(item.conversationId);
+        if (lock && lock.pendingSubmissionKey === item.idempotencyKey) chatRunsByConversation.delete(item.conversationId);
+        rememberRun(item.conversationId, foundRunId);
+        syncConversationBusy();
+        await runChat({ conversationId: item.conversationId, resumeRunId: foundRunId });
+      } finally {
+        pendingSubmissionRecoveries.delete(item.idempotencyKey);
+      }
+    })());
+  }
+  return Promise.all(recoveries);
+}
+function resumeRememberedRuns() {
+  for (const item of rememberedRuns()) void runChat({ conversationId: item.conversationId, resumeRunId: item.runId });
+}
 
 /**
  * 某条对话的结果回来了，但界面已经不在它上面 —— 只能在列表里做「有新回复」标记，
@@ -169,22 +258,189 @@ function taskTypeOfArgs(args) {
   if (typeof a === "string") { try { a = JSON.parse(a); } catch (e) { return null; } }
   return (a && a.taskType) || null;
 }
-function mediaRouteStepMessage(step) {
-  if (!step || step.name !== "media_route") return null;
+function mediaRouteStepMessage(step, taskState) {
+  // DSH emits media_route steps; the host RPC and some persisted tool records
+  // use media.route. Apply the same history redaction to either spelling.
+  if (!step || (step.name !== "media_route" && step.name !== "media.route")) return null;
+  const stateForStep = taskState || { taskType: lastMediaTaskType };
   const isEnd = step.isError !== undefined;
   const tt = taskTypeOfArgs(step.args);
-  if (tt) lastMediaTaskType = tt;                 // 开始步骤顺手记住类型
-  const eff = isEnd ? lastMediaTaskType : tt;     // 结束步骤没有 args，沿用记住的类型
+  if (tt) stateForStep.taskType = tt;             // 开始步骤顺手记住类型
+  if (!taskState) lastMediaTaskType = stateForStep.taskType;
+  const eff = isEnd ? stateForStep.taskType : tt; // 结束步骤没有 args，沿用记住的类型
   const isVideo = eff === "text2video" || eff === "image2video";
   if (isEnd) {
     if (step.isError) {
-      return { text: isVideo ? "⚠️ 视频生成失败，可以重新试一次" : "⚠️ 图片生成失败，可以重新试一次" };
+      return { text: isVideo
+        ? "⚠️ 视频处理未完成，外部任务状态可能未确认。请先到「用量与日志」核对，再决定是否重新发起。"
+        : "⚠️ 图片处理未完成，外部任务状态可能未确认。请先到「用量与日志」核对，再决定是否重新发起。" };
     }
     return { skip: true };   // 成功结束：媒体已展示，不再冒一行
   }
   return { text: isVideo
     ? "🎬 正在生成视频中，预计十几分钟，完成后会自动显示在这里，可以先去做别的"
     : "🎨 正在生成图片…" };
+}
+
+// A persisted assistant message may carry the exact Run ID assigned by the
+// host. Never infer it from message order or the most recent Run in a chat.
+function validRunReviewId(value) {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+function addRunReviewButton(host, runId) {
+  if (!host || !validRunReviewId(runId)) return null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "run-review-btn";
+  button.textContent = "查看本次运行";
+  button.style.cssText = "display:inline-flex;align-items:center;flex:none;width:auto;min-height:28px;padding:4px 8px;white-space:nowrap;border:1px solid var(--line);border-radius:7px;background:transparent;color:inherit;font:inherit;cursor:pointer";
+  button.addEventListener("click", async () => {
+    const panelHost = host.className === "meta" && host.parentElement ? host.parentElement : host;
+    let panel = panelHost.querySelector(".run-review");
+    if (!panel) {
+      panel = document.createElement("div");
+      panel.className = "run-review";
+      panel.style.cssText = "margin-top:8px;font-size:12px;white-space:pre-wrap";
+      panelHost.appendChild(panel);
+    }
+    panel.textContent = "正在读取运行记录…";
+    button.disabled = true;
+    try {
+      const response = await fetch("/api/runs/" + encodeURIComponent(runId), { credentials: "same-origin" });
+      if (!response.ok) throw new Error("RUN_READ_FAILED");
+      const data = await response.json();
+      if (data?.ok !== true || data.run?.runId !== runId) throw new Error("RUN_READ_FAILED");
+      const operations = Array.isArray(data.externalOperations?.operations) ? data.externalOperations.operations : [];
+      const lines = ["Run：" + runId, "本地状态：" + bizUsageStatus(data.run.state)];
+      if (operations.length) {
+        lines.push("外部操作：");
+        for (const op of operations.slice(0, 20)) lines.push("· " + bizUsageStatus(op.status) + (op.taskId ? " · Task ID " + String(op.taskId).slice(0, 128) : ""));
+        if (operations.length > 20) lines.push("另有 " + (operations.length - 20) + " 条，请到「用量与日志」查看。");
+      } else lines.push("暂无外部操作记录；提交结果仍需以运行状态为准。");
+      panel.textContent = lines.join("\n");
+      for(const media of (Array.isArray(data.managedMedia?.media)?data.managedMedia.media.slice(0,20):[])){
+        if(!['image','video'].includes(media.type)||typeof media.url!=="string"||!media.url.startsWith("/api/run-media/"+runId+"/")||!/^\/api\/run-media\/[a-f0-9-]{36}\/[a-f0-9-]{36}\.(?:png|jpe?g|webp|gif|avif|mp4|webm|mov)$/i.test(media.url))continue;
+        const link=document.createElement("a");link.href=media.url;link.target="_blank";link.rel="noopener";link.textContent=media.type==="image"?"打开已托管图片":"打开已托管视频";panel.appendChild(link);
+      }
+      addRunUsageControls(panel, runId, data.run.state);
+      addMediaReservationControls(panel, runId);
+    } catch {
+      panel.textContent = "运行记录暂时无法读取，请稍后重试。";
+    } finally { button.disabled = false; }
+  });
+  host.appendChild(button);
+  return button;
+}
+
+function addMediaReservationControls(host, runId) {
+  if (!host || !validRunReviewId(runId)) return;
+  const button = document.createElement("button"); button.type = "button"; button.textContent = "查看媒体占位"; button.className = "run-review-btn";
+  const content = document.createElement("div"); content.className = "media-reservation-review";
+  button.addEventListener("click", async () => {
+    button.disabled = true; content.textContent = "正在读取媒体占位…";
+    try {
+      const response = await fetch("/api/runs/" + encodeURIComponent(runId) + "/media-reservations", {credentials:"same-origin"});
+      const data = await response.json();
+      if (!response.ok || data.ok !== true || !Array.isArray(data.view?.items) || data.view.items.length > 100) throw new Error("MEDIA_RESERVATION_READ_FAILED");
+      content.textContent = data.view.items.length ? "" : "本次运行没有媒体占位记录。";
+      for (const row of data.view.items) {
+        if (row.runId !== runId || !validRunReviewId(row.reservationId) || typeof row.canRequestReconciliation !== "boolean" || !["modelId","taskLabel","statusLabel","detail"].every(key=>typeof row[key] === "string" && row[key].length <= 256)) throw new Error("MEDIA_RESERVATION_READ_FAILED");
+        const item = document.createElement("div"), label = document.createElement("p");
+        label.textContent = row.modelId + " · " + row.taskLabel + "：" + row.statusLabel + "；" + row.detail;
+        item.appendChild(label);
+        if (row.canRequestReconciliation) {
+          const reconcile = document.createElement("button"); reconcile.type = "button"; reconcile.textContent = "核对并更新占位";
+          reconcile.addEventListener("click", async () => {
+            reconcile.disabled = true;
+            try {
+              const result = await fetch("/api/media-reservations/reconcile", {method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({reservationId:row.reservationId})});
+              const decision = await result.json();
+              if (!result.ok || decision.ok !== true || decision.reservationId !== row.reservationId || decision.grantRemainsConsumed !== true || decision.mayResubmit !== false || !["release_allowed","already_released","keep_reserved"].includes(decision.decision)) throw new Error("MEDIA_RECONCILIATION_FAILED");
+              label.textContent = decision.decision === "keep_reserved" ? "占位继续保留：远端结果或核对证据仍未确认，请勿重复提交。" : "占位已释放；原授权仍已消费，再次执行需要新授权。";
+              if (decision.decision === "keep_reserved") reconcile.disabled = false;
+            } catch { label.textContent = "核对暂未完成，占位状态未确认；请稍后读取记录，勿重复提交。"; reconcile.disabled = false; }
+          });
+          item.appendChild(reconcile);
+        }
+        content.appendChild(item);
+      }
+      if (data.view.hasMore === true) { const more = document.createElement("p"); more.textContent = "这里只显示前100条记录，列表尚未完整。"; content.appendChild(more); }
+    } catch { content.textContent = "媒体占位记录暂时无法读取，请稍后重试。"; }
+    finally { button.disabled = false; }
+  });
+  host.appendChild(button); host.appendChild(content);
+}
+
+function addRunUsageControls(panel, runId, state) {
+  const action = document.createElement("button");
+  action.type = "button";
+  action.textContent = "查看本次用量";
+  const note = document.createElement("p");
+  note.textContent = "费用为本地估算，非 PT 官方账单；未知不代表免费。";
+  const status = document.createElement("p");
+  status.setAttribute("role", "status");
+  const tableHost = document.createElement("div");
+  tableHost.style.cssText = "overflow:auto;max-width:100%";
+  panel.append(action, note, status, tableHost);
+  if (["completed", "failed", "cancelled", "interrupted"].includes(state)) {
+    const download = document.createElement("a");
+    download.href = "/api/runs/" + encodeURIComponent(runId) + "/usage-all.csv";
+    download.textContent = "下载全部已记录用量 CSV（最多 5,000 条）";
+    panel.appendChild(download);
+  }
+  let rows = [], after = -1, hasMore = false;
+  const label = value => typeof value === "string" && value ? value.slice(0, 256) : "未知";
+  const tokens = value => Number.isSafeInteger(value) && value >= 0 ? String(value) : "未知";
+  action.addEventListener("click", async () => {
+    action.disabled = true;
+    const cursor = hasMore ? after : -1;
+    status.textContent = "正在读取本次用量…";
+    try {
+      const response = await fetch("/api/runs/" + encodeURIComponent(runId) + "/usage?after=" + cursor + "&limit=100", { credentials: "same-origin" });
+      if (!response.ok) throw new Error("USAGE_READ_FAILED");
+      const data = await response.json();
+      if (data?.ok !== true || data.runId !== runId || !Array.isArray(data.responses) || data.responses.length > 100 || typeof data.hasMore !== "boolean") throw new Error("USAGE_READ_FAILED");
+      let previous = cursor;
+      for (const row of data.responses) {
+        if (!row || !Number.isSafeInteger(row.responseSeq) || row.responseSeq <= previous) throw new Error("USAGE_READ_FAILED");
+        previous = row.responseSeq;
+      }
+      if (data.nextCursor !== previous || (data.hasMore && !data.responses.length)) throw new Error("USAGE_READ_FAILED");
+      rows = (cursor === -1 ? [] : rows).concat(data.responses);
+      after = data.nextCursor; hasMore = data.hasMore;
+      tableHost.replaceChildren();
+      const table = document.createElement("table");
+      const appendRow = (values, heading = false) => {
+        const tr = document.createElement("tr");
+        for (const value of values) {
+          const cell = document.createElement(heading ? "th" : "td");
+          cell.textContent = value; cell.style.cssText = "padding:6px;border-bottom:1px solid var(--line);text-align:left";
+          tr.appendChild(cell);
+        }
+        table.appendChild(tr);
+      };
+      appendRow(["响应序号", "所选模型", "上游回报模型", "输入 / 输出 token", "缓存读 / 写 token", "估算费用", "价格版本", "费用依据"], true);
+      for (const row of rows) {
+        const estimated = row.costCoverage === "estimated" && row.costCurrency === "USD" &&
+          Number.isFinite(row.cost) && row.cost >= 0 && typeof row.priceVersion === "string" && row.priceVersion;
+        appendRow([String(row.responseSeq), label(row.selectedModel),
+          row.modelIdentityEvidence === "provider_response_model" ? label(row.providerReportedModel) : "未知",
+          tokens(row.inputTokens) + " / " + tokens(row.outputTokens), tokens(row.cacheReadTokens) + " / " + tokens(row.cacheWriteTokens),
+          estimated ? "USD " + String(row.cost) : "未知", estimated ? label(row.priceVersion) : "未知",
+          estimated ? (row.costBasis === "requested_model" ? "按请求模型官方价格估算；上游身份未知"
+            : row.costBasis === "provider_reported_model" ? "按上游回报模型官方价格估算" : "官方价格快照；估算依据未标注")
+            : ({ USAGE_SEMANTICS_UNKNOWN: "用量口径未证实", MODEL_IDENTITY_UNKNOWN: "上游身份未提供",
+            REQUEST_COORDINATES_UNKNOWN: "无法关联到具体调用", REQUEST_INTENT_AMBIGUOUS: "调用记录需核对", REQUEST_INTENT_LIMIT: "调用记录超出核对范围",
+            MODEL_IDENTITY_MISMATCH: "回报模型与请求不一致", PRICE_UNAVAILABLE: "缺少适用价格", PRICE_BINDING_INVALID: "价格版本不可用",
+            USAGE_INCOMPLETE: "用量字段不完整" }[row.costReasonCode] || "证据不足")]);
+      }
+      tableHost.appendChild(table);
+      status.textContent = rows.length ? "已显示 " + rows.length + " 条已记录的模型响应。" : "暂无已记录的模型响应用量；费用仍可能未知。";
+      action.textContent = hasMore ? "加载更多用量" : "刷新本次用量";
+      if (hasMore && rows.length >= 1000) { action.disabled = true; status.textContent += "更多记录请下载 CSV。"; }
+    } catch { status.textContent = "本次用量暂时无法读取，请稍后重试。"; }
+    finally { if (!(hasMore && rows.length >= 1000)) action.disabled = false; }
+  });
 }
 
 /** 把等待秒数格式化成安心易读的文案：60 秒内显示「N 秒」，超过则换算成「X分Y秒」。 */
@@ -324,6 +580,7 @@ function minimalMarkdown(src) {
 function artifactIcon(kind) {
   if (kind === "pdf") return "\uD83D\uDCD5";
   if (kind === "html") return "\uD83C\uDF10";
+  if (kind === "csv") return "\uD83D\uDCCA";
   return "\uD83D\uDCDD";   // md
 }
 
@@ -333,10 +590,19 @@ let artIndex = 0;
 
 /** 记下一个产出（同 rel 视为同一个，后来者覆盖；新的排到最前）。 */
 function pushArtifact(a) {
-  if (!a || !a.url) return;
-  const i = artItems.findIndex((x) => x.rel === a.rel);
-  if (i >= 0) { artItems[i] = a; artIndex = i; return; }
-  artItems.unshift(a);
+  if (!a || typeof a.rel !== "string") return;
+  const rel = a.rel.replace(/\\/g, "/");
+  if (!rel || rel.length > 1024 || /[\x00-\x1f\x7f-\x9f]/.test(rel) || rel.startsWith("/") || /^[a-zA-Z]:/.test(rel)) return;
+  const parts = rel.split("/");
+  if (parts.some((part) => !part || part === "." || part === "..")) return;
+  const base = parts[parts.length - 1];
+  const ext = base.slice(base.lastIndexOf(".")).toLowerCase();
+  const kind = ext === ".pdf" ? "pdf" : (ext === ".html" || ext === ".htm") ? "html" : (ext === ".md" || ext === ".markdown") ? "md" : ext === ".csv" ? "csv" : null;
+  if (!kind) return;
+  const normalized = { rel, kind, name: String(a.name || base).slice(0, 255), url: "/api/artifact?p=" + encodeURIComponent(rel), size: Number.isFinite(a.size) ? a.size : 0, mtime: Number.isFinite(a.mtime) ? a.mtime : 0 };
+  const i = artItems.findIndex((x) => x.rel === rel);
+  if (i >= 0) { artItems[i] = normalized; artIndex = i; return; }
+  artItems.unshift(normalized);
   artIndex = 0;
 }
 
@@ -375,6 +641,14 @@ function renderArtifactPane() {
 
   if (!body) return;
   body.replaceChildren();
+  if (a.kind === "csv") {
+    const link = document.createElement("a");
+    link.href = a.url;
+    link.textContent = "下载 CSV 文件";
+    link.setAttribute("download", "result.csv");
+    body.appendChild(link);
+    return;
+  }
   if (a.kind === "md") {
     const d = document.createElement("div");
     d.className = "art-md";
@@ -479,20 +753,25 @@ function renderMessage(m, opts) {
   if (Array.isArray(m.steps) && m.steps.length) {
     const sb = document.createElement("details"); sb.className = "steps";
     const sum = document.createElement("summary"); sum.className = "steps-sum";
-    sum.textContent = "🛠️ 过程 · " + m.steps.length + " 步";
-    sb.appendChild(sum);
     const ol = document.createElement("div"); ol.className = "step-list";
+    const mediaStepState = { taskType: null };
     for (const s of m.steps) {
+      const mediaStep = mediaRouteStepMessage(s, mediaStepState);
+      if (mediaStep?.skip) continue;
       const d = document.createElement("div"); d.className = "step" + (s.isError ? " err" : "");
       const nm = document.createElement("div"); nm.className = "step-name";
-      nm.textContent = (s.isError ? "⚠️ " : "🔧 ") + (s.name || "工具");
-      if (s.args) { const sp = document.createElement("span"); sp.className = "step-args"; sp.textContent = " " + s.args; nm.appendChild(sp); }
+      nm.textContent = mediaStep ? mediaStep.text : (s.isError ? "⚠️ " : "🔧 ") + (s.name || "工具");
+      if (!mediaStep && s.args) { const sp = document.createElement("span"); sp.className = "step-args"; sp.textContent = " " + s.args; nm.appendChild(sp); }
       d.appendChild(nm);
-      if (s.result) { const rs = document.createElement("div"); rs.className = "step-result"; rs.textContent = s.result; d.appendChild(rs); }
+      if (!mediaStep && s.result) { const rs = document.createElement("div"); rs.className = "step-result"; rs.textContent = s.result; d.appendChild(rs); }
       ol.appendChild(d);
     }
-    sb.appendChild(ol);
-    box.appendChild(sb);
+    if (ol.children.length) {
+      sum.textContent = "🛠️ 过程 · " + ol.children.length + " 步";
+      sb.appendChild(sum);
+      sb.appendChild(ol);
+      box.appendChild(sb);
+    }
   }
 
   const meta = document.createElement("div"); meta.className = "meta";
@@ -506,6 +785,7 @@ function renderMessage(m, opts) {
     copy.addEventListener("click", () => copyText(m.text, copy));
     meta.appendChild(copy);
   }
+  if (m.role === "assistant") addRunReviewButton(meta, m.runId);
   if (opts && opts.branchable && m.role === "assistant") {
     const br = document.createElement("button"); br.className = "msgbtn"; br.title = "分岔（以这条回复之前的上下文重新生成）";
     br.innerHTML = '<span class="ico" data-ico="fork"></span>';
@@ -528,6 +808,11 @@ function renderMessage(m, opts) {
 
 /* ---- 渲染整个对话 ---- */
 function renderChat(messages) {
+  artItems = []; artIndex = 0;
+  const pane = $("#artPane");
+  if (pane) pane.hidden = true;
+  const artifactBody = $("#artBody");
+  if (artifactBody) artifactBody.replaceChildren();
   chat.innerHTML = "";
   const msgs = Array.isArray(messages) ? messages : [];
   if (!msgs.length) {
@@ -539,13 +824,16 @@ function renderChat(messages) {
   msgs.forEach((m, i) => {
     const lastAssistant = i === msgs.length - 1 && m.role === "assistant";
     renderMessage(m, { branchable: true, index: i, regeneratable: lastAssistant });
+    if (m && m.role === "assistant") mergeArtifacts(m.artifacts);
   });
+  if (artItems.length) openArtifactPane();
 }
 
 /* 停止 / 超时中断文案。
  * 以前「真超时被强制中断」和「用户手动点停止」走同一个 stopped 分支，都显示「已停止」，
  * 用户分不清是卡死了还是自己停的 —— 现在按服务端下发的 stopReason 区分（timeout / user）。 */
-function stoppedBarText(stopReason) {
+function stoppedBarText(stopReason, upstreamMayStillRun = false) {
+  if (upstreamMayStillRun) return "本地任务已停止；上游任务状态未确认，可能仍在运行，请稍后核对结果。";
   return stopReason === "timeout"
     ? "已超时中断（本轮超出时间预算，回答已丢弃）"
     : "已停止（你的问题已保存，回答已丢弃）";
@@ -554,10 +842,10 @@ function stoppedChipText(stopReason) {
   return stopReason === "timeout" ? "已超时中断" : "已停止";
 }
 
-function showStoppedBar(stopReason) {
+function showStoppedBar(stopReason, upstreamMayStillRun = false) {
   const bar = document.createElement("div");
   bar.className = "stopped-bar";
-  const label = document.createElement("span"); label.textContent = stoppedBarText(stopReason);
+  const label = document.createElement("span"); label.textContent = stoppedBarText(stopReason, upstreamMayStillRun);
   const btn = document.createElement("button"); btn.className = "msgbtn"; btn.title = "重新生成";
   btn.innerHTML = '<span class="ico" data-ico="refresh"></span>';
   btn.addEventListener("click", () => regenerate());
@@ -650,9 +938,11 @@ function openMenu(c, anchor) {
   expM.addEventListener("click", () => { closeMenu(); exportConversation(c, "md"); });
   const expJ = document.createElement("button"); expJ.textContent = "导出 JSON";
   expJ.addEventListener("click", () => { closeMenu(); exportConversation(c, "json"); });
+  const expW = document.createElement("button"); expW.textContent = "导出 Word";
+  expW.addEventListener("click", () => { closeMenu(); exportConversation(c, "docx"); });
   const del = document.createElement("button"); del.className = "danger"; del.textContent = "删除";
   del.addEventListener("click", () => { closeMenu(); deleteConversation(c); });
-  pop.appendChild(ren); pop.appendChild(arc); pop.appendChild(expM); pop.appendChild(expJ); pop.appendChild(del);
+  pop.appendChild(ren); pop.appendChild(arc); pop.appendChild(expM); pop.appendChild(expJ); pop.appendChild(expW); pop.appendChild(del);
   document.body.appendChild(pop);
   const r = anchor.getBoundingClientRect();
   pop.style.top = (r.bottom + 4) + "px";
@@ -671,9 +961,13 @@ async function refreshList() {
   } catch (e) { /* 静默 */ }
 }
 
+let conversationLoadSequence = 0;
 async function openConversation(id, opts) {
+  const loadSequence = ++conversationLoadSequence;
+  const current = () => loadSequence === conversationLoadSequence && isViewing(id);
   const force = !!(opts && opts.force);
   state.activeId = id;
+  syncConversationBusy();
   delete state.unread[id];   // 点进来了，未读标记就没用了
   // 不管这条对话之前是不是已激活，都必须切回对话视图：
   // 否则「开 A → 切到别的页 → 再点 A」时 activeId 还是 A，旧代码会整个跳过 openConversation，
@@ -683,18 +977,22 @@ async function openConversation(id, opts) {
   // 归档对话只读：这条一打开就把输入框锁上（详见 setComposerLocked）
   setComposerLocked(convIsArchived(id));
   saveRoute();
+  void loadModels();
   // 右侧已经渲染着这个对话 → 只切视图，不重复拉取（避免闪烁和滚动跳动）
-  if (!force && state.loadedId === id) return;
+  if (!force && state.loadedId === id) { restoreMediaAuthorization(id); return; }
   try {
     const r = await fetch("/api/conversations/" + encodeURIComponent(id), { credentials: "same-origin" });
-    if (!r.ok) { renderChat([]); state.loadedId = null; return; }
+    if (!r.ok) { if (current()) { renderChat([]); state.loadedId = null; } return; }
     const j = await r.json().catch(() => null);
+    if (!current()) return;
     const conv = (j && j.conversation) ? j.conversation : null;
     renderChat(conv && conv.messages ? conv.messages : []);
+    showManualCheckHistory(id);
+    restoreMediaAuthorization(id);
     state.loadedId = id;
     // 详情带 archived 就以它为准 —— 列表可能是上一版缓存（刚归档完刷新列表的间隙）
     if (conv && typeof conv.archived === "boolean") setComposerLocked(conv.archived);
-  } catch (e) { renderChat([]); state.loadedId = null; }
+  } catch (e) { if (current()) { renderChat([]); state.loadedId = null; } }
 }
 
 /** 一条消息都还没有的空对话（用来复用，避免堆出一串空记录）。 */
@@ -705,7 +1003,7 @@ function convIsEmpty(c) {
 }
 function findEmptyConversation() {
   const list = Array.isArray(state.list) ? state.list : [];
-  for (const c of list) if (convIsEmpty(c)) return c;
+  for (const c of list) if (convIsEmpty(c) && !chatRunsByConversation.has(c.id)) return c;
   return null;
 }
 
@@ -758,7 +1056,7 @@ async function deleteConversation(c) {
     await fetch("/api/conversations/" + encodeURIComponent(c.id), {
       method: "DELETE", credentials: "same-origin",
     });
-    if (state.activeId === c.id) state.activeId = null;
+    if (state.activeId === c.id) { state.activeId = null; syncConversationBusy(); }
     await refreshList();
     if (state.list.length) await openConversation(state.list[0].id); // 删完自动跳到最近一个
     else renderChat([]);
@@ -778,10 +1076,15 @@ function applyComposerState() {
   send.hidden = locked;
   stopBtn.hidden = !state.busy;
 }
-function setBusy(b) {
-  state.busy = b;
+function syncConversationBusy() {
+  state.busy = !!(state.activeId && chatRunsByConversation.has(state.activeId));
   applyComposerState();
-  if (!b && !state.composerLocked) ta.focus();
+}
+function setConversationBusy(conversationId, entry, busy) {
+  if (busy) chatRunsByConversation.set(conversationId, entry);
+  else if (chatRunsByConversation.get(conversationId) === entry) chatRunsByConversation.delete(conversationId);
+  syncConversationBusy();
+  if (!state.busy && !state.composerLocked) ta.focus();
 }
 /** 归档对话只读：锁输入框 / 发送按钮，并亮起顶部提示条。 */
 function setComposerLocked(locked) {
@@ -795,26 +1098,108 @@ function syncArchBanner() {
   if (b) b.hidden = !(state.composerLocked && state.view === "chat");
 }
 
+function createMediaAuthorizationPanel(authorization) {
+    const panel = document.createElement("div"); panel.className = "media-authorization";
+    const note = document.createElement("p");
+    note.textContent = "本次媒体任务需要确认模型。仅授权一次提交，不自动重试；费用按模型实际计费，此处没有金额硬上限。等待确认期间不会调用模型。";
+    if(typeof authorization.parameterSummary==="string"&&authorization.parameterSummary.length<=160)note.textContent+=" "+authorization.parameterSummary;
+    const select = document.createElement("select"); select.setAttribute("aria-label", "本次媒体模型");
+    const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = "选择媒体模型（提交时核验资格）"; select.appendChild(placeholder);
+    for (const [id] of modelCaps) { const option = document.createElement("option"); option.value = id; option.textContent = id; select.appendChild(option); }
+    const button = document.createElement("button"); button.type = "button"; button.textContent = "确认本次提交";
+    const result = document.createElement("p"); result.setAttribute("role", "status");
+    button.addEventListener("click", async () => {
+      if (!select.value) { result.textContent = "请先选择模型。"; return; }
+      button.disabled = true; select.disabled = true;
+      try {
+        const response = await fetch("/api/runs/" + encodeURIComponent(authorization.runId) + "/media-authorization", { method:"POST", credentials:"same-origin", headers:{"Content-Type":"application/json"}, body:JSON.stringify({confirmed:true,modelId:select.value}) });
+        const body = await response.json();
+        if (!response.ok || body.ok !== true) throw new Error(body.code || "MEDIA_AUTHORIZATION_UNAVAILABLE");
+        result.textContent = "已确认；该授权仅用于本次任务。";
+      } catch { result.textContent = "本次确认未完成，请检查模型资格或任务是否已过期。"; button.disabled = false; select.disabled = false; }
+    });
+    panel.appendChild(note); panel.appendChild(select); panel.appendChild(button); panel.appendChild(result); return panel;
+}
+function restoreMediaAuthorization(conversationId) {
+  if (!isViewing(conversationId)) return;
+  const entry = chatRunsByConversation.get(conversationId);
+  if (!entry?.mediaAuthorization || !validRunReviewId(entry.mediaAuthorization.runId)) return;
+  if (!entry.mediaAuthorizationPanel) entry.mediaAuthorizationPanel = createMediaAuthorizationPanel(entry.mediaAuthorization);
+  if (!chat.contains(entry.mediaAuthorizationPanel)) chat.appendChild(entry.mediaAuthorizationPanel);
+}
+
 async function runChat(payload) {
-  // 守卫：选中了生成类模型（不可聊天）就别发请求了 —— 发过去只会干等到超时
-  if (!currentModelChat()) {
-    composerNotice("「" + currentModelName() + "」不能用于聊天，已拦下这次发送。请切换成 AUTO 或对话模型。", "err");
+  if (!payload.resumeRunId && modelSelect && !modelContextReady) {
+    if(modelLoadFailed){await loadModels();if(modelContextReady)composerNotice("模型已重新同步，请再次发送。", "");}
+    else composerNotice("正在同步当前对话的模型，请稍后发送。", "err");
     return;
   }
-  if (state.busy) return;
+  // 守卫：选中了生成类模型（不可聊天）就别发请求了 —— 发过去只会干等到超时
+  if (!payload.resumeRunId && !currentModelChat()) {
+    const selected = modelSelect && modelSelect.value;
+    const reason = modelAvailabilityLabel(modelCaps.get(selected));
+    composerNotice(modelBlockedNotice(currentModelName(), reason, modelCaps.get(selected)), "err");
+    return;
+  }
+  const targetId = payload.conversationId || state.activeId;
+  if (!targetId || chatRunsByConversation.has(targetId)) return;
+  let serializedPayload = null;
+  let idempotencyKey = null;
+  if (!payload.resumeRunId) {
+    try { serializedPayload = JSON.stringify(payload); }
+    catch { composerNotice("请求内容无法序列化，这次请求未发送。", "err"); return; }
+    idempotencyKey = window.crypto && crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + "-" + Math.random().toString(36).slice(2));
+    if (!rememberPendingSubmission(targetId, idempotencyKey)) {
+      composerNotice("浏览器无法保存请求恢复凭据，这次请求未发送。请恢复会话存储后重试。", "err");
+      return;
+    }
+  }
+  const requestEntry = { runId: payload.resumeRunId || null, idempotencyKey };
+  let terminalObserved = false;
+  let postAttempted = false;
   // 这条请求是替哪个对话发的 —— 结果回来时必须跟「界面现在显示的是谁」比对。
   // 用户在 A 生成期间切到 B：A 的回复只做列表未读标记，绝不渲染进 B（会整屏覆盖 B 的内容）。
-  const targetId = payload.conversationId || state.activeId;
   const viewing = () => isViewing(targetId);
-  setBusy(true);
-  const t = thinking();
+  let manualCheckNoticeShown = false;
+  const mediaStepState = { taskType: null };
+  const observeManualCheck = (operationStatus) => {
+    if (operationStatus !== "manual_check") return;
+    manualCheckHistoryByConversation.add(targetId);
+    if (!viewing()) { markUnread(targetId); return; }
+    if (!manualCheckNoticeShown) { showManualCheckHistory(targetId); manualCheckNoticeShown = true; }
+  };
+  const restoreManualCheckHistory = () => {
+    if (!viewing() || !manualCheckHistoryByConversation.has(targetId)) return;
+    showManualCheckHistory(targetId);
+    manualCheckHistoryByConversation.delete(targetId);
+  };
+  const observeMediaAuthorization = (authorization) => {
+    if (!authorization || !validRunReviewId(authorization.runId) || authorization.runId !== requestEntry.runId) return;
+    requestEntry.mediaAuthorization = authorization;
+    restoreMediaAuthorization(targetId);
+  };
+  setConversationBusy(targetId, requestEntry, true);
+  const t = viewing() ? thinking() : document.createElement("div");
   const t0 = Date.now();
   const tick = setInterval(() => { const e = t.querySelector(".elapsed"); if (e) e.textContent = "（" + formatElapsed(Math.round((Date.now() - t0) / 1000)) + "）"; }, 1000);
   try {
-    const r = await fetch("/api/chat", {
-      method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "Idempotency-Key": (window.crypto && crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + "-" + Math.random().toString(36).slice(2))) }, body: JSON.stringify(payload),
-    });
+    const r = payload.resumeRunId ? {
+      headers: { get: (name) => name === "content-type" ? "text/event-stream" : name === "x-agent-run-id" ? payload.resumeRunId : null },
+      body: { getReader: () => ({ read: async () => ({ done: true }) }) },
+    } : await (async () => {
+      // If the connection fails before response headers arrive, the server may
+      // already have durably admitted this Run. Retry once with the exact same
+      // key and body: the server returns that Run instead of executing twice.
+      const options = {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey }, body: serializedPayload,
+      };
+      try { postAttempted = true; return await fetch("/api/chat", options); }
+      catch (firstError) {
+        if (new URLSearchParams(location.search || "").get("northstarNoChatRetry") === "1") throw firstError;
+        return await fetch("/api/chat", options);
+      }
+    })();
     const ct = (r.headers.get("content-type") || "");
 
     if (ct.indexOf("text/event-stream") >= 0) {
@@ -823,6 +1208,8 @@ async function runChat(payload) {
       const decoder = new TextDecoder("utf-8");
       let buf = "", acc = "", gotDone = false, lastSeq = 0;
       const runId = r.headers.get("x-agent-run-id");
+      requestEntry.runId = runId || null;
+      if (runId) { forgetPendingSubmission(targetId, requestEntry.idempotencyKey); rememberRun(targetId, runId); }
       try {
         while (true) {
           const { done, value } = await reader.read();
@@ -838,6 +1225,8 @@ async function runChat(payload) {
             let obj; try { obj = JSON.parse(line.slice(6)); } catch (e) { continue; }
           // 打字机和工具步骤只画在「用户当前正在看的那条对话」上
           if (obj.connecting && viewing()) { showConnecting(t); }
+          observeManualCheck(obj.operationStatus);
+          if (obj.mediaAuthorization) observeMediaAuthorization(obj.mediaAuthorization);
           if (obj.artifact && viewing()) { pushArtifact(obj.artifact); openArtifactPane(); }
           if (obj.delta && viewing()) { acc += obj.delta; streamInto(t, acc); }
           if (obj.step && viewing()) {
@@ -846,11 +1235,12 @@ async function runChat(payload) {
               // media_route 步骤统一美化：开始给等待提示、失败给友好报错、成功结束不冒多余一行；
               // 其他工具（归因查询等）返回 null，走下面的通用渲染（不美化、保持原样）。
               // 后端 progress 字段长期卡 30% 不可靠，不做进度条，只给等待预期。
-              const r = mediaRouteStepMessage(obj.step);
+              const r = mediaRouteStepMessage(obj.step, mediaStepState);
               if (r !== null && !r.skip) {
                 const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
                 d.textContent = r.text;
                 live.appendChild(d);
+                if (obj.step.isError) addRunReviewButton(d, runId);
                 chat.scrollTop = chat.scrollHeight;
               } else if (r === null) {
                 const d = document.createElement("div"); d.className = "step-live" + (obj.step.isError ? " err" : "");
@@ -862,16 +1252,26 @@ async function runChat(payload) {
             }
           }
           if (obj.done) {
+            terminalObserved = true;
             // 收尾扫描给出的产出列表（准的那一份）：并进面板；面板关着就不强行弹开
-            if (Array.isArray(obj.artifacts) && obj.artifacts.length) { mergeArtifacts(obj.artifacts); openArtifactPane(); }
+            if (viewing() && Array.isArray(obj.artifacts) && obj.artifacts.length) { mergeArtifacts(obj.artifacts); openArtifactPane(); }
             gotDone = true;
             clearInterval(tick); t.remove();
             // 界面已经不在目标对话上了：只标未读 + 刷列表，一个字都不写进当前视图
             if (!viewing()) { markUnread(targetId); await refreshList(); return; }
-            if (obj.stopped) { renderChat(obj.messages); showStoppedBar(obj.stopReason); cm.textContent = stoppedChipText(obj.stopReason); }
-            else if (obj.ok) { renderChat(obj.messages); cm.textContent = "第 " + obj.turns + " 轮 · 常驻 agent 会话续接"; }
+            ++conversationLoadSequence; // A pending history read must not overwrite this terminal result.
+            if (obj.stopped) { renderChat(obj.messages); restoreManualCheckHistory(); showStoppedBar(obj.stopReason, upstreamMayRunForRuns.has(runId)); cm.textContent = stoppedChipText(obj.stopReason); }
+            else if (obj.ok) { renderChat(obj.messages); restoreManualCheckHistory(); cm.textContent = "第 " + obj.turns + " 轮 · 常驻 agent 会话续接"; }
             else if (obj.needKey) { needKeyBubble(); cm.textContent = ""; }
-            else { if (Array.isArray(obj.messages)) renderChat(obj.messages); else bubbleSys("执行失败：" + (obj.error || "")); cm.textContent = ""; }
+            else {
+              if (Array.isArray(obj.messages)) {
+                renderChat(obj.messages);
+                restoreManualCheckHistory();
+                if (obj.error) bubbleSys(obj.error);
+              } else bubbleSys("执行失败：" + (obj.error || ""));
+              cm.textContent = "";
+            }
+            if (runId) upstreamMayRunForRuns.delete(runId);
             await refreshList();
           }
           }
@@ -886,27 +1286,50 @@ async function runChat(payload) {
           while (!finished && attempts < 1800) {
             try {
               const replay = await fetch("/api/runs/" + encodeURIComponent(runId) + "/events?after=" + lastSeq + "&limit=500", { credentials: "same-origin" });
-              if (!replay.ok) break;
+              if (!replay.ok) {
+                if (replay.status === 408 || replay.status === 429 || replay.status >= 500) throw new Error("任务恢复暂时不可用");
+                if ([401, 403, 404].includes(replay.status)) terminalObserved = true;
+                break;
+              }
               const page = await replay.json();
               for (const event of (page.events || [])) {
-                lastSeq = Math.max(lastSeq, Number(event.seq) || 0);
                 const payload = event.payload || {};
                 if (event.type === "delta") { acc += payload.text || ""; if (viewing()) streamInto(t, acc); }
-                else if (event.type === "step" && viewing()) {
-                  const live = t.querySelector(".steps-live");
-                  if (live) { const d = document.createElement("div"); d.className = "step-live" + (payload.step && payload.step.isError ? " err" : ""); d.textContent = (payload.step && payload.step.name || "工具"); live.appendChild(d); }
+                else if (event.type === "state") {
+                  observeManualCheck(payload.operationStatus);
+                  if (payload.action === "media_authorization_required") observeMediaAuthorization({runId:event.runId,taskType:payload.taskType,expiresAt:payload.expiresAt,parameterSummary:payload.parameterSummary});
+                }
+                else if (event.type === "step") {
+                  const mediaStep = mediaRouteStepMessage(payload.step, mediaStepState);
+                  const live = viewing() ? t.querySelector(".steps-live") : null;
+                  if (live && !mediaStep?.skip) {
+                    const d = document.createElement("div"); d.className = "step-live" + (payload.step && payload.step.isError ? " err" : "");
+                    d.textContent = mediaStep ? mediaStep.text : (payload.step && payload.step.name || "工具");
+                    live.appendChild(d);
+                    if (mediaStep && payload.step?.isError) addRunReviewButton(d, runId);
+                  }
                 } else if (event.type === "artifact" && viewing() && payload.artifact) { pushArtifact(payload.artifact); openArtifactPane(); }
                 else if (event.type === "done") {
-                  finished = true; gotDone = true; clearInterval(tick); t.remove();
                   if (viewing()) {
                     const latest = await fetch("/api/conversations/" + encodeURIComponent(targetId), { credentials: "same-origin" });
-                    const detail = await latest.json().catch(() => null);
-                    const messages = detail && detail.conversation && detail.conversation.messages;
-                    if (Array.isArray(messages)) renderChat(messages); else if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
-                    cm.textContent = event.payload && event.payload.state === "cancelled" ? stoppedChipText("user") : "";
+                    if (!latest.ok && ![401, 403, 404].includes(latest.status)) throw new Error("任务结果暂时无法读取");
+                    if (latest.ok) {
+                      const detail = await latest.json();
+                      const messages = detail && detail.conversation && detail.conversation.messages;
+                      if (!Array.isArray(messages)) throw new Error("任务结果尚不可用");
+                      // The active conversation may change while its final history loads.
+                      if (viewing()) { ++conversationLoadSequence; renderChat(messages); restoreManualCheckHistory(); }
+                    }
+                    if (viewing()) cm.textContent = event.payload && event.payload.state === "cancelled" ? stoppedChipText("user") : "";
                   }
+                  // A failed final-history read leaves this done sequence unconsumed,
+                  // so the next durable replay retries it before forgetting the Run.
+                  terminalObserved = true;
+                  finished = true; gotDone = true; clearInterval(tick); t.remove();
+                  if (!viewing()) markUnread(targetId);
                   await refreshList();
                 }
+                lastSeq = Math.max(lastSeq, Number(event.seq) || 0);
               }
             } catch (e) { /* transient network failure; retry from the last durable sequence */ }
             if (!finished) { attempts++; await new Promise((resolve) => setTimeout(resolve, 1000)); }
@@ -922,9 +1345,16 @@ async function runChat(payload) {
     } else {
       // 非流式（预检错误 / needKey / busy 等 JSON）
       const j = await r.json().catch(() => null);
+      if (r.status < 500) forgetPendingSubmission(targetId, requestEntry.idempotencyKey);
+      else if (requestEntry.idempotencyKey) {
+        holdPendingSubmission(targetId, requestEntry.idempotencyKey);
+        composerNotice("服务器返回错误，请求是否已接收尚未确认；请勿重复发送，正在核对 Run 状态。", "err");
+        setTimeout(() => resumePendingSubmissions(), 0);
+      }
       clearInterval(tick); t.remove();
       // 界面已切走：结果也好、报错也好，都只标未读，不往别的对话里插气泡
       if (!viewing()) { markUnread(targetId); await refreshList(); return; }
+      ++conversationLoadSequence;
       if (!r.ok && r.status === 409 && j && j.needKey) {
         needKeyBubble(); cm.textContent = "";
       } else if (!r.ok && r.status === 409 && j && j.busy) {
@@ -944,10 +1374,19 @@ async function runChat(payload) {
     }
   } catch (x) {
     clearInterval(tick); t.remove();
-    if (!viewing()) { await refreshList(); return; }
-    bubbleSys("请求出错：" + x.message); cm.textContent = "";
+    if (requestEntry.idempotencyKey && !requestEntry.runId && postAttempted) {
+      holdPendingSubmission(targetId, requestEntry.idempotencyKey);
+      if (viewing()) composerNotice("请求状态未确认，请勿重复发送；正在按原幂等键核对 Run。", "err");
+      setTimeout(() => resumePendingSubmissions(), 0);
+      if (!viewing()) { await refreshList(); return; }
+    } else {
+      if (requestEntry.idempotencyKey) forgetPendingSubmission(targetId, requestEntry.idempotencyKey);
+      if (!viewing()) { await refreshList(); return; }
+      bubbleSys("请求出错：" + x.message); cm.textContent = "";
+    }
   } finally {
-    setBusy(false);
+    if (terminalObserved && requestEntry.runId) forgetRun(targetId, requestEntry.runId);
+    setConversationBusy(targetId, requestEntry, false);
   }
 }
 
@@ -969,6 +1408,11 @@ async function ask(msg) {
     const id = await newConversation();
     if (!id) return;
   }
+  const csvSelections = pendingDocs.filter(d => d.csvSelection).map(d => d.csvSelection);
+  if (csvSelections.length > 1) {
+    composerNotice("一次只能确认一个 CSV 分析范围，请移除多余选择后再发送", "err");
+    return;
+  }
   ta.value = ""; ta.style.height = "auto";
   const payload = { conversationId: state.activeId, message: msg };
   // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
@@ -977,6 +1421,7 @@ async function ask(msg) {
   // 文本文档：只传后端返回的 url 列表（/uploads/<租户>/<随机名>.<ext>），
   // 正文由服务端读出来注入上下文，URL 本身不下发给模型。
   if (pendingDocs.length) payload.documents = pendingDocs.map(d => d.url);
+  if (csvSelections.length) payload.csvSelections = csvSelections;
   // 音视频：提交 [{ type:"video"|"audio", url }]，气泡里由 chat-media.js 渲成播放器。
   // 只传 url 不传文件本体 —— 落盘和租户隔离都在基座 /api/upload-media 那边做完了。
   // 只挑传完的（有 url 且 uploading 为 false）：正在传的那条 url 还是空的。
@@ -1041,7 +1486,24 @@ if (archRestoreBtn) archRestoreBtn.addEventListener("click", async () => {
 });
 
 /* ---- ⑧ 导出（Content-Disposition 触发下载） ---- */
-function exportConversation(c, fmt) {
+async function exportConversation(c, fmt) {
+  if (fmt === 'docx') {
+    let url;
+    try {
+      const response = await fetch('/api/conversations/' + encodeURIComponent(c.id) + '/export?fmt=docx', {credentials: 'same-origin'});
+      if (!response.ok) throw Error('export failed');
+      const blob = await response.blob();
+      url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url; link.download = 'conversation-' + String(c.id).slice(0, 8) + '.docx';
+      document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch {
+      if (url) URL.revokeObjectURL(url);
+      composerNotice('Word 导出失败，请稍后重试；超长对话可先导出 Markdown。', 'err');
+    }
+    return;
+  }
   const a = document.createElement("a");
   a.href = "/api/conversations/" + encodeURIComponent(c.id) + "/export?fmt=" + (fmt || "md");
   document.body.appendChild(a); a.click(); a.remove();
@@ -1102,8 +1564,20 @@ ta.addEventListener("keydown", e => { if (e.key === "Escape") closeMentionMenu()
 send.addEventListener("click", () => ask(ta.value));
 newBtn.addEventListener("click", () => newConversation());
 stopBtn.addEventListener("click", async () => {
-  if (!state.busy) return;
-  try { await fetch("/api/chat/stop", { method: "POST", credentials: "same-origin" }); } catch (e) { /* 静默 */ }
+  const conversationId = state.activeId;
+  const run = conversationId && chatRunsByConversation.get(conversationId);
+  if (!run) return;
+  stopBtn.disabled = true;
+  try {
+    const response = await fetch("/api/chat/stop", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ conversationId, ...(run.runId ? { runId: run.runId } : {}) }),
+    });
+    const result = response.ok ? await response.json() : null;
+    if (result?.upstreamMayStillRun && run.runId) upstreamMayRunForRuns.add(run.runId);
+  } catch (e) { /* stream/run feed remains the source of terminal status */ }
+  finally { if (state.activeId === conversationId && chatRunsByConversation.has(conversationId)) stopBtn.disabled = false; }
 });
 ta.addEventListener("keydown", e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask(ta.value); } });
 ta.addEventListener("input", () => { ta.style.height = "auto"; ta.style.height = Math.min(ta.scrollHeight, 170) + "px"; });
@@ -1275,9 +1749,9 @@ async function uploadImageDataUrl(b64) {
  * 走基座已合并的 POST /api/upload-doc，只把返回的 url 存下来，
  * 发消息时作为 documents 数组提交；正文由后端读出来注入上下文（URL 本身不给模型）。
  * 下面的扩展名 / 体积校验只是「早点给提示」，后端还会按内容再判一次纯文本，两道都在。 */
-const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv"]);
+const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx"]);
 const DOC_MAX_BYTES = 5 * 1024 * 1024;
-let pendingDocs = [];   // [{ url, name, size, chars }]
+let pendingDocs = [];   // [{ url, name, size, chars, csvSelection? }]
 
 function docExtOf(name) {
   const m = /\.([A-Za-z0-9]+)$/.exec(String(name || "").trim());
@@ -1325,8 +1799,74 @@ function renderDocList() {
     del.addEventListener("click", () => { pendingDocs.splice(i, 1); renderDocList(); });
     chip.appendChild(nm); chip.appendChild(sz); chip.appendChild(del);
     docListEl.appendChild(chip);
+    if (docExtOf(d.name) === "csv") {
+      const choose = document.createElement("button");
+      choose.type = "button"; choose.className = "doc-csv-select";
+      choose.textContent = d.csvSelection ? `已确认 C${d.csvSelection.column}，从第 ${d.csvSelection.startRow} 行开始` : "选择 CSV 列与数据行";
+      choose.addEventListener("click", () => showCsvSelectionForm(d));
+      docListEl.appendChild(choose);
+    }
   });
   if (window.initIcons) window.initIcons();
+}
+
+function showCsvSelectionForm(doc) {
+  if (!docListEl || !doc || !doc.url) return;
+  const old = docListEl.querySelector(".doc-csv-selection");
+  if (old) old.remove();
+  const form = document.createElement("div");
+  form.className = "doc-csv-selection";
+  const field = (labelText, value, placeholder) => {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = document.createElement("input");
+    input.type = "number"; input.min = "1"; input.step = "1";
+    input.value = value == null ? "" : String(value);
+    input.placeholder = placeholder;
+    label.appendChild(input); form.appendChild(label);
+    return input;
+  };
+  const header = field("表头行（无表头留空）", doc.csvSelection?.headerRow, "留空");
+  const start = field("数据起始行", doc.csvSelection?.startRow ?? 1, "1");
+  const column = field("列号 C", doc.csvSelection?.column ?? 1, "1");
+  const previewButton = document.createElement("button");
+  previewButton.type = "button"; previewButton.textContent = "预览列证据";
+  const confirmButton = document.createElement("button");
+  confirmButton.type = "button"; confirmButton.textContent = "确认这个范围"; confirmButton.disabled = true;
+  const result = document.createElement("div");
+  result.className = "doc-csv-selection-result";
+  let preview = null;
+  let previewVersion = 0;
+  for (const input of [header, start, column]) input.addEventListener("input", () => { previewVersion++; preview = null; confirmButton.disabled = true; });
+  previewButton.addEventListener("click", async () => {
+    const version = ++previewVersion;
+    const selection = { sourceRef: doc.url, headerRow: header.value.trim() ? Number(header.value) : null,
+      startRow: Number(start.value), column: Number(column.value) };
+    preview = null; confirmButton.disabled = true; result.textContent = "正在核对 CSV…";
+    try {
+      const response = await fetch("/api/csv/selection-preview", { method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" }, body: JSON.stringify(selection) });
+      const payload = await response.json();
+      if (version !== previewVersion) return;
+      if (!response.ok || !payload.ok || !payload.preview) throw new Error(payload.code || "CSV_SELECTION_INVALID");
+      preview = { ...selection, sourceSha256: payload.preview.sourceSha256 };
+      const samples = payload.preview.samples.map(s => s.value).join("、") || "（无非空样本）";
+      result.textContent = `${payload.preview.columnLabel}｜${samples}｜${payload.preview.type}${payload.preview.reason ? `（${payload.preview.reason}）` : ""}`;
+      confirmButton.disabled = payload.preview.type !== "decimal";
+      if (confirmButton.disabled) result.textContent += "；当前数值分析仅接受无歧义十进制列";
+    } catch {
+      if (version !== previewVersion) return;
+      result.textContent = "预览失败：请检查列号、表头行和数据起始行";
+    }
+  });
+  confirmButton.addEventListener("click", () => {
+    if (!preview) return;
+    doc.csvSelection = preview;
+    renderDocList();
+    composerNotice("CSV 分析范围已确认", "ok");
+  });
+  form.appendChild(previewButton); form.appendChild(confirmButton); form.appendChild(result);
+  docListEl.appendChild(form);
 }
 function clearPendingDocs() { pendingDocs = []; renderDocList(); if (docInput) docInput.value = ""; }
 
@@ -1335,12 +1875,13 @@ async function uploadDocFile(f) {
   if (!f) return false;
   const name = f.name || "未命名文件";
   if (!DOC_EXT_WHITELIST.has(docExtOf(name))) {
-    composerNotice("只支持 .txt / .md / .csv 纯文本文档，「" + name + "」不是", "err");
+    composerNotice("支持 .txt / .md / .csv / .docx / .xlsx / .pptx，「" + name + "」暂不支持", "err");
     return false;
   }
   if (!f.size) { composerNotice("「" + name + "」是空文件，没有可读取的内容", "err"); return false; }
-  if (f.size > DOC_MAX_BYTES) {
-    composerNotice("文档太大：单文件上限 5MB，「" + name + "」是 " + fmtSize(f.size), "err");
+  const maxBytes=['docx','xlsx','pptx'].includes(docExtOf(name))?20*1024*1024:DOC_MAX_BYTES;
+  if (f.size > maxBytes) {
+    composerNotice("文档太大：单文件上限 "+Math.round(maxBytes/1048576)+"MB，「" + name + "」是 " + fmtSize(f.size), "err");
     return false;
   }
   let b64;
@@ -1721,7 +2262,7 @@ async function handleComposerFile(f) {
   if (isDocFile(f)) { await uploadDocFile(f); return; }          // 文档 → /api/upload-doc
   if (mediaKindOf(f)) { await uploadMediaFile(f); return; }      // 音视频 → /api/upload-media
   if (!/^image\//.test(f.type || "")) {
-    composerNotice("只支持图片（参考素材）、音视频，或 .txt / .md / .csv 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
+    composerNotice("只支持图片（参考素材）、音视频，或 .txt / .md / .csv / .docx / .xlsx / .pptx 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
     return;
   }
   if (f.size > 15 * 1024 * 1024) { composerNotice("素材太大（≤15MB）", "err"); return; }
@@ -1807,8 +2348,66 @@ if (searchResults) document.addEventListener("click", (e) => {
  * 现在全量展示，但每个模型带一个 chat 标记 —— 用户选中不能聊的模型时要明确告诉他，
  * 不能让他选完发消息干等、或者报错了还不知道为什么。
  */
-/** 模型 id -> { chat, kind }。来自 /api/models，用来判断「这个模型能不能聊天」。 */
+/** 模型 id -> 显式能力与 runtime 状态；未知信息一律 fail-closed。 */
 const modelCaps = new Map();
+let lastAcceptedModelSelection = "AUTO";
+let modelLoadSequence = 0;
+let modelSelectionSequence = 0;
+let modelContextReady = false;
+let modelLoadFailed = false;
+let reasoningEffort = null;
+let reasoningInfoSequence = 0;
+let reasoningInfoController = null;
+function clearReasoningControl() {
+  ++reasoningInfoSequence;
+  reasoningInfoController?.abort(); reasoningInfoController = null;
+  const control = $("#reasoningControl"), select = $("#reasoningSelect");
+  if (control) control.hidden = true;
+  if (select) { select.disabled = true; select.innerHTML = ""; }
+}
+async function loadReasoningOptions() {
+  clearReasoningControl();
+  const conversationId = state.activeId || null, model = modelSelect?.value;
+  if (!conversationId || !model || model === "AUTO") return;
+  const sequence = reasoningInfoSequence;
+  const controller = new AbortController(); reasoningInfoController = controller;
+  try {
+    const response = await fetch("/api/models/reasoning?conversationId=" + encodeURIComponent(conversationId) + "&model=" + encodeURIComponent(model), {credentials:"same-origin",signal:controller.signal});
+    const info = await response.json();
+    if (sequence !== reasoningInfoSequence || conversationId !== state.activeId || model !== modelSelect.value) return;
+    if (!response.ok || !info?.ok || !Array.isArray(info.efforts) || (!info.efforts.length && !reasoningEffort) || info.efforts.length > 16) return;
+    const select = $("#reasoningSelect"), control = $("#reasoningControl");
+    if (!select || !control) return;
+    const add = (value, text) => {const option=document.createElement("option");option.value=value;option.textContent=text;select.appendChild(option);};
+    add("", "模型默认");
+    for (const item of info.efforts) add(item.id,item.name);
+    if (reasoningEffort && !info.efforts.some(item=>item.id===reasoningEffort)) add(reasoningEffort,"原档位已不可用，请重选");
+    select.value = reasoningEffort || ""; select.disabled = false; control.hidden = false;
+  } catch { /* Metadata failure never guesses levels or overwrites a saved preference. */ }
+}
+const reasoningSelect = $("#reasoningSelect");
+if (reasoningSelect) reasoningSelect.addEventListener("change", async () => {
+  const conversationId = state.activeId || null, model = modelSelect?.value;
+  if (!conversationId || !modelContextReady || !model || model === "AUTO") return;
+  const sequence = ++modelSelectionSequence, loadSequence = modelLoadSequence;
+  const previous = reasoningEffort, next = reasoningSelect.value || null;
+  modelContextReady = false; modelSelect.disabled = true; reasoningSelect.disabled = true;
+  try {
+    const response = await fetch("/api/models/select", {method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({conversationId,model,reasoningEffort:next})});
+    const result = await response.json();
+    if (sequence !== modelSelectionSequence || loadSequence !== modelLoadSequence || conversationId !== state.activeId) return;
+    if (!response.ok || !result?.ok) throw new Error();
+    reasoningEffort = result.reasoningEffort ?? null;
+  } catch {
+    if (sequence === modelSelectionSequence && loadSequence === modelLoadSequence && conversationId === state.activeId) {
+      reasoningEffort = previous; composerNotice("推理档位保存失败，请重试。", "err");
+    }
+  } finally {
+    if (sequence === modelSelectionSequence && loadSequence === modelLoadSequence && conversationId === state.activeId) {
+      reasoningSelect.value=reasoningEffort || ""; reasoningSelect.disabled=false; modelContextReady=true; modelSelect.disabled=false;
+    }
+  }
+});
 
 /** 生成类模型的中文标签（只用于提示文案）。 */
 function modelKindLabel(kind) {
@@ -1820,7 +2419,7 @@ function modelKindLabel(kind) {
 
 /**
  * 当前选中的模型能不能聊天。
- * AUTO 是智能路由（一定能聊）；查不到记录的按「能聊」处理 —— 宁可放行也别误拦。
+ * AUTO 交由服务端路由；手动模型须有服务端资格。已适配的手动首调可用于建立运行验证。
  */
 function currentModelChat() {
   const sel = $("#modelSelect");
@@ -1828,7 +2427,68 @@ function currentModelChat() {
   const id = sel.value;
   if (!id || id === "AUTO") return true;
   const c = modelCaps.get(id);
-  return c ? c.chat !== false : true;
+  return !!(c && c.chat === true && c.availability === "present" &&
+    (c.runtimeStatus === "verified" || c.manualEligible === true));
+}
+
+function modelAvailabilityLabel(cap) {
+  if (!cap) return "能力未确认";
+  if (cap.availability === "removed") return "已下架";
+  const eligibilityLabels = {
+    AVAILABILITY_UNKNOWN: "目录状态未确认",
+    MODEL_UNAVAILABLE: "当前Key不可用",
+    PERMISSION_UNKNOWN_OR_DENIED: "当前Key权限未确认",
+    LOCAL_POLICY_UNKNOWN_OR_DENIED: "尚未获本地策略启用",
+    CAPABILITY_UNKNOWN: "能力未确认",
+    TASK_UNSUPPORTED: "不支持对话",
+    ADAPTER_UNVERIFIED: "运行时未适配",
+    ADAPTER_ENDPOINT_MISMATCH: "聊天接口不匹配",
+    ENDPOINT_COMPATIBILITY_UNKNOWN: "聊天接口兼容性未确认",
+    RUNTIME_UNVERIFIED: "运行时尚未验证",
+    MODALITY_UNKNOWN: "输入输出模态未确认",
+    TEXT_MODALITY_UNSUPPORTED: "不支持文本输入输出",
+  };
+  if (eligibilityLabels[cap.eligibilityCode]) return eligibilityLabels[cap.eligibilityCode];
+  if (cap.manualEligible === true && cap.availability === "present") return "";
+  if (cap.chat !== true) return cap.chat === false ? "不支持聊天" : "能力未确认";
+  if (cap.runtimeStatus === "unadapted") return "运行时未适配";
+  if (cap.runtimeStatus === "adapted_unverified") return "运行时尚未验证";
+  if (cap.runtimeStatus !== "verified") return "运行时状态未知";
+  if (cap.availability !== "present") return "可用状态未知";
+  return "";
+}
+
+function modelBlockedNotice(modelName, reason, cap) {
+  const recovery = cap?.eligibilityCode === "AVAILABILITY_UNKNOWN"
+    ? "请稍后重试；若仍未恢复，请让维护者检查当前账号的目录同步状态。"
+    : "请切换到 AUTO 或已验证的聊天模型。";
+  return "「" + modelName + "」不可执行：" + reason + "。" + recovery;
+}
+
+function catalogDiagnosticMessage(diagnostics) {
+  const status = Number(diagnostics?.upstreamStatus) || null;
+  const errorCode = typeof diagnostics?.errorCode === "string" ? diagnostics.errorCode : "";
+  const messages = {
+    PT_KEY_MISSING: "当前账号尚未配置 PT API Key。请在设置中配置后刷新模型列表。",
+    PT_KEY_DECRYPT_FAILED: "保存的 PT API Key 无法读取。请让维护者检查数据库与主密钥配置。",
+    PT_CREDENTIAL_UNAVAILABLE: "当前账号没有可用的 PT 凭据。",
+    PT_HTTP_ERROR: "PT 模型目录请求失败" + (status ? "（HTTP " + status + "）" : "") + "。",
+    PT_TIMEOUT: "读取 PT 模型目录超时，请稍后刷新。",
+    PT_NETWORK_ERROR: "无法连接 PT 模型目录，请让维护者检查服务网络。",
+    PT_INVALID_RESPONSE: "PT 模型目录返回格式无效，请让维护者检查网关响应。",
+    PT_EMPTY_OR_UNRECOGNIZED_RESPONSE: "PT 模型目录没有返回可识别的模型记录。",
+    CATALOG_CACHE_WRITE_FAILED: "模型目录读取成功，但服务无法保存目录状态，请让维护者检查运行目录权限。",
+    CATALOG_SYNC_BACKOFF: "模型目录同步正在退避，请稍后重试。",
+    MODEL_CATALOG_INTERNAL_ERROR: "模型目录读取发生内部错误，请让维护者检查服务日志。",
+    PT_SYNC_FAILED: "PT 模型目录尚未成功同步。",
+    CATALOG_STATUS_UNKNOWN: "当前账号尚无成功的模型目录快照。",
+  };
+  if (errorCode.startsWith("MODEL_CATALOG_INTERNAL_")) {
+    return "模型目录读取发生内部错误（" + errorCode + "），请把此诊断码提供给维护者。";
+  }
+  return messages[errorCode] || (diagnostics?.state === "backoff"
+    ? messages.CATALOG_SYNC_BACKOFF
+    : messages.CATALOG_STATUS_UNKNOWN);
 }
 
 /** 当前选中模型的展示名（提示文案用）。 */
@@ -1841,13 +2501,47 @@ function currentModelName() {
 
 /* ---- ⑩ 模型切换 ---- */
 const modelSelect = $("#modelSelect");
+let mediaQualification = null;
+const MEDIA_TASK_LABELS = Object.freeze({ text2image: "文生图", image2image: "图生图", text2video: "文生视频", image2video: "图生视频" });
+const MEDIA_BLOCK_LABELS = Object.freeze({
+  PERMISSION_UNKNOWN_OR_DENIED: "权限未确认", LOCAL_POLICY_UNKNOWN_OR_DENIED: "当前未启用",
+  CAPABILITY_UNKNOWN: "任务能力未确认", TASK_UNSUPPORTED: "任务不支持",
+  MODALITY_UNKNOWN: "输入输出类型未确认", MODALITY_UNSUPPORTED: "输入输出类型不支持",
+  MEDIA_ADAPTER_UNSUPPORTED: "调用适配未确认", ADAPTER_ENDPOINT_MISMATCH: "接口适配不匹配",
+  RUNTIME_UNVERIFIED: "运行验证未完成", MODEL_UNAVAILABLE: "模型不可用",
+});
+function mediaQualificationTaskSummary(matrix, taskType) {
+  if (matrix?.ok !== true || !Array.isArray(matrix.rows)) return "目录未确认，无法判断";
+  if (!matrix.rows.length) return "目录中暂无模型";
+  const codes = matrix.rows.map(row => row?.tasks?.[taskType]);
+  const ready = codes.filter(code => code === "ROUTE_READY").length;
+  if (ready) return "本地路由候选 " + ready + " 个；尚未实际生成验证";
+  const counts = new Map();
+  for (const code of codes) if (MEDIA_BLOCK_LABELS[code]) counts.set(code, (counts.get(code) || 0) + 1);
+  const top = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return "暂无本地路由候选；" + (top ? MEDIA_BLOCK_LABELS[top] : "资格未确认");
+}
+function mediaQualificationSummary(matrix) {
+  if (matrix?.ok !== true || !Array.isArray(matrix.rows)) return "媒体生成资格：目录未确认";
+  const readyTypes = Object.keys(MEDIA_TASK_LABELS).filter(taskType => matrix.rows.some(row => row?.tasks?.[taskType] === "ROUTE_READY")).length;
+  return "媒体生成资格：" + readyTypes + "/4 类有本地候选（未实测）";
+}
 async function loadModels() {
   const modelSelect = $("#modelSelect");
   if (!modelSelect) return;
+  const conversationId = state.activeId || null;
+  const sequence = ++modelLoadSequence;
+  clearReasoningControl(); reasoningEffort = null;
+  mediaQualification = null;
+  modelContextReady = false;
+  modelLoadFailed = false;
+  modelSelect.disabled = true;
   try {
-    const r = await fetch("/api/models", { credentials: "same-origin" });
+    const r = await fetch("/api/models" + (conversationId ? "?conversationId=" + encodeURIComponent(conversationId) : ""), { credentials: "same-origin" });
     const j = await r.json().catch(() => null);
-    if (!j || !j.ok || !Array.isArray(j.models)) return;
+    if (sequence !== modelLoadSequence || (state.activeId || null) !== conversationId) return;
+    if (!r.ok || !j || !j.ok || !Array.isArray(j.models)) throw new Error("MODEL_SYNC_FAILED");
+    mediaQualification = j.mediaQualification || null;
     modelCaps.clear();
     modelSelect.innerHTML = "";
     // AUTO 置顶：不指定模型，由服务端按输入特征路由（B3 默认选项）
@@ -1858,16 +2552,48 @@ async function loadModels() {
     modelSelect.appendChild(autoOpt);
     for (const m of j.models) {
       if (!m || !m.id) continue;
-      modelCaps.set(m.id, { chat: m.chat !== false, kind: m.kind || (m.chat === false ? "other" : "chat") });
+      const cap = {
+        chat: m.chat === true ? true : m.chat === false ? false : null,
+        kind: m.kind || (m.chat === false ? "other" : "chat"),
+        capabilityStatus: m.capabilityStatus || (m.chat === true ? "supported" : m.chat === false ? "unsupported" : "unknown"),
+        runtimeStatus: m.runtimeStatus || "unknown",
+        availability: typeof m.availability === "string" ? m.availability : "unknown",
+        manualEligible: j.eligibility?.[m.id]?.ok === true && j.eligibility?.[m.id]?.mode === "manual",
+        verificationRequired: j.eligibility?.[m.id]?.verificationRequired === true,
+        eligibilityCode: j.eligibility?.[m.id]?.detail?.reasons?.[0]?.code || j.eligibility?.[m.id]?.code || null,
+      };
+      modelCaps.set(m.id, cap);
       const o = document.createElement("option");
       o.value = m.id;
-      // 不可聊的模型在名字上直接标出来，避免用户点进去才发现不能聊
-      o.textContent = (m.name || m.id) + (m.chat === false ? "（" + modelKindLabel(m.kind) + " · 不可聊天）" : "");
+      const blockedReason = modelAvailabilityLabel(cap);
+      o.disabled = !!blockedReason;
+      const firstRunNotice = !blockedReason && cap.manualEligible && cap.verificationRequired ? "（可手动首调）" : "";
+      o.textContent = (m.name || m.id) + (blockedReason ? "（" + (cap.chat === false ? modelKindLabel(cap.kind) + " · " : "") + blockedReason + "）" : firstRunNotice);
       if (m.id === j.current) o.selected = true;
       modelSelect.appendChild(o);
     }
+    // Preserve unavailable/manual IDs visibly; never display AUTO for a stored
+    // explicit selection that execution will reject.
+    if (j.current && !Array.from(modelSelect.options).some((option) => option.value === j.current)) {
+      const missing = document.createElement("option"); missing.value = j.current;
+      missing.textContent = j.current + "（当前不可用）"; missing.disabled = true;
+      modelSelect.appendChild(missing);
+    }
+    modelSelect.value = j.current || j.auto || "AUTO";
+    lastAcceptedModelSelection = modelSelect.value;
+    reasoningEffort = j.reasoningEffort ?? null;
+    void loadReasoningOptions();
+    modelContextReady = true;
+    modelSelect.disabled = false;
     syncModelCapsule();
-  } catch (e) { /* 静默 */ }
+    if (j.availability?.status !== "available" || j.catalogDiagnostics?.errorCode) {
+      composerNotice(catalogDiagnosticMessage(j.catalogDiagnostics), "err");
+    }
+  } catch (e) {
+    if(sequence!==modelLoadSequence||(state.activeId||null)!==conversationId)return;
+    modelLoadFailed=true;
+    composerNotice("模型同步失败，请再次点击发送以重新同步。", "err");
+  }
 }
 function syncModelCapsule() {
   const sel = $("#msBtnName");
@@ -1890,6 +2616,23 @@ function buildModelMenu() {
   const list = document.createElement("div"); list.className = "model-list";
   menu.appendChild(list);
 
+  const mediaDetails = document.createElement("details");
+  mediaDetails.style.cssText = "flex:0 0 auto;max-height:155px;overflow:auto;border-top:1px solid #eee;padding:5px 8px;color:#555;font-size:12px";
+  const mediaTitle = document.createElement("summary");
+  mediaTitle.textContent = mediaQualificationSummary(mediaQualification);
+  mediaDetails.appendChild(mediaTitle);
+  for (const [taskType, label] of Object.entries(MEDIA_TASK_LABELS)) {
+    const row = document.createElement("div");
+    row.style.cssText = "padding:3px 0;line-height:1.4";
+    row.textContent = label + "：" + mediaQualificationTaskSummary(mediaQualification, taskType);
+    mediaDetails.appendChild(row);
+  }
+  const caveat = document.createElement("div");
+  caveat.style.cssText = "padding:4px 0;color:#777;line-height:1.4";
+  caveat.textContent = "仅显示本地资格；实际调用还受 Run 预算和上游状态约束。";
+  mediaDetails.appendChild(caveat);
+  menu.appendChild(mediaDetails);
+
   const allOptions = Array.from(modelSelect.options);
   const renderList = (keyword) => {
     list.innerHTML = "";
@@ -1902,10 +2645,12 @@ function buildModelMenu() {
       const item = document.createElement("div");
       item.className = "model-menu-item" + (o.selected ? " active" : "");
       const cap = modelCaps.get(o.value);
-      const noChat = cap && cap.chat === false;
-      item.className = "model-menu-item" + (o.selected ? " active" : "") + (noChat ? " no-chat" : "");
-      item.innerHTML = '<span class="mi-check">' + (o.selected ? "✓" : "") + '</span><span class="mi-label">' + (o.textContent || "") + '</span>' + (noChat ? '<span class="mi-tag">不可聊天</span>' : "");
+      const blockedReason = o.value === "AUTO" ? "" : modelAvailabilityLabel(cap);
+      item.className = "model-menu-item" + (o.selected ? " active" : "") + (blockedReason ? " no-chat" : "");
+      item.setAttribute("aria-disabled", blockedReason ? "true" : "false");
+      item.innerHTML = '<span class="mi-check">' + (o.selected ? "✓" : "") + '</span><span class="mi-label">' + (o.textContent || "") + '</span>' + (blockedReason ? '<span class="mi-tag">' + blockedReason + '</span>' : "");
       item.addEventListener("click", () => {
+        if (blockedReason) { composerNotice(modelBlockedNotice(o.textContent || o.value, blockedReason, cap), "err"); return; }
         modelSelect.value = o.value;
         modelSelect.dispatchEvent(new Event("change"));
         closeModelMenu();
@@ -1921,7 +2666,7 @@ function buildModelMenu() {
   // 聚焦搜索框
   setTimeout(() => si.focus(), 0);
 }
-function openModelMenu() { buildModelMenu(); $("#modelMenu").hidden = false; $("#msBtn").classList.add("open"); }
+function openModelMenu() { if (!modelContextReady || modelSelect?.disabled) return; buildModelMenu(); $("#modelMenu").hidden = false; $("#msBtn").classList.add("open"); }
 function closeModelMenu() { $("#modelMenu").hidden = true; $("#msBtn").classList.remove("open"); }
 const msBtn = $("#msBtn");
 if (msBtn) {
@@ -1929,23 +2674,46 @@ if (msBtn) {
   document.addEventListener("click", (e) => { if (!e.target.closest(".model-switcher")) closeModelMenu(); });
 }
 if (modelSelect) modelSelect.addEventListener("change", async () => {
-  // 选中生成类模型（图片/视频/语音）：明确告知「不可用于聊天」，别让用户自己撞墙
+  const conversationId = state.activeId || null;
+  const selectionSequence = ++modelSelectionSequence;
+  const loadSequence = modelLoadSequence;
   if (!currentModelChat()) {
-    composerNotice("「" + currentModelName() + "」是生成类模型，不能用于聊天 —— 生成图片/视频请在输入框上方选「生成」类型，或直接切回 AUTO。", "err");
+    const rejected = modelSelect.value;
+    modelSelect.value = lastAcceptedModelSelection || "AUTO";
+    syncModelCapsule();
+    const rejectedOption = Array.from(modelSelect.options || []).find(o => o.value === rejected);
+    composerNotice(modelBlockedNotice(rejectedOption ? rejectedOption.textContent : rejected, modelAvailabilityLabel(modelCaps.get(rejected)), modelCaps.get(rejected)), "err");
+    return;
   } else {
     composerNotice("", "");
   }
   syncModelCapsule();
   const model = modelSelect.value;
   if (!model) return;
+  const previous = lastAcceptedModelSelection;
+  clearReasoningControl();
+  modelContextReady = false;
+  modelSelect.disabled = true;
   try {
     const r = await fetch("/api/models/select", {
       method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model }),
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model, ...(conversationId ? { conversationId } : {}) }),
     });
     const j = await r.json().catch(() => null);
-    if (!(j && j.ok)) alert((j && j.error) || "切换失败");
-  } catch (e) { alert("切换失败：" + e.message); }
+    if (selectionSequence !== modelSelectionSequence || loadSequence !== modelLoadSequence || (state.activeId || null) !== conversationId) return;
+    if (!(j && j.ok)) {
+      modelSelect.value = previous || "AUTO"; syncModelCapsule();
+      composerNotice((j && j.error) || "切换失败", "err"); return;
+    }
+    lastAcceptedModelSelection = model;
+    reasoningEffort = null;
+  } catch (e) {
+    if (selectionSequence !== modelSelectionSequence || loadSequence !== modelLoadSequence || (state.activeId || null) !== conversationId) return;
+    modelSelect.value = previous || "AUTO"; syncModelCapsule();
+    composerNotice("切换失败：" + e.message, "err");
+  } finally {
+    if (selectionSequence === modelSelectionSequence && loadSequence === modelLoadSequence && (state.activeId || null) === conversationId) { modelContextReady = true; modelSelect.disabled = false; void loadReasoningOptions(); }
+  }
 });
 
 /* ---- ⑪ 长期记忆面板 ---- */
@@ -2868,8 +3636,10 @@ function impOnEnter() {
   // 刷新前在哪，就回哪（sessionStorage 记住的 view + 对话 id）。
   // 记不住 / 记录失效（对话被删、404、视图已下线）→ 兜底回首页，不留白屏。
   const rt = readRoute();
-  if (rt && await restoreRoute(rt)) return;
+  if (rt && await restoreRoute(rt)) { resumeRememberedRuns(); resumePendingSubmissions(); return; }
   switchView("home");    // 保底落地首页（U0 三卡片 + chip 行）
+  resumeRememberedRuns();
+  resumePendingSubmissions();
 })();
 
 /* ---- M-UI-B：仅业务流库、用量日志与上传记录。?m-ui-b=mock 显式演示；
@@ -2979,6 +3749,7 @@ $("#flowEnable").addEventListener("click", () => {
 });
 $("#toolsRetry").addEventListener("click", bizLoadFlows);
 let bizUsageRange = "today", bizUsageRequest = 0;
+let bizUsageExternalItems = [], bizUsageExternalCursor = null, bizUsageExternalHasMore = false, bizUsageExternalLoading = false;
 function bizUsageSample() {
   const now = Date.now(), days = bizUsageRange === "month" ? [0, 2, 12] : bizUsageRange === "week" ? [0, 2] : [0];
   return { ok: true, calls: days.map((d, i) => ({ id: "demo-" + i, timestamp: new Date(now - d * 86400000).toISOString(), toolName: bizToolSamples[i % 2].name, category: "Skill", modelName: null, inputSummary: "最近广告数据", outputSummary: "分析已完成", durationMs: 240 + i * 80, tokenCount: 380 + i * 60, status: "success" })) };
@@ -2994,6 +3765,7 @@ function bizUsageSummarySample() {
     ],
   } };
 }
+function bizUsageExternalOperationsSample() { return { ok: true, operations: [], nextCursor: null, hasMore: false }; }
 // 后端 tool_calls 已带 category，这里仅兜底示例数据/旧数据没有分类字段的情况。
 function bizUsageCategory(toolName) {
   const n = String(toolName || "").toLowerCase();
@@ -3002,7 +3774,7 @@ function bizUsageCategory(toolName) {
   return "Skill";
 }
 function bizUsageStatus(status) {
-  return ({ success: "成功", completed: "成功", failed: "失败", error: "失败", interrupted: "中断", running: "执行中", started: "执行中", skipped: "未执行", pending: "等待中" })[status] || status || "—";
+  return ({ success: "成功", completed: "成功", failed: "失败", error: "失败", interrupted: "中断", running: "执行中", started: "执行中", skipped: "未执行", pending: "等待中", submitting: "提交中", accepted: "已受理", querying: "查询中", pending_query: "等待查单", manual_check: "待人工核对", succeeded: "成功", cancelled: "已取消" })[status] || status || "—";
 }
 function bizUsageRenderCards(summary) {
   const host = $("#usageCards");
@@ -3010,9 +3782,13 @@ function bizUsageRenderCards(summary) {
   const today = summary && summary.today ? summary.today : null;
   const month = summary && summary.month ? summary.month : null;
   const fmt = (n) => (n == null ? "—" : Number(n).toLocaleString("zh-CN"));
-  // 区分「范围内压根没有 usage 记录」（count=0 → 暂缺）与「有记录但汇总真的是 0」（→ 0），
-  // 避免把「没测到」伪装成「测出来是 0」。
-  const tokenText = (slot) => (slot && slot.count ? fmt(slot.totalTokens) : "暂缺");
+  // Coverage carries whether the stored sum is complete. A real zero remains 0;
+  // an unknown or partial total must never be rendered as a complete number.
+  const tokenText = (slot) => {
+    if (!slot || !Number(slot.count)) return "暂缺";
+    if (slot.totalTokens == null) return slot.coverage === "partial" ? "部分数据" : "暂缺";
+    return fmt(slot.totalTokens) + (slot.coverage === "partial" ? "（覆盖不完整）" : "");
+  };
   [
     ["今日 Tokens", tokenText(today)],
     ["本月 Tokens", tokenText(month)],
@@ -3032,30 +3808,58 @@ function bizUsageRenderModels(summary) {
   const wrap = bizNode("div", null, "card"); wrap.style.cssText = "padding:14px 16px";
   const title = bizNode("div", "按模型 Token 分布"); title.style.cssText = "font-size:12px;color:#8c8c8c;margin-bottom:10px";
   wrap.appendChild(title);
-  const max = Math.max(...byModel.map(m => Number(m.totalTokens) || 0), 1);
+  const valueForChart = (m) => {
+    if (m.totalTokens == null || (m.coverage != null && m.coverage !== "complete")) return null;
+    const value = Number(m.totalTokens);
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  };
+  const max = Math.max(...byModel.map(m => valueForChart(m) ?? 0), 1);
   byModel.forEach(m => {
     const row = bizNode("div"); row.style.cssText = "display:flex;align-items:center;gap:10px;margin:6px 0";
     const name = bizNode("div", m.model); name.style.cssText = "flex:0 0 180px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
     const barWrap = bizNode("div"); barWrap.style.cssText = "flex:1;height:14px;background:var(--line);border-radius:7px;overflow:hidden";
-    const bar = bizNode("div"); bar.style.cssText = "height:100%;width:" + Math.round((Number(m.totalTokens) || 0) / max * 100) + "%;background:var(--accent,#4f7cff);border-radius:7px";
+    const chartValue = valueForChart(m);
+    const bar = bizNode("div"); bar.style.cssText = "height:100%;width:" + (chartValue == null ? 0 : Math.round(chartValue / max * 100)) + "%;background:var(--accent,#4f7cff);border-radius:7px";
     barWrap.appendChild(bar);
-    const num = bizNode("div", Number(m.totalTokens || 0).toLocaleString("zh-CN") + " tok"); num.style.cssText = "flex:0 0 110px;font-size:12px;text-align:right";
+    const label = chartValue == null
+      ? (m.coverage === "partial" ? "部分数据" : "暂缺")
+      : chartValue.toLocaleString("zh-CN") + " tok";
+    const num = bizNode("div", label); num.style.cssText = "flex:0 0 110px;font-size:12px;text-align:right";
     row.append(name, barWrap, num); wrap.appendChild(row);
   });
   host.appendChild(wrap);
 }
+function bizUsageRenderExternalOperations() {
+  bizTable($("#usageExternalOperations"), ["最后观察时间", "Run ID", "操作键", "Provider", "Task ID", "状态", "查单次数", "费用", "币种"], bizUsageExternalItems.map(op => [
+    op.observedAt ? fmtTime(op.observedAt) : "—", op.runId, op.operationKey, op.provider, op.taskId,
+    bizUsageStatus(op.status), op.queryAttempts == null ? "—" : op.queryAttempts,
+    op.costCoverage === "unknown" ? "unknown（待 PT 对账）" : (op.cost == null ? "unknown" : op.cost),
+    op.costCoverage === "unknown" ? "unknown" : (op.currency || "unknown"),
+  ]));
+  const more = $("#usageExternalMore");
+  more.hidden = !bizUsageExternalHasMore;
+  more.disabled = bizUsageExternalLoading;
+  more.textContent = bizUsageExternalLoading ? "正在加载…" : "加载更多媒体操作";
+}
 async function bizLoadUsage() {
   const seq = ++bizUsageRequest; $("#usageStatus").textContent = "读取调用记录…";
+  bizUsageExternalItems = []; bizUsageExternalCursor = null; bizUsageExternalHasMore = false; bizUsageExternalLoading = false;
+  $("#usageExternalStatus").textContent = "";
+  bizUsageRenderExternalOperations();
   $("#usageRanges").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.range === bizUsageRange)));
   try {
-    const [callRes, sumRes] = await Promise.all([
+    const [callRes, sumRes, externalRes] = await Promise.all([
       bizRead("/api/usage/tool-calls?range=" + bizUsageRange, bizUsageSample),
       bizRead("/api/usage/summary?range=" + bizUsageRange, bizUsageSummarySample),
+      bizRead("/api/usage/external-operations?range=" + bizUsageRange + "&limit=50", bizUsageExternalOperationsSample)
+        .catch(error => ({ data: { operations: [] }, mock: false, error })),
     ]);
     if (seq !== bizUsageRequest) return;
     if (!Array.isArray(callRes.data.calls)) throw new Error("调用日志接口返回格式不正确");
     const calls = callRes.data.calls;
     const summary = (sumRes.data && sumRes.data.summary) || null;
+    const operations = externalRes.data && externalRes.data.operations;
+    if (!Array.isArray(operations)) throw new Error("媒体外部操作接口返回格式不正确");
     bizUsageRenderCards(summary);
     bizUsageRenderModels(summary);
     $("#usageStatus").textContent = (callRes.mock ? "示例数据 · 日志接口待接入。" : "") + (calls.length ? calls.length + " 次调用" : "所选时间范围内没有工具调用");
@@ -3069,10 +3873,40 @@ async function bizLoadUsage() {
       c.durationMs == null ? "—" : c.durationMs + " ms",
       bizUsageStatus(c.status),
     ]));
-  } catch (e) { if (seq === bizUsageRequest) { $("#usageList").replaceChildren(); $("#usageCards").replaceChildren(); $("#usageModels").replaceChildren(); $("#usageStatus").textContent = e.message; } }
+    if (externalRes.error) {
+      $("#usageExternalStatus").textContent = "媒体外部操作暂时读取失败：" + externalRes.error.message;
+    } else {
+      bizUsageExternalItems = operations;
+      bizUsageExternalCursor = externalRes.data.nextCursor || null;
+      bizUsageExternalHasMore = externalRes.data.hasMore === true;
+      $("#usageExternalStatus").textContent = (externalRes.mock ? "示例数据 · " : "") + (operations.length ? operations.length + " 条操作" : "所选时间范围内没有媒体外部操作");
+    }
+    bizUsageRenderExternalOperations();
+  } catch (e) { if (seq === bizUsageRequest) { $("#usageList").replaceChildren(); $("#usageCards").replaceChildren(); $("#usageModels").replaceChildren(); $("#usageExternalOperations").replaceChildren(); $("#usageStatus").textContent = e.message; $("#usageExternalStatus").textContent = e.message; } }
+}
+async function bizLoadMoreExternalOperations() {
+  if (bizUsageExternalLoading || !bizUsageExternalHasMore || !bizUsageExternalCursor) return;
+  const seq = bizUsageRequest, cursor = bizUsageExternalCursor;
+  bizUsageExternalLoading = true; bizUsageRenderExternalOperations();
+  try {
+    const result = await bizRead("/api/usage/external-operations?range=" + bizUsageRange + "&limit=50&afterOperationId=" + encodeURIComponent(cursor), bizUsageExternalOperationsSample);
+    if (seq !== bizUsageRequest) return;
+    const page = result.data && result.data.operations;
+    if (!Array.isArray(page)) throw new Error("媒体外部操作分页返回格式不正确");
+    bizUsageExternalItems = bizUsageExternalItems.concat(page);
+    bizUsageExternalCursor = result.data.nextCursor || null;
+    bizUsageExternalHasMore = result.data.hasMore === true;
+    $("#usageExternalStatus").textContent = (bizUsageExternalItems.length ? bizUsageExternalItems.length + " 条操作" : "所选时间范围内没有媒体外部操作");
+    bizUsageRenderExternalOperations();
+  } catch (error) {
+    if (seq === bizUsageRequest) $("#usageExternalStatus").textContent = "媒体外部操作分页读取失败：" + error.message;
+  } finally {
+    if (seq === bizUsageRequest) { bizUsageExternalLoading = false; bizUsageRenderExternalOperations(); }
+  }
 }
 $("#usageRanges").querySelectorAll("button").forEach(b => b.addEventListener("click", () => { bizUsageRange = b.dataset.range; bizLoadUsage(); }));
 $("#usageRetry").addEventListener("click", bizLoadUsage);
+$("#usageExternalMore").addEventListener("click", bizLoadMoreExternalOperations);
 const bizImportApi = "/api/business/attribution/import";
 const bizUploadStatus = { pending: "排队中", validating: "结构校验中", ready: "结构校验通过 · 待确认", importing: "正在入库", completed: "导入完成", partial_failed: "部分行失败", failed: "导入失败", cancelled: "已取消" };
 let bizScheduleRequest = 0;

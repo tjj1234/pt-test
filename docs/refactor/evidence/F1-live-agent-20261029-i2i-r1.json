@@ -1,0 +1,94 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T07:45:27.390Z",
+  "models": [],
+  "runs": [
+    {
+      "taskType": "image2image",
+      "requestModel": "seedream-5-0-260128",
+      "status": "completed",
+      "at": "2026-10-29T07:45:30.603Z",
+      "inputSourceSha256": "3730be1b01a4450f902ee6ccbbd33006f3dcb5235189c349bb4e0a5d79daa550",
+      "inputByteCount": 119992,
+      "runId": "15deed21-5665-4c21-ac4c-e4b9bdb2002a",
+      "httpStatus": 200,
+      "authorization": "explicit-single-submission",
+      "streamTail": "25\ndata: {\"delta\":\"上传\"}\n\nid: 26\ndata: {\"delta\":\"参考\"}\n\nid: 27\ndata: {\"delta\":\"图\"}\n\nid: 28\ndata: {\"delta\":\"中的\"}\n\nid: 29\ndata: {\"delta\":\"蓝色\"}\n\nid: 30\ndata: {\"delta\":\"陶瓷\"}\n\nid: 31\ndata: {\"delta\":\"咖啡\"}\n\nid: 32\ndata: {\"delta\":\"杯\"}\n\nid: 33\ndata: {\"delta\":\"修改\"}\n\nid: 34\ndata: {\"delta\":\"为\"}\n\nid: 35\ndata: {\"delta\":\"绿色\"}\n\nid: 36\ndata: {\"delta\":\"，\"}\n\nid: 37\ndata: {\"delta\":\"保留\"}\n\nid: 38\ndata: {\"delta\":\"了\"}\n\nid: 39\ndata: {\"delta\":\"原\"}\n\nid: 40\ndata: {\"delta\":\"有的\"}\n\nid: 41\ndata: {\"delta\":\"白色\"}\n\nid: 42\ndata: {\"delta\":\"桌面\"}\n\nid: 43\ndata: {\"delta\":\"，\"}\n\nid: 44\ndata: {\"delta\":\"生成\"}\n\nid: 45\ndata: {\"delta\":\"的\"}\n\nid: 46\ndata: {\"delta\":\"图片\"}\n\nid: 47\ndata: {\"delta\":\"已\"}\n\nid: 48\ndata: {\"delta\":\"展示\"}\n\nid: 49\ndata: {\"delta\":\"。\"}\n\nid: 55\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T07:45:30.942Z\",\"role\":\"user\",\"text\":\"Use media_route exactly once with taskType image2image and the current uploaded image. Change the blue ceramic coffee cup to green while keeping the white table. Actually call the tool, then briefly confirm completion.\",\"image\":\"/uploads/4761fa1e-0f42-49dc-a140-d44280225580/2c94e2056d16ecc85e37207c7f44f34c.jpg\",\"taskType\":\"image2image\",\"imageEvidence\":{\"ref\":\"/uploads/4761fa1e-0f42-49dc-a140-d44280225580/2c94e2056d16ecc85e37207c7f44f34c.jpg\",\"size\":119992,\"sha256\":\"3730be1b01a4450f902ee6ccbbd33006f3dcb5235189c349bb4e0a5d79daa550\"}},{\"ts\":\"2026-10-29T07:46:13.822Z\",\"role\":\"assistant\",\"text\":\"已完成图生图操作，已将上传参考图中的蓝色陶瓷咖啡杯修改为绿色，保留了原有的白色桌面，生成的图片已展示。\",\"media\":[{\"url\":\"/api/run-media/15deed21-5665-4c21-ac4c-e4b9bdb2002a/8745d373-3ef5-4c19-b563-08d6cb0d0518.jpg\",\"type\":\"image\"}],\"runId\":\"15deed21-5665-4c21-ac4c-e4b9bdb2002a\",\"steps\":[{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"将图片中的蓝色陶瓷咖啡杯修改为绿色，保留原有的白色桌面\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2image\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"已生成图生图\",\"isError\":false,\"modelName\":\"seedream-5-0-260128\",\"durationMs\":29769}]}],\"reply\":\"已完成图生图操作，已将上传参考图中的蓝色陶瓷咖啡杯修改为绿色，保留了原有的白色桌面，生成的图片已展示。\",\"turns\":1}\n\n",
+      "externalOperations": {
+        "operations": [
+          {
+            "operationId": "ec71e62a-40bb-480f-a634-ccf104fccd34",
+            "runId": "15deed21-5665-4c21-ac4c-e4b9bdb2002a",
+            "operationKey": "15deed21-5665-4c21-ac4c-e4b9bdb2002a:b359e3d2-16e6-433e-8da2-89a4844937c9",
+            "provider": "powertokens-image",
+            "status": "succeeded",
+            "taskId": null,
+            "queryAttempts": 0,
+            "nextQueryAt": null,
+            "lastQuery": {
+              "reason": null,
+              "source": "host",
+              "attempt": 0,
+              "outcome": "succeeded",
+              "queried": false,
+              "observedAt": "2026-10-29T07:46:05.698Z",
+              "providerStatus": "succeeded"
+            },
+            "createdAt": "2026-10-29T07:45:40.805Z",
+            "updatedAt": "2026-10-29T07:46:05.698Z"
+          }
+        ],
+        "nextCursor": "ec71e62a-40bb-480f-a634-ccf104fccd34",
+        "hasMore": false
+      },
+      "managedMedia": {
+        "media": [
+          {
+            "type": "image",
+            "url": "/api/run-media/15deed21-5665-4c21-ac4c-e4b9bdb2002a/8745d373-3ef5-4c19-b563-08d6cb0d0518.jpg",
+            "size": 120897,
+            "sha256": "9c4ec94c81116ae27043fb37c6f7fba1a3261137aeaa9b97029ef20a8bebfb0f"
+          }
+        ],
+        "hasMore": false
+      },
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 1,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 2,
+            "maxOutputTokens": 512,
+            "maxToolCallsPerKey": 1
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 41705.022166999996,
+            "toolCalls": 1,
+            "costStatus": "unlimited",
+            "modelCalls": 2,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 1
+          }
+        }
+      ],
+      "inputBound": true,
+      "download": {
+        "status": 200,
+        "byteCount": 120897,
+        "sha256": "9c4ec94c81116ae27043fb37c6f7fba1a3261137aeaa9b97029ef20a8bebfb0f",
+        "mime": "image/jpeg"
+      },
+      "anonymousStatus": 401,
+      "historyManagedUrl": true
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T07:46:13.850Z"
+}

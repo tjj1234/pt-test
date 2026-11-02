@@ -8,7 +8,7 @@ function freeze(value) {
   if (value && typeof value === "object") { for (const v of Object.values(value)) freeze(v); Object.freeze(value); }
   return value;
 }
-function createSessionScheduler({ perUserLimit = 2, globalLimit = 8 } = {}) {
+function createSessionScheduler({ perUserLimit = 4, globalLimit = 16 } = {}) {
   for (const limit of [perUserLimit, globalLimit]) if (!Number.isSafeInteger(limit) || limit < 1) throw new TypeError("Concurrency limits must be positive integers");
   const entries = new Map();
   const queue = [];

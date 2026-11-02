@@ -84,7 +84,17 @@ async function initAuth(opts = {}) {
   const ttlMs = Number(opts.sessionTtlMs || process.env.PT_SESSION_TTL_MS || DEFAULT_TTL_MS);
 
   const { db, close } = await dbmod.open({ dataDir });
-  await dbmod.migrate(db, migrationsDir);
+  const closeAfterInitializationFailure = async (error) => {
+    // initAuth owns the handle until it returns its API. Preserve the first
+    // initialization error even when closing the database also fails.
+    try { await close(); } catch { /* Preserve the original initialization failure. */ }
+    throw error;
+  };
+  try {
+    await dbmod.migrate(db, migrationsDir);
+  } catch (error) {
+    return closeAfterInitializationFailure(error);
+  }
 
   /** 内部建用户：role 由「调用方（服务端逻辑）」显式给出，绝不经 HTTP 请求体。 */
   async function _createUser({ username, email, password, role }) {
@@ -145,7 +155,7 @@ async function initAuth(opts = {}) {
     const uname = String(username || "").trim();
     const pass = String(password || "");
     const r = await db.query(
-      "SELECT id, tenant_id, username, email, password_hash, role FROM users WHERE username = $1",
+      "SELECT id, tenant_id, username, email, password_hash, role, disabled_at FROM users WHERE username = $1",
       [uname]
     );
     if (!r.rows.length) {
@@ -153,15 +163,28 @@ async function initAuth(opts = {}) {
       return { ok: false, error: "账号或密码不对" };
     }
     const u = r.rows[0];
+    if (u.disabled_at) return { ok: false, error: "账号或密码不对" };
     if (!verifyPassword(pass, u.password_hash)) return { ok: false, error: "账号或密码不对" };
 
     const token = crypto.randomBytes(32).toString("hex");
     const tokenHash = sha256(token);
     const expiresAt = new Date(Date.now() + ttlMs);
-    await db.query("INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1,$2,$3)", [u.id, tokenHash, expiresAt]);
-
-    const t = await db.query("SELECT id, name FROM tenants WHERE id = $1", [u.tenant_id]);
-    return { ok: true, token, user: publicUser(u), tenant: publicTenant(t.rows[0]), expiresAt: expiresAt.toISOString() };
+    // Serialize session issuance with trusted account disable. If disable wins,
+    // the locked row is disabled; if login wins, disable runs afterward and
+    // deletes the newly issued session in the same transaction as the marker.
+    const issued = await db.transaction(async (tx) => {
+      const locked = await tx.query(
+        "SELECT id, tenant_id, username, email, password_hash, role, disabled_at FROM users WHERE id = $1 FOR UPDATE",
+        [u.id],
+      );
+      const current = locked.rows[0];
+      if (!current || current.disabled_at || current.password_hash !== u.password_hash) return null;
+      await tx.query("INSERT INTO sessions (user_id, token_hash, expires_at) VALUES ($1,$2,$3)", [current.id, tokenHash, expiresAt]);
+      const t = await tx.query("SELECT id, name FROM tenants WHERE id = $1", [current.tenant_id]);
+      return { user: current, tenant: t.rows[0] };
+    });
+    if (!issued) return { ok: false, error: "账号或密码不对" };
+    return { ok: true, token, user: publicUser(issued.user), tenant: publicTenant(issued.tenant), expiresAt: expiresAt.toISOString() };
   }
 
   /** 用 token 反查会话（含过期判断）；返回 { user, tenant } 或 null。 */
@@ -175,7 +198,7 @@ async function initAuth(opts = {}) {
          FROM sessions s
          JOIN users u   ON u.id = s.user_id
          JOIN tenants t ON t.id = u.tenant_id
-        WHERE s.token_hash = $1 AND s.expires_at > now()`,
+        WHERE s.token_hash = $1 AND s.expires_at > now() AND u.disabled_at IS NULL`,
       [th]
     );
     if (!r.rows.length) return null;
@@ -193,6 +216,24 @@ async function initAuth(opts = {}) {
     return true;
   }
 
+  /** Trusted operator capability only; deliberately has no public HTTP route. */
+  async function setAccountDisabled(userId, disabled = true) {
+    const id = String(userId || "").trim();
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      return { ok: false, code: "INVALID_USER_ID" };
+    }
+    if (typeof disabled !== "boolean") return { ok: false, code: "INVALID_DISABLED_STATE" };
+    return db.transaction(async (tx) => {
+      const result = await tx.query(
+        "UPDATE users SET disabled_at = CASE WHEN $2 THEN COALESCE(disabled_at, now()) ELSE NULL END WHERE id = $1 RETURNING disabled_at",
+        [id, disabled],
+      );
+      if (!result.rows.length) return { ok: false, code: "USER_NOT_FOUND" };
+      if (disabled) await tx.query("DELETE FROM sessions WHERE user_id = $1", [id]);
+      return { ok: true, disabled: result.rows[0].disabled_at != null };
+    });
+  }
+
   const me = (token) => getSession(token);
 
   /** 幂等种子：保证「默认管理员」存在且 role 恒为 admin（不依赖是否首个用户）。 */
@@ -207,10 +248,11 @@ async function initAuth(opts = {}) {
     return { ok: true, created: true };
   }
 
-  const api = { db, close, register, login, getSession, logout, me, ensureDefaultAdmin, ttlMs };
+  const api = { db, close, register, login, getSession, logout, setAccountDisabled, me, ensureDefaultAdmin, ttlMs };
 
   if (opts.defaultAdmin && opts.defaultAdmin.username) {
-    await api.ensureDefaultAdmin(opts.defaultAdmin.username, opts.defaultAdmin.password);
+    try { await api.ensureDefaultAdmin(opts.defaultAdmin.username, opts.defaultAdmin.password); }
+    catch (error) { return closeAfterInitializationFailure(error); }
   }
   return api;
 }

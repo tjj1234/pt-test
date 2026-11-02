@@ -1,0 +1,26 @@
+[Unit]
+Description=Northstar Shell (Controlled Trial Candidate 12)
+Wants=network-online.target
+After=network-online.target postgresql.service northstar-analytics.service
+Requires=postgresql.service northstar-analytics.service
+
+[Service]
+Type=simple
+User=northstar
+Group=northstar
+WorkingDirectory=/opt/northstar/releases/controlled-trial-20261022-candidate-12/shell
+EnvironmentFile=/etc/northstar/northstar.env
+ExecStart=/usr/local/bin/node /opt/northstar/releases/controlled-trial-20261022-candidate-12/shell/server.cjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/northstar/runtime /var/lib/northstar/db /var/lib/northstar/secrets
+SyslogIdentifier=northstar-shell
+
+[Install]
+WantedBy=multi-user.target

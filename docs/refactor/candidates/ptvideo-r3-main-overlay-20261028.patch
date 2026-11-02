@@ -1,0 +1,362 @@
+--- a/pt_video.py
++++ b/pt_video.py
+@@ -357,9 +357,13 @@
+     while True:
+         if cancel and cancel.is_cancelled:
+             raise ApiError(0, "响应读取已取消")
+-        if deadline and clock and clock() >= deadline:
++        if deadline is not None and clock and clock() >= deadline:
+             raise ApiError(0, "响应读取超时")
+-        chunk = stream.read(CHUNK_SIZE)
++        chunk = stream.read(min(CHUNK_SIZE, limit - total + 1))
++        if cancel and cancel.is_cancelled:
++            raise ApiError(0, "Response read cancelled")
++        if deadline is not None and clock and clock() >= deadline:
++            raise ApiError(0, "Response read deadline exceeded")
+         if not chunk:
+             break
+         total += len(chunk)
+@@ -379,6 +383,8 @@
+ 
+ 
+ def _api_call(method, path, key, body=None, timeout=30, clock=None, deadline=None, cancel=None):
++    clock = clock or time.monotonic
++    deadline = deadline if deadline is not None else clock() + timeout
+     url = PT_BASE + path
+     data = json.dumps(body).encode("utf-8") if body is not None else None
+     req = urllib.request.Request(url, data=data, headers=_headers(key), method=method)
+@@ -415,25 +421,21 @@
+         super().__init__(f"HTTP {status}: {message}")
+ 
+ 
++class _PollOutcome(ApiError):
++    def __init__(self, reason):
++        self.reason = reason
++        super().__init__(0, reason)
++
++
+ _SIGN_WORD_RE = re.compile(r"(sign\s+the\s+agreement|need\s+to\s+sign|must\s+sign|unsigned\s+agreement)|未签署|未签协议")
+ 
+ 
+ def is_agreement_error(e):
+-    """提交返回的错误是否因 Seedance 协议未签导致（用于报错回退重置标记）。
+-    注意：PT 已确认不能细分‘素材未入库’和‘内容违规’；
+-    naked 'asset library'（如 'asset library content rejected' 或 'asset library design rejected'）
+-    不能因 'design' 含有 'sign' 子串就误判为协议未签！
+-    只有明确全词匹配协议/未签/agreement 时才判定为协议未签。
+-    """
+-    m = (getattr(e, "message", "") or "").lower()
+-    if _SIGN_WORD_RE.search(m):
+-        return True
+-    if "asset library" in m:
+-        # Check strict agreement markers, guarding against 'design' containing 'sign'
+-        if "design" in m and "agreement" not in m:
+-            return False
+-        return any(k in m for k in ("user agreement", "sign the agreement", "agreement required", "agreement not signed", "未签", "协议"))
+-    return any(k in m for k in ("user agreement", "sign the agreement", "agreement required", "未签协议", "未签署"))
++    message = (getattr(e, "message", "") or "").lower()
++    markers = ("sign the agreement", "need to sign", "must sign", "agreement required",
++               "agreement not signed", "agreement has not been signed", "agreement not accepted",
++               "unsigned agreement", "未签署", "未签协议", "尚未签署")
++    return any(marker in message for marker in markers)
+ 
+ 
+ def classify_error(e):
+@@ -815,12 +817,10 @@
+         err_msg = resp.get("error") or resp.get("message") or "提交返回错误"
+         raise ApiError(0, f"提交被上游拒绝: {err_msg}")
+     tid = resp.get("id") or resp.get("task_id")
+-    if not tid or not isinstance(tid, (str, int)):
+-        raise ApiError(0, "提交响应缺少有效 task_id")
+-    tid_str = str(tid).strip()
+-    if not tid_str:
+-        raise ApiError(0, "提交响应 task_id 为空")
+-    return tid_str, resp
++    if not isinstance(tid, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}", tid) or (key and key in tid):
++        raise ApiError(0, "Submission response has no valid task identifier")
++    return tid, resp
++
+ 
+ 
+ POLL_CB_5XX_MAX   = 8
+@@ -878,10 +878,10 @@
+     while True:
+         # Check cancellation & deadline before request
+         if _cancel.is_cancelled:
+-            raise ApiError(0, f"POLL_CANCELLED: 轮询已取消，task_id={task_id}")
++            raise _PollOutcome("POLL_CANCELLED")
+         remaining = deadline - _clock()
+         if remaining <= 0:
+-            raise ApiError(0, f"POLL_TIMEOUT: 轮询超时（>{timeout}s），最后状态={last_status}；task_id={task_id}")
++            raise _PollOutcome("POLL_TIMEOUT")
+ 
+         http_timeout = min(30.0, max(0.001, remaining))
+ 
+@@ -914,20 +914,20 @@
+             remaining = deadline - _clock()
+             if remaining <= 0 or _cancel.is_cancelled:
+                 if _cancel.is_cancelled:
+-                    raise ApiError(0, f"POLL_CANCELLED: 轮询已取消，task_id={task_id}")
+-                raise ApiError(0, f"POLL_TIMEOUT: 轮询超时（>{timeout}s），最后状态={last_status}；task_id={task_id}")
++                    raise _PollOutcome("POLL_CANCELLED")
++                raise _PollOutcome("POLL_TIMEOUT")
+ 
+             actual_sleep = min(wait, remaining)
+             _sleep(actual_sleep)
+             if _clock() >= deadline:
+-                raise ApiError(0, f"POLL_TIMEOUT: 轮询超时（>{timeout}s），最后状态={last_status}；task_id={task_id}")
++                raise _PollOutcome("POLL_TIMEOUT")
+             continue
+ 
+         # Check deadline and cancellation AFTER request: late arrival is a timeout!
+         if _clock() >= deadline:
+-            raise ApiError(0, f"POLL_TIMEOUT: 轮询超时（>{timeout}s）；task_id={task_id}")
++            raise _PollOutcome("POLL_TIMEOUT")
+         if _cancel.is_cancelled:
+-            raise ApiError(0, f"POLL_CANCELLED: 轮询已取消，task_id={task_id}")
++            raise _PollOutcome("POLL_CANCELLED")
+ 
+         if not isinstance(task, dict):
+             consec_unkn += 1
+@@ -941,23 +941,13 @@
+         last_status = status or "malformed_status"
+         progress_val = task.get("progress")
+ 
+-        url = result_url(task)
+-        if url and status in ("succeeded", "completed", "finished", "done", "ready"):
+-            return task
++        metadata = task.get("metadata")
++        if status == "cancelled":
++            raise _PollOutcome("REMOTE_TERMINAL_CANCELLED")
++        if status in ("failed", "error") or task.get("error") or (isinstance(metadata, dict) and metadata.get("error")):
++            raise _PollOutcome("REMOTE_TERMINAL_FAILED")
+         if status in ("succeeded", "completed", "finished", "done", "ready"):
+             return task
+-        if status in ("failed", "cancelled"):
+-            err = task.get("error")
+-            if isinstance(err, dict):
+-                err = err.get("message") or json.dumps(err, ensure_ascii=False)
+-            elif not isinstance(err, str):
+-                err = ""
+-            if not err:
+-                meta = task.get("metadata")
+-                if isinstance(meta, dict):
+-                    err = meta.get("error")
+-            err_msg = str(err) if err else f"REMOTE_{status.upper()}"
+-            raise ApiError(0, f"REMOTE_TERMINAL_{status.upper()}: {err_msg}")
+ 
+         if not status or status not in _ALLOWED_POLL_STATUSES:
+             consec_unkn += 1
+@@ -968,7 +958,7 @@
+ 
+         # Sanitized stderr logging (never prints arbitrary status strings or raw provider body)
+         disp_status = status if status in _ALLOWED_POLL_STATUSES else "checking"
+-        if isinstance(progress_val, (int, float)) and not isinstance(progress_val, bool):
++        if isinstance(progress_val, (int, float)) and not isinstance(progress_val, bool) and math.isfinite(progress_val):
+             disp_progress = f" {int(max(0, min(100, progress_val)))}%"
+         else:
+             disp_progress = ""
+@@ -978,13 +968,13 @@
+         remaining = deadline - _clock()
+         if remaining <= 0 or _cancel.is_cancelled:
+             if _cancel.is_cancelled:
+-                raise ApiError(0, f"POLL_CANCELLED: 轮询已取消，task_id={task_id}")
+-            raise ApiError(0, f"POLL_TIMEOUT: 轮询超时（>{timeout}s），最后状态={status}；task_id={task_id}")
++                raise _PollOutcome("POLL_CANCELLED")
++            raise _PollOutcome("POLL_TIMEOUT")
+ 
+         actual_sleep = min(interval, remaining)
+         _sleep(actual_sleep)
+         if _clock() >= deadline:
+-            raise ApiError(0, f"POLL_TIMEOUT: 轮询超时（>{timeout}s），最后状态={status}；task_id={task_id}")
++            raise _PollOutcome("POLL_TIMEOUT")
+ 
+ 
+ def result_url(task):
+@@ -1220,26 +1210,24 @@
+ 
+ 
+ def _is_safe_result_url(url):
+-    """Strictly validate image/video result URL:
+-    - Must be non-empty string
+-    - Scheme must be http or https
+-    - Host must be non-empty
+-    - No username or password (userinfo)
+-    - No ASCII control characters
+-    """
+-    if not isinstance(url, str) or not url.strip():
++    if not isinstance(url, str) or not url or len(url) > 8192 or url != url.strip():
+         return False
+-    if any(ord(c) < 32 or ord(c) == 127 for c in url):
++    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in url):
+         return False
+     try:
+         parsed = urllib.parse.urlsplit(url)
+-    except Exception:
+-        return False
+-    if parsed.scheme.lower() not in ("http", "https"):
+-        return False
+-    if not parsed.netloc or not parsed.hostname:
+-        return False
+-    if parsed.username or parsed.password:
++        if parsed.scheme.lower() not in ("http", "https") or not parsed.hostname:
++            return False
++        if parsed.username is not None or parsed.password is not None:
++            return False
++        host = parsed.hostname
++        if any(c in host for c in "\\%/?#@") or not host.rstrip('.'):
++            return False
++        host.encode('idna')
++        port = parsed.port  # Access validates non-numeric and out-of-range ports.
++        if parsed.netloc.endswith(':') or (port is not None and port < 1):
++            return False
++    except (ValueError, UnicodeError):
+         return False
+     return True
+ 
+@@ -1379,9 +1367,11 @@
+         raise ValueError("model must be a non-empty string")
+     if len(snap.model) > _MAX_MODEL_ID_LEN:
+         raise ValueError(f"model ID exceeds maximum length of {_MAX_MODEL_ID_LEN}")
++    if snap.model != snap.model.strip() or any(c.isspace() or ord(c) < 32 for c in snap.model):
++        raise ValueError("model must be an exact identifier")
+     if snap.model.lower() == "auto":
+         raise ValueError("model='auto' not allowed in product API; caller must supply exact model ID")
+-    if snap.kind not in _ALLOWED_KINDS:
++    if not isinstance(snap.kind, str) or snap.kind not in _ALLOWED_KINDS:
+         raise ValueError(f"kind must be one of {sorted(_ALLOWED_KINDS)}")
+ 
+     # Duration & n type checks (guarding against bool disguised as int!)
+@@ -1432,6 +1422,9 @@
+     if len(snap.ref_images) > _MAX_REF_IMAGES:
+         raise ValueError(f"ref_images count exceeds maximum of {_MAX_REF_IMAGES}")
+ 
++    for frame in (snap.first_frame, snap.last_frame):
++        if frame is not None and (not isinstance(frame, str) or not frame):
++            raise ValueError("Frame must be a non-empty string when supplied")
+     # Media items collection
+     media_items = [u for u in [snap.first_frame, snap.last_frame] if u] + list(snap.ref_images)
+ 
+@@ -1510,7 +1503,12 @@
+     _cancel = _cancel or _NOT_CANCELLED
+     _clock = _clock or time.monotonic
+     _sleep = _sleep or time.sleep
+-    call_fn = _transport or _api_call
++    if _transport is None:
++        def call_fn(method, path, key, body, timeout):
++            return _api_call(method, path, key, body, timeout, clock=_clock,
++                             deadline=_clock() + timeout, cancel=_cancel)
++    else:
++        call_fn = _transport
+ 
+     # 1. Capture immutable snapshot
+     snap = _RequestSnapshot(request)
+@@ -1593,11 +1591,17 @@
+                                  error_hint="Image POST 响应非 JSON 字典结构；受理状态未知，严禁二次提交。",
+                                  model=snap.model, kind="image", billing_params=billing_params)
+ 
+-        if resp.get("status") in ("failed", "cancelled", "error") or resp.get("error") is not None or resp.get("code") not in (None, 200, 0):
+-            err_msg = resp.get("error") or resp.get("message") or f"状态: {resp.get('status')}"
++        image_status = resp.get("status")
++        image_status = image_status.lower() if isinstance(image_status, str) else image_status
++        if image_status in ("failed", "cancelled", "error") or resp.get("error") or resp.get("code") not in (None, 200, 0):
+             return ProductResult(ok=False, error_code="IMAGE_REMOTE_FAILED",
+-                                 status=str(resp.get("status") or "failed"),
+-                                 error_hint=f"图片生成被远端明确拒绝或失败: {err_msg}",
++                                 status="failed",
++                                 error_hint="图片生成被远端拒绝或失败；不自动重提。",
++                                 model=snap.model, kind="image", billing_params=billing_params)
++
++        if image_status is not None and image_status not in ("succeeded", "completed", "finished", "done", "ready"):
++            return ProductResult(ok=False, error_code="SUBMISSION_OUTCOME_UNKNOWN", status="submission_unknown",
++                                 error_hint="图片响应状态无法确认完成；不自动重提。",
+                                  model=snap.model, kind="image", billing_params=billing_params)
+ 
+         raw_data = resp.get("data")
+@@ -1612,8 +1616,14 @@
+                 return ProductResult(ok=False, error_code="IMAGE_RESULT_INVALID_URL",
+                                      error_hint="data[] 项非字典结构，拒绝混合结果",
+                                      model=snap.model, kind="image", billing_params=billing_params)
++            item_status = item.get("status")
++            item_status = item_status.lower() if isinstance(item_status, str) else item_status
++            if item_status in ("failed", "cancelled", "error") or item.get("error"):
++                return ProductResult(ok=False, error_code="IMAGE_REMOTE_FAILED", status="failed",
++                                     error_hint="图片结果包含失败项；不自动重提。",
++                                     model=snap.model, kind="image", billing_params=billing_params)
+             u = item.get("url")
+-            if not _is_safe_result_url(u):
++            if not _is_safe_result_url(u) or api_key in u:
+                 return ProductResult(ok=False, error_code="IMAGE_RESULT_INVALID_URL",
+                                      error_hint="图片结果 URL 方案非法或包含畸形主机/用户凭据",
+                                      model=snap.model, kind="image", billing_params=billing_params)
+@@ -1639,7 +1649,9 @@
+             try:
+                 hooks.on_result(result)
+             except Exception:
+-                pass
++                result.error_code = "ON_RESULT_FAILED"
++                result.error_hint = "远端结果已产生，但本地保存失败；不自动重提。"
++                result.status = "completed_local_save_failed"
+             return result
+ 
+         status = "completed" if len(urls) == snap.n else "completed_partial"
+@@ -1735,30 +1747,30 @@
+             _cancel=_cancel,
+         )
+     except ApiError as e:
+-        msg = str(getattr(e, "message", e))
+-        if "POLL_CANCELLED" in msg:
++        reason = e.reason if isinstance(e, _PollOutcome) else None
++        if reason == "POLL_CANCELLED":
+             return ProductResult(ok=False, error_code="CANCELLED_DURING_POLL",
+                                  error_hint=f"Cancelled during poll; task_id={task_id} retained for reconciliation",
+                                  task_id=task_id, model=snap.model, kind=snap.kind,
+                                  status="unknown_cancelled", billing_params=billing_params)
+-        if "POLL_TIMEOUT" in msg:
++        if reason == "POLL_TIMEOUT":
+             return ProductResult(ok=False, error_code="POLL_TIMEOUT",
+                                  error_hint=f"Local poll timeout; task_id={task_id} retained. "
+                                              f"DO NOT resubmit; check status manually.",
+                                  task_id=task_id, model=snap.model, kind=snap.kind,
+                                  status="unknown_timeout", billing_params=billing_params)
+-        if "REMOTE_TERMINAL_FAILED" in msg:
++        if reason == "REMOTE_TERMINAL_FAILED":
+             return ProductResult(ok=False, error_code="REMOTE_TASK_FAILED",
+-                                 error_hint=f"远端任务已明确执行失败: {msg}",
++                                 error_hint="远端任务已明确执行失败；不自动重提。",
+                                  task_id=task_id, model=snap.model, kind=snap.kind,
+                                  status="failed", billing_params=billing_params)
+-        if "REMOTE_TERMINAL_CANCELLED" in msg:
++        if reason == "REMOTE_TERMINAL_CANCELLED":
+             return ProductResult(ok=False, error_code="REMOTE_TASK_CANCELLED",
+-                                 error_hint=f"远端任务已被取消: {msg}",
++                                 error_hint="远端任务已明确取消；不自动重提。",
+                                  task_id=task_id, model=snap.model, kind=snap.kind,
+                                  status="cancelled", billing_params=billing_params)
+-        code, hint = classify_error(e)
+-        return ProductResult(ok=False, error_code=code, error_hint=hint,
++        return ProductResult(ok=False, error_code="POLL_QUERY_FAILED",
++                             error_hint="任务已提交但查询失败；保留任务ID核对，不自动重提。",
+                              task_id=task_id, model=snap.model, kind=snap.kind,
+                              status="unknown_poll_error", billing_params=billing_params)
+     except Exception as e:
+@@ -1768,7 +1780,7 @@
+                              status="unknown_poll_error", billing_params=billing_params)
+ 
+     url = result_url(task)
+-    if not _is_safe_result_url(url):
++    if not _is_safe_result_url(url) or api_key in url:
+         return ProductResult(ok=False, error_code="VIDEO_RESULT_EMPTY",
+                              error_hint="Task succeeded but result URL absent or invalid; cannot return ok:true",
+                              task_id=task_id, model=snap.model, kind=snap.kind,
+@@ -1790,7 +1802,9 @@
+         try:
+             hooks.on_result(result)
+         except Exception:
+-            pass
++            result.error_code = "ON_RESULT_FAILED"
++            result.error_hint = "远端结果已产生，但本地保存失败；不自动重提。"
++            result.status = "completed_local_save_failed"
+         return result
+ 
+     result = ProductResult(ok=True, task_id=task_id, model=snap.model,

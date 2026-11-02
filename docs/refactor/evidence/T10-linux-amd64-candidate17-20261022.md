@@ -1,0 +1,9 @@
+# T10 · candidate-17 Linux/AMD64 artifact boundary probe (2026-10-22)
+
+**Slice: PASS in disposable Linux containers; T10/AC11 remain partial.** The probe extracted candidate-17 (`northstar-controlled-trial-20261022-candidate-17.tar.gz`, SHA-256 `480e97cd975f61d7691163f9466e7f79ac3b898d01d79b2eb0771a977ee1f964`) into temporary workspaces and ran under Node `v20.20.2` and `v22.23.4`, both `linux/x64`. Each runtime used `koffi@3.3.3` with its Linux x64 native package; the host macOS `node_modules` tree was not used for Koffi.
+
+Command scope on each runtime: `artifact-openat-test.mjs`, `t10-artifact-openat-leaf-race-test.mjs`, `t10-artifact-openat-nonregular-test.mjs`, and `t10-artifact-tenant-symlink-audit-test.mjs`; **8/8 Node subtests PASS on Node20 and 8/8 on Node22**. Coverage includes pinned directory traversal, final/intermediate/tenant-root symlink rejection, hard-link rejection, ancestor rename/replacement, leaf symlink/hard-link race rejection, FIFO non-blocking rejection, authenticated HTTP GET/HEAD tenant isolation, and health responsiveness after rejecting a FIFO.
+
+The first harness attempt produced 7/8 because the integration test intentionally starts a child with an explicit environment allowlist, which omitted a temporary `NODE_PATH` used to load Linux Koffi. That attempt loaded the mounted macOS Koffi package in the child. Re-running from an extracted candidate copy with Linux Koffi installed at the candidate's normal `shell/node_modules` path passed 8/8; no repository test code was modified to mask the harness issue.
+
+This is container-level Linux behavior, not the maintainer's target host, production filesystem, full candidate install/upgrade, or complete artifact lifecycle. T10 remains partial pending target GET/HEAD and tenant boundary checks plus Run/call provenance, persistence, reopen, concurrent artifact ownership, export formats, and same-UID isolation.

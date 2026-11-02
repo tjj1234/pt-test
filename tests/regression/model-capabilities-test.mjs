@@ -5,17 +5,32 @@ const require=createRequire(import.meta.url);
 const {normalizePtRecord:N,mergeSnapshot:M}=require('../../shell/models/capabilities.cjs');
 const at='2026-10-16T01:00:00.000Z',later='2026-10-17T01:00:00.000Z',third='2026-10-18T01:00:00.000Z';
 const ctx={scopeId:'permission-scope-a',observedAt:at,sourceVersion:'PT models fixture v1'};
-// Shapes observed in the existing PT fixtures; identifiers never imply a capability.
-const observedFixtures=[{id:'deepseek-v4-pro',supported_endpoint_types:['anthropic']},{id:'seedream-5-0-260128',supported_endpoint_types:['image-generation']},{id:'wan2.7-t2v',supported_endpoint_types:['video']}];
-const explicit={id:'explicit-record',capabilities:{textChat:true,imageUnderstanding:false},input_modalities:['text'],output_modalities:['text'],supported_endpoint_types:['openai-chat'],context_window:128000,max_output_tokens:8192};
+// PT-confirmed endpoint semantics; identifiers never imply a capability.
+const observedFixtures=[{id:'deepseek-v4-pro',supported_endpoint_types:['anthropic']},{id:'seedream-5-0-260128',supported_endpoint_types:['image-generation']},{id:'wan2.7-t2v',supported_endpoint_types:['openai-video']}];
+const explicit={id:'explicit-record',capabilities:{textChat:true,imageUnderstanding:false},input_modalities:['text'],output_modalities:['text'],supported_endpoint_types:['anthropic'],context_window:128000,max_output_tokens:8192};
 const snapshot=(records,extra={})=>({scopeId:ctx.scopeId,success:true,complete:true,observedAt:at,records,...extra});
-const policy={enabled:true,source:'platform routing policy',version:'policy-1'};
-const adapter={textChat:{adapterId:'dsh-text',version:'1',endpoint:'openai-chat',source:'adapter-registry/v1'}};
-function verifiedOptions(raw=explicit){const base=N(raw,ctx);return {...ctx,permission:true,localPolicy:policy,adaptations:adapter,verifications:{textChat:{status:'passed',modelId:raw.id,task:'textChat',adapterId:'dsh-text',endpoint:'openai-chat',scopeId:ctx.scopeId,capabilityRevision:base.capabilityRevision,adapterVersion:'1',source:'controlled-probe/run-1',verifiedAt:at}}};}
+const policy={enabled:true,source:'platform routing policy',version:'policy-1',tasks:['textChat']};
+const adapter={textChat:{adapterId:'dsh-text',version:'1',endpoint:'openai-chat-completions',source:'adapter-registry/v1'}};
+function verifiedOptions(raw=explicit){const base=N(raw,ctx);return {...ctx,permission:true,localPolicy:policy,adaptations:adapter,verifications:{textChat:{status:'passed',modelId:raw.id,task:'textChat',adapterId:'dsh-text',endpoint:'openai-chat-completions',scopeId:ctx.scopeId,capabilityRevision:base.capabilityRevision,adapterVersion:'1',source:'controlled-probe/run-1',verifiedAt:at}}};}
 
-test('existing PT record shapes preserve endpoints without guessing task or modality',()=>{
- for(const raw of observedFixtures){const m=N(raw,ctx);assert.deepEqual(m.endpoints.value,raw.supported_endpoint_types);assert.equal(m.tasks.textChat.value,null);assert.equal(m.tasks.textToImage.value,null);assert.equal(m.tasks.textToVideo.value,null);assert.equal(m.inputModalities.value,null);assert.equal(m.states.textChat.autoEligible,false);}
+test('PT-confirmed endpoint mappings set only their task and text I/O facts with provenance',()=>{
+ const [chat,image,video]=observedFixtures.map(raw=>N(raw,ctx));
+ assert.equal(chat.tasks.textChat.value,true);assert.equal(chat.tasks.textChat.source.path,'supported_endpoint_types');assert.deepEqual(chat.inputModalities.value,['text']);assert.deepEqual(chat.outputModalities.value,['text']);
+ assert.equal(image.tasks.textToImage.value,true);assert.deepEqual(image.inputModalities.value,['text']);assert.deepEqual(image.outputModalities.value,['image']);assert.equal(image.tasks.textChat.value,null);
+ assert.equal(video.tasks.textToVideo.value,true);assert.deepEqual(video.inputModalities.value,['text']);assert.deepEqual(video.outputModalities.value,['video']);assert.equal(video.tasks.textChat.value,null);
+ for(const m of [chat,image,video]){assert.equal(m.states.textChat.autoEligible,false);assert.equal(m.tasks.imageUnderstanding.value,null);}
+ assert.equal(N({id:'unknown',supported_endpoint_types:['video']},ctx).tasks.textToVideo.value,null);
+ for(const endpoint of ['anthropic','openai-response']){const m=N({id:`chat-${endpoint}`,supported_endpoint_types:[endpoint]},ctx);assert.equal(m.tasks.textChat.value,true,endpoint);assert.equal(m.tasks.textToImage.value,null,endpoint);}
+ const generic=N({id:'generic-openai',supported_endpoint_types:['openai']},ctx);assert.equal(generic.tasks.textChat.value,null);assert.equal(generic.inputModalities.value,null);assert.equal(generic.outputModalities.value,null);
+ const imageWithGeneric=N({id:'image-openai',supported_endpoint_types:['image-generation','openai']},ctx);assert.equal(imageWithGeneric.tasks.textChat.value,null);assert.equal(imageWithGeneric.tasks.textToImage.value,true);
+ const imageType=N({id:'image-type',supported_endpoint_types:['image-generation']},ctx);assert.equal(imageType.tasks.textToImage.value,true);assert.equal(imageType.tasks.textToVideo.value,null);
+ const videoType=N({id:'video-type',supported_endpoint_types:['openai-video']},ctx);assert.equal(videoType.tasks.textToVideo.value,true);assert.equal(videoType.tasks.textToImage.value,null);
  assert.equal(N({id:'glm-chat-vision-audio-video'},ctx).tasks.textChat.value,null);
+});
+test('explicit task denial or contradictory modalities take precedence over endpoint inference',()=>{
+ const denied=N({id:'x',supported_endpoint_types:['openai'],capabilities:{textChat:false}},ctx);assert.equal(denied.tasks.textChat.value,false);
+ const mismatch=N({id:'y',supported_endpoint_types:['openai'],input_modalities:['image'],output_modalities:['text']},ctx);assert.equal(mismatch.tasks.textChat.value,null);assert.deepEqual(mismatch.inputModalities.value,['image']);
+ const image=N({id:'z',supported_endpoint_types:['image-generation'],capabilities:{textToImage:false}},ctx);assert.equal(image.tasks.textToImage.value,false);
 });
 test('explicit metadata carries independent facts and paths',()=>{
  const m=N(explicit,ctx);assert.equal(m.tasks.textChat.value,true);assert.equal(m.tasks.imageUnderstanding.value,false);assert.equal(m.tasks.videoUnderstanding.value,null);assert.equal(m.tasks.textChat.source.path,'capabilities.textChat');assert.equal(m.tasks.textChat.source.version,ctx.sourceVersion);assert.equal(m.limits.contextWindow.value,128000);assert.equal(m.states.textChat.adapted,false);assert.equal(m.states.textChat.verified,false);
@@ -27,10 +42,20 @@ test('supported task list is positive-only and cannot erase explicit false',()=>
  const m=N({id:'x',supported_tasks:['text-to-image','image-to-video','unknown-task'],capabilities:{imageToVideo:false}},ctx);assert.equal(m.tasks.textToImage.value,true);assert.equal(m.tasks.imageToVideo.value,false);assert.equal(m.tasks.textChat.value,null);
 });
 test('discovered, adapted, verified and AUTO eligibility are distinct',()=>{
- const m=N(explicit,verifiedOptions());assert.deepEqual(m.states.textChat,{discovered:true,adapted:true,verified:true,autoEligible:true});
+ const m=N(explicit,verifiedOptions());assert.deepEqual(m.states.textChat,{discovered:true,adapted:true,endpointCompatible:true,verified:true,autoEligible:true});
  for(const opts of [{permission:false},{permission:null},{adaptations:{}},{verifications:{}}])assert.equal(N(explicit,{...verifiedOptions(),...opts}).states.textChat.autoEligible,false);
- assert.equal(N({...explicit,input_modalities:undefined},verifiedOptions({...explicit,input_modalities:undefined})).states.textChat.autoEligible,false);
+ for(const scopedPolicy of [{...policy,tasks:undefined},{...policy,tasks:['textToImage']}])assert.equal(N(explicit,{...verifiedOptions(),localPolicy:scopedPolicy}).states.textChat.autoEligible,false,'unscoped or media-only policy cannot grant chat AUTO');
+ assert.equal(N({...explicit,input_modalities:undefined},verifiedOptions({...explicit,input_modalities:undefined})).states.textChat.autoEligible,true,'trusted PT chat mapping supplies the confirmed text I/O contract');
  assert.equal(N(explicit,{...verifiedOptions(),adaptations:{textChat:{...adapter.textChat,endpoint:'unsupported-endpoint'}}}).states.textChat.autoEligible,false);
+ const aliasRaw={id:'endpoint-alias',capabilities:{textChat:true},input_modalities:['text'],output_modalities:['text'],supported_endpoints:['openai-chat-completions']};
+ const aliasModel=N(aliasRaw,verifiedOptions(aliasRaw));
+ assert.equal(aliasModel.endpoints.source.path,'supported_endpoints');
+ assert.equal(aliasModel.ptEndpointTasks.value,null);
+ assert.equal(aliasModel.states.textChat.autoEligible,false,'supported_endpoints does not carry the user-confirmed mapping');
+ const route=require('../../shell/models/task-router.cjs').routeTextTask;
+ const manual=route({candidates:[aliasModel],requirements:{task:'textChat'},selection:{mode:'manual',modelId:aliasModel.id},availability:{status:'available',modelIds:[aliasModel.id]}});
+ assert.equal(manual.ok,false);
+ assert.equal(manual.detail.reasons[0].code,'ADAPTER_ENDPOINT_MISMATCH');
 });
 test('verification must match permission scope, revision and adapter version',()=>{
  const good=verifiedOptions();for(const patch of [{scopeId:'other'},{capabilityRevision:'stale'},{adapterVersion:'2'},{status:'failed'},{verifiedAt:'bad-date'}])assert.equal(N(explicit,{...good,verifications:{textChat:{...good.verifications.textChat,...patch}}}).states.textChat.verified,false);
@@ -41,6 +66,16 @@ test('manual override requires provenance and is retained across upstream snapsh
  const a=M(null,snapshot([raw]),{overrides:{x:override}});assert.equal(a.models[0].tasks.textChat.source.kind,'manual');
  const b=M(a,snapshot([{...raw,name:'new name'}],{observedAt:later}));assert.equal(b.models[0].tasks.textChat.value,true);assert.deepEqual(b.models[0].manualOverride,override);
  assert.throws(()=>N(raw,{...ctx,override:{tasks:{textChat:true}}}));assert.throws(()=>N(raw,{...ctx,override:{...override,id:'other-model'}}));
+});
+test('user-confirmed chat-completions endpoint is provenance-bound and activates only adapter compatibility',()=>{
+ const raw={id:'x',supported_endpoint_types:['anthropic']};
+ const override={id:'x',source:'PowerTokens OpenAI-compatible chat-completions route',version:'2026-10-22.1',tasks:{textChat:true},inputModalities:['text'],outputModalities:['text'],endpoints:['openai-chat-completions']};
+ const adaptations={textChat:{adapterId:'powertokens-openai-completions',version:'0.1.1-rc.2',endpoint:'openai-chat-completions',source:'PT endpoint contract'}};
+ const m=N(raw,{...ctx,override,permission:true,localPolicy:policy,adaptations});
+ assert.deepEqual(m.endpoints.value,['openai-chat-completions']);
+ assert.equal(m.states.textChat.adapted,true);
+ assert.equal(m.states.textChat.verified,false);
+ assert.throws(()=>N(raw,{...ctx,override:{...override,endpoints:['bad endpoint']}}));
 });
 test('complete same-scope snapshots add, change, tombstone and restore without AUTO resurrection',()=>{
  const initial=M(null,snapshot([explicit,{id:'other'}]),{permission:true,policies:{[explicit.id]:policy},adaptations:{[explicit.id]:adapter},verifications:{[explicit.id]:verifiedOptions().verifications}});

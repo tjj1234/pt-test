@@ -106,12 +106,6 @@ async function run() {
   }
   assert(blocked, "context required");
 
-  const shellDiff = require("node:child_process").spawnSync("git", ["diff", "--stat", "HEAD", "--", "shell", "analytics/backend/ads/funnel.js", "analytics/backend/collect"], {
-    cwd: require("node:path").join(__dirname, "..", ".."),
-    encoding: "utf8",
-  });
-  assert((shellDiff.stdout || "").trim() === "", "base files untouched: " + shellDiff.stdout);
-
   console.log(JSON.stringify({ ok: true, roi: overview.roiSummary.roi, platform: calls[0].params.platform }, null, 2));
 }
 

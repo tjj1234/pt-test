@@ -15,9 +15,10 @@
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
-const { spawn, spawnSync } = require("child_process");
+const { spawn } = require("child_process");
 const { assembleSystemPrompt } = require("./contract.cjs");
 const artifactsMod = require("./artifacts.cjs");
+const { normalizeModelIdentity } = require("./usage.cjs");
 
 const sha256 = (s) => crypto.createHash("sha256").update(String(s), "utf8").digest("hex");
 
@@ -127,149 +128,148 @@ function mediaRouteTaskType(args) {
  * DSH 入口发现（跨平台）
  * ========================================================================== */
 function findDshEntry(explicit) {
-  if (explicit && fs.existsSync(explicit)) return { js: explicit, nodePath: null };
-  if (process.env.DSH_JS) {
-    const envJs = path.resolve(process.cwd(), process.env.DSH_JS);
-    if (fs.existsSync(envJs)) return { js: envJs, nodePath: null };
-    process.stderr.write("[DSH] DSH_JS 指向的文件不存在：" + envJs + "（继续尝试自动发现…）\n");
-  }
-  const roots = [];
-  const pushUp = (start, depth) => {
-    let cur = start;
-    for (let i = 0; i < depth; i++) {
-      roots.push(path.join(cur, "node_modules"));
-      const parent = path.dirname(cur);
-      if (parent === cur) break;
-      cur = parent;
-    }
-  };
-  pushUp(path.dirname(process.execPath), 6);
-  pushUp(process.cwd(), 6);
   try {
-    const r = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["root", "-g"], { encoding: "utf8", timeout: 10000 });
-    if (r.status === 0 && r.stdout) roots.push(String(r.stdout).trim());
-  } catch (e) { /* 忽略 */ }
-  for (const r of roots) {
-    if (!r) continue;
-    const js = path.join(r, "@deepseek-ai", "dsh", "lib", "bin.js");
-    if (fs.existsSync(js)) {
-      let nodePath = null;
-      try {
-        const cmd = fs.readFileSync(path.join(r, ".bin", "dsh.cmd"), "utf8");
-        const m = cmd.match(/SET "NODE_PATH=([^"]+)"/i);
-        if (m) nodePath = m[1];
-      } catch (e) { /* 无 NODE_PATH 也可跑 */ }
-      return { js, nodePath };
-    }
+    const verified = require("./dsh-installation.cjs").resolveDshInstallation({ explicitEntry: explicit, envEntry: process.env.DSH_JS });
+    const installation = {
+      source: "host_release_verification", version: verified.version,
+      manifestSha256: verified.manifestSha256, vendorSha256: verified.vendorSha256,
+      lockfileSha256: verified.lockfileSha256, packageFileCount: verified.packageFileCount,
+      scope: "dsh-cli-package-only",
+    };
+    return { js: verified.entry, nodePath: null, installation };
+  } catch (error) {
+    return { js: null, nodePath: null, code: error.code || "DSH_INSTALLATION_INVALID", error: "DSH 发布安装校验失败" };
   }
-  return { js: null, nodePath: null };
 }
 
 function dshMissingHint() {
-  return (
-    "找不到 DSH 的 JS 入口（@deepseek-ai/dsh/lib/bin.js）。请二选一：\n" +
-    "  ① 设环境变量 DSH_JS 指向该 bin.js 的绝对路径；\n" +
-    "  ② 安装 dsh：npm install -g @deepseek-ai/dsh（或装到本仓库 node_modules），装好后重试。"
-  );
+  return "DSH 发布安装校验失败。请用 shell/package-lock.json 恢复仓库内安装，核对 runtime/dsh-release-manifest.json 与 vendor 发布包。DSH_JS/--dsh 仅可指向该包的绝对 lib/bin.js 路径。";
 }
 
 /* ============================================================================
  * profile：常驻 profile（dsh-base + persistent-runner，无 headless）
  * ========================================================================== */
 const PROFILE_NAME = "run-persistent";
+const RPC_PROTOCOL_VERSION = 1;
+const RUNNER_CONTROL_ERRORS = Object.freeze({
+  RUNNER_SETUP_FAILED: "Persistent runner setup failed",
+  RUNNER_QUEUE_FAILED: "Parent command could not be processed",
+  PARENT_FRAME_INVALID: "Parent frame is not valid JSON",
+  PARENT_COMMAND_UNSUPPORTED: "Parent command is not supported",
+  TASK_FRAME_INVALID: "Parent task frame is invalid",
+  PROTOCOL_VERSION_MISMATCH: "Parent protocol version mismatch",
+});
+const RUNNER_CONTROL_ERROR_FALLBACK = "DSH runner reported a control error";
+
+function normalizeRunnerControlError(frame) {
+  const candidate = typeof frame?.code === "string" ? frame.code : "";
+  const code = Object.prototype.hasOwnProperty.call(RUNNER_CONTROL_ERRORS, candidate) ? candidate : "DSH_RUNNER_ERROR";
+  return { code, error: RUNNER_CONTROL_ERRORS[code] || RUNNER_CONTROL_ERROR_FALLBACK };
+}
+const PROFILE_FORMAT_VERSION = 1;
+const PROFILE_MANIFEST = "northstar-profile-manifest.json";
+const PROFILE_SOURCE_FILES = Object.freeze({
+  "persistent-runner.mjs": (runner) => runner,
+  "powertokens.cjs": (runner) => path.resolve(path.dirname(runner), "..", "business", "media", "powertokens.cjs"),
+  "presets.cjs": (runner) => path.resolve(path.dirname(runner), "..", "business", "media", "presets.cjs"),
+  "ga-query-executor.cjs": (runner) => path.resolve(path.dirname(runner), "..", "business", "attribution", "ga-connector", "executor.js"),
+  "budget.cjs": (runner) => path.resolve(path.dirname(runner), "tasks", "budget.cjs"),
+  "usage.cjs": (runner) => path.resolve(path.dirname(runner), "runtime", "usage.cjs"),
+  "native-image-message.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "native-image-message.mjs"),
+  "run-budget.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget.json"),
+  "run-budget-csv.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-csv.json"),
+  "run-budget-media.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-media.json"),
+});
 const PROFILE_PATCH = [
   "- id: hmr",
   "  disabled: true",
+  ...["session-title-llm", "user-questions", "compaction-basic", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "tool-skill", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
   "",
   "- insert:",
+  "    - id: northstar-patch-watch-compat",
+  "      name: './northstar-patch-watch-compat.mjs'",
   "    - id: persistent-runner",
   "      name: './persistent-runner.mjs'",
-  "      inject: [agentDefaultModel, agents, sessions]",
+  "      inject: [agentDefaultModel, agents, sessions, attachments]",
   "",
 ].join("\n");
 
-function ensureDshHomeConfig(dshHome, settingsTemplate) {
-  const home = dshHome;
-  const dst = path.join(home, "settings.yaml");
-  if (fs.existsSync(dst)) return;
-  fs.mkdirSync(home, { recursive: true });
-  if (settingsTemplate && fs.existsSync(settingsTemplate)) {
-    try { fs.copyFileSync(settingsTemplate, dst); }
-    catch (e) { process.stderr.write("[DSH] settings.yaml 播种失败：" + e.message + "\n"); }
-  } else {
-    process.stderr.write("[DSH] 警告：缺 dsh-settings.yaml 模板，DSH 将回退默认模型路由\n");
+function profileManifest(files) {
+  return {
+    formatVersion: PROFILE_FORMAT_VERSION,
+    rpcProtocolVersion: RPC_PROTOCOL_VERSION,
+    files: Object.fromEntries(Object.keys(files).sort().map((name) => [
+      name,
+      crypto.createHash("sha256").update(files[name]).digest("hex"),
+    ])),
+  };
+}
+
+function profileError(code, message) {
+  return Object.assign(new Error(message), { code });
+}
+
+function profileFiles(persistentRunner) {
+  if (typeof persistentRunner !== "string" || !fs.existsSync(persistentRunner)) {
+    throw profileError("PROFILE_SOURCE_MISSING", "Persistent DSH runner source is unavailable");
   }
+  const { buildProfileDependencyContract, PROFILE_DEPENDENCY_FILE } = require("./profile-dependencies.cjs");
+  const dependencyContract = buildProfileDependencyContract({
+    lockfile: fs.readFileSync(path.resolve(__dirname, "../package-lock.json")),
+    npmrc: fs.readFileSync(path.resolve(__dirname, "../.npmrc")),
+  });
+  const packageJson = JSON.stringify({
+    name: "dsh-profile-" + PROFILE_NAME, private: true, dependencies: dependencyContract.dependencies,
+    dsh: { profile: { bundles: dependencyContract.bundles } },
+  });
+  const files = {
+    "package.json": Buffer.from(packageJson),
+    [PROFILE_DEPENDENCY_FILE]: Buffer.from(JSON.stringify(dependencyContract.releaseInput, null, 2) + "\n"),
+    "pnpm-workspace.yaml": Buffer.from("packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n"),
+    "cordis.patch.yml": Buffer.from(PROFILE_PATCH),
+    // This DSH release's app-boot unconditionally asks hmr.registerConfig()
+    // to watch user patch layers, but the locked cordis-plugin-hmr API has no
+    // registerConfig method. Northstar uses a generated, manifest-covered
+    // no-op service: runtime config changes take effect on process restart.
+    // This avoids enabling broad filesystem HMR in a tenant DSH profile.
+    "northstar-patch-watch-compat.mjs": Buffer.from([
+      "export default (ctx) => {",
+      "  ctx.provide('hmr', {",
+      "    async registerConfig(filename) {",
+      "      if (typeof filename !== 'string' || !filename) throw new TypeError('patch filename is required');",
+      "      return async () => {};",
+      "    },",
+      "  });",
+      "};",
+      "",
+    ].join("\n")),
+  };
+  for (const [targetName, resolveSource] of Object.entries(PROFILE_SOURCE_FILES)) {
+    const source = resolveSource(persistentRunner);
+    if (!fs.existsSync(source)) throw profileError("PROFILE_SOURCE_MISSING", `Required profile source is missing: ${targetName}`);
+    try { files[targetName] = fs.readFileSync(source); }
+    catch { throw profileError("PROFILE_SOURCE_UNREADABLE", `Required profile source is unreadable: ${targetName}`); }
+  }
+  return files;
 }
 
 function makeProfile(dshHome, settingsTemplate, persistentRunner) {
-  ensureDshHomeConfig(dshHome, settingsTemplate);
-  const name = PROFILE_NAME;
-  const dir = path.join(dshHome, "profiles", name);
-  fs.mkdirSync(dir, { recursive: true });
-
-  const pkgFile = path.join(dir, "package.json");
-  const pkgWant = JSON.stringify({
-    name: "dsh-profile-" + name, private: true, dependencies: {},
-    dsh: { profile: { bundles: ["@deepseek-ai/dsh-base"] } },
+  const files = profileFiles(persistentRunner);
+  return require("./profile-lifecycle.cjs").manageProfile({
+    dshHome, settingsTemplate, files, manifest: profileManifest(files),
   });
-  if (!fs.existsSync(pkgFile) || fs.readFileSync(pkgFile, "utf8") !== pkgWant) {
-    fs.writeFileSync(pkgFile, pkgWant, "utf8");
-  }
+}
 
-  const wsFile = path.join(dir, "pnpm-workspace.yaml");
-  if (!fs.existsSync(wsFile)) {
-    fs.writeFileSync(wsFile, "packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n", "utf8");
-  }
-
-  const patchFile = path.join(dir, "cordis.patch.yml");
-  if (!fs.existsSync(patchFile) || fs.readFileSync(patchFile, "utf8") !== PROFILE_PATCH) {
-    fs.writeFileSync(patchFile, PROFILE_PATCH, "utf8");
-  }
-
-  const runnerFile = path.join(dir, "persistent-runner.mjs");
-  if (persistentRunner && fs.existsSync(persistentRunner)) {
-    try { fs.copyFileSync(persistentRunner, runnerFile); }
-    catch (e) { process.stderr.write("[DSH] persistent-runner.mjs 复制失败：" + e.message + "\n"); }
-  } else {
-    process.stderr.write("[DSH] 警告：缺 persistent-runner.mjs（" + persistentRunner + "）\n");
-  }
-
-  // media.route 依赖的 PowerTokens 调用层：与 persistent-runner.mjs 同目录，
-  // 供其 createRequire(import.meta.url) + require("./powertokens.cjs") 引用。
-  const mediaModule = persistentRunner
-    ? path.resolve(path.dirname(persistentRunner), "..", "business", "media", "powertokens.cjs")
-    : null;
-  if (mediaModule && fs.existsSync(mediaModule)) {
-    try { fs.copyFileSync(mediaModule, path.join(dir, "powertokens.cjs")); }
-    catch (e) { process.stderr.write("[DSH] powertokens.cjs 复制失败：" + e.message + "\n"); }
-  } else {
-    process.stderr.write("[DSH] 警告：缺 business/media/powertokens.cjs（" + mediaModule + "）\n");
-  }
-
-  // media.route 风格预设：powertokens.cjs / persistent-runner.mjs 都 require("./presets.cjs")，
-  // 需一并复制到 profile 同目录。
-  const presetsModule = persistentRunner
-    ? path.resolve(path.dirname(persistentRunner), "..", "business", "media", "presets.cjs")
-    : null;
-  if (presetsModule && fs.existsSync(presetsModule)) {
-    try { fs.copyFileSync(presetsModule, path.join(dir, "presets.cjs")); }
-    catch (e) { process.stderr.write("[DSH] presets.cjs 复制失败：" + e.message + "\n"); }
-  } else {
-    process.stderr.write("[DSH] 警告：缺 business/media/presets.cjs（" + presetsModule + "）\n");
-  }
-
-  // ga.query 依赖的 GA4 连接器 executor（自包含：仅 node:http/node:crypto）：
-  // persistent-runner.mjs 按相对路径 require("./ga-query-executor.cjs")。
-  const gaQueryModule = persistentRunner
-    ? path.resolve(path.dirname(persistentRunner), "..", "business", "attribution", "ga-connector", "executor.js")
-    : null;
-  if (gaQueryModule && fs.existsSync(gaQueryModule)) {
-    try { fs.copyFileSync(gaQueryModule, path.join(dir, "ga-query-executor.cjs")); }
-    catch (e) { process.stderr.write("[DSH] ga-query-executor.cjs 复制失败：" + e.message + "\n"); }
-  } else {
-    process.stderr.write("[DSH] 警告：缺 business/attribution/ga-connector/executor.js（" + gaQueryModule + "）\n");
-  }
-  return { name, dir };
+// Explicit maintenance only: callers must stop runtime processes before upgrade
+// or recovery. Automatic startup never rebuilds or takes over stale locks.
+function rebuildProfile(dshHome, settingsTemplate, persistentRunner) {
+  const files = profileFiles(persistentRunner);
+  return require("./profile-lifecycle.cjs").manageProfile({
+    dshHome, settingsTemplate, files, manifest: profileManifest(files), mode: "rebuild",
+  });
+}
+function recoverProfile(dshHome, recovery) {
+  return require("./profile-lifecycle.cjs").manageProfile({ dshHome, mode: "recover", recovery });
 }
 
 /* ============================================================================
@@ -279,8 +279,7 @@ function makeProfile(dshHome, settingsTemplate, persistentRunner) {
  * 会把服务端自己的密钥 / DB 连接串 / 登录口令 / 模型 API Key / 看板只读 token 等
  * 原样透给每个租户的子进程。这里改成白名单：
  *   · 只复制平台运行必需的键（PATH / HOME / TEMP / Windows SystemRoot …）；
- *   · 只显式注入业务真正需要的键（DSH_HOME / NODE_PATH / POWERTOKENS_* /
- *     DASH_PORT / PT_DASH_INTERNAL_KEY）。
+ *   · 只显式注入业务真正需要的键（DSH_HOME / NODE_PATH / POWERTOKENS_*）。
  * 其余一律不下发。
  */
 
@@ -301,8 +300,6 @@ function buildDshChildEnv(parentEnv, opts = {}) {
   if (opts.nodePath) env.NODE_PATH = opts.nodePath;
   if (opts.powerTokensApiKey != null) env.POWERTOKENS_API_KEY = String(opts.powerTokensApiKey);
   if (opts.powerTokensBaseUrl) env.POWERTOKENS_BASE_URL = opts.powerTokensBaseUrl;
-  if (opts.dashInternalKey) env.PT_DASH_INTERNAL_KEY = opts.dashInternalKey;
-  if (opts.dashPort != null) env.DASH_PORT = String(opts.dashPort);
   return env;
 }
 
@@ -334,19 +331,245 @@ function createDshRuntime(opts = {}) {
   const tmpDir = opts.tmpDir;
   const idleMs = opts.idleMs || (15 * 60 * 1000);
   const taskTimeoutMs = opts.taskTimeoutMs || (3 * 60 * 1000);
-  const entry = opts.dshEntry || findDshEntry().js;
+  const abortGraceMs = Number.isSafeInteger(opts.abortGraceMs) && opts.abortGraceMs >= 0 ? opts.abortGraceMs : 3000;
 
   const persistentProcesses = new Map(); // tenantId -> proc
   const warmSessions = new Map();        // sessionKey -> { tenantId, sessionId }
 
   function writeJson(proc, obj) {
+    if (obj.type === "task" && obj.reasoningEffort !== undefined && !proc.capabilities?.includes("reasoning-selection-v1")) {
+      failRunnerProcess(proc,"DSH_REASONING_UNSUPPORTED","DSH runner does not support explicit reasoning selection"); return;
+    }
+    if (obj.type === "task" && obj.recordModelIntents === true && !proc.capabilities?.includes("model-intent-v1")) {
+      failRunnerProcess(proc, "DSH_MODEL_INTENT_UNSUPPORTED", "DSH runner does not support durable model intents");
+      return;
+    }
     try { proc.child.stdin.write(JSON.stringify(obj) + "\n"); } catch (e) { /* 进程已退 */ }
   }
 
+  function clearToolRequests(proc, sessionId) {
+    if (!proc.toolRequests) return;
+    for (const [requestId, pending] of [...proc.toolRequests.entries()]) {
+      if (sessionId != null && pending.sessionId !== sessionId) continue;
+      proc.toolRequests.delete(requestId);
+      try { pending.controller.abort(); } catch (e) {}
+    }
+  }
+
+  function retireDrainingProcess(proc) {
+    if (!proc.draining || proc.waiters.size || proc.retireScheduled) return;
+    proc.retireScheduled = true;
+    writeJson(proc, { type: "exit", protocolVersion: RPC_PROTOCOL_VERSION });
+    setTimeout(() => { try { proc.child.kill(); } catch (e) {} }, abortGraceMs);
+  }
+
+  function maybeEscalateAbort(proc) {
+    if (!proc.draining) return;
+    const waiters = [...proc.waiters.values()];
+    const canEscalate = (waiter) => waiter.abortGraceExpired === true
+      && (waiter.timedOut || waiter.abortRequested);
+    if (waiters.some((waiter) => !canEscalate(waiter))) {
+      proc.timeoutKillDeferred = true;
+      return;
+    }
+    if (waiters.length) {
+      if (proc.timeoutKillStarted) return;
+      proc.timeoutKillStarted = true;
+      // A stopped turn still owns its lease until it drains or the shared
+      // process actually exits. Never settle it merely because kill was sent.
+      try { proc.child.kill(); } catch (e) {}
+      return;
+    }
+    retireDrainingProcess(proc);
+  }
+
+  function requestWaiterAbort(proc, sessionId, reason = "user") {
+    const waiter = proc.waiters.get(sessionId);
+    const wasPending = proc.pendingTasks.delete(sessionId);
+    clearToolRequests(proc, sessionId);
+    if (!waiter) return wasPending;
+    if (reason === "timeout") {
+      waiter.timedOut = true;
+      proc.draining = true;
+    }
+    if (waiter.abortRequested) {
+      if (reason === "timeout" && !waiter.taskDispatched) {
+        proc.waiters.delete(sessionId);
+        waiter.resolve({ ok: false, code: "TIMEOUT", text: "", stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断", steps: waiter.steps || [] });
+        maybeEscalateAbort(proc);
+        retireDrainingProcess(proc);
+      }
+      return true;
+    }
+    waiter.abortRequested = true;
+    if (!waiter.taskDispatched) {
+      proc.waiters.delete(sessionId);
+      if (waiter.timedOut) {
+        waiter.resolve({ ok: false, code: "TIMEOUT", text: "", stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断", steps: waiter.steps || [] });
+      } else {
+        waiter.resolve({ ok: false, text: "", stopped: true, stopReason: "user", error: "已停止", steps: waiter.steps || [] });
+      }
+      if (proc.draining) maybeEscalateAbort(proc);
+      retireDrainingProcess(proc);
+      return true;
+    }
+    if (!waiter.abortGraceTimer) {
+      writeJson(proc, { type: "abort", protocolVersion: RPC_PROTOCOL_VERSION, sessionId });
+      waiter.abortGraceTimer = setTimeout(() => {
+        waiter.abortGraceTimer = null;
+        waiter.abortGraceExpired = true;
+        proc.draining = true;
+        maybeEscalateAbort(proc);
+      }, abortGraceMs);
+    }
+    return true;
+  }
+
+  function safeToolError(error) {
+    const rawCode = error && typeof error.code === "string" ? error.code : "TOOL_REQUEST_FAILED";
+    const code = /^[A-Za-z0-9_.-]{1,64}$/.test(rawCode) ? rawCode : "TOOL_REQUEST_FAILED";
+    return { code, message: "Parent tool request failed" };
+  }
+
+  function answerToolRequest(proc, frame) {
+    const requestId = typeof frame.requestId === "string" && frame.requestId.length <= 128 ? frame.requestId : "";
+    const sessionId = typeof frame.sessionId === "string" && frame.sessionId.length <= 256 ? frame.sessionId : "";
+    const name = typeof frame.name === "string" && frame.name.trim().length <= 128 ? frame.name.trim() : "";
+    const waiter = sessionId ? proc.waiters.get(sessionId) : null;
+    const respond = (ok, value) => {
+      const response = ok
+        ? { type: "tool_response", protocolVersion: RPC_PROTOCOL_VERSION, requestId, sessionId, ok: true, result: value === undefined ? null : value }
+        : { type: "tool_response", protocolVersion: RPC_PROTOCOL_VERSION, requestId, sessionId, ok: false, error: value };
+      try {
+        const line = JSON.stringify(response);
+        if (line.length > 1_048_576) throw new Error("response too large");
+        proc.child.stdin.write(line + "\n");
+      } catch (error) {
+        writeJson(proc, { type: "tool_response", protocolVersion: RPC_PROTOCOL_VERSION, requestId, sessionId, ok: false, error: { code: "TOOL_RESPONSE_INVALID", message: "Parent tool response could not be serialized" } });
+      }
+    };
+
+    if (!requestId || !sessionId || !name) {
+      if (requestId && sessionId) respond(false, { code: "TOOL_REQUEST_INVALID", message: "Parent tool request is invalid" });
+      return;
+    }
+    if (waiter?.abortRequested || waiter?.abortAcknowledged) {
+      respond(false, { code: "SESSION_ABORTED", message: "Parent tool request was cancelled" });
+      return;
+    }
+    if (proc.toolRequests.has(requestId)) return; // Duplicate frame: do not execute twice.
+    if (!waiter || typeof waiter.onToolRequest !== "function") {
+      respond(false, { code: "TOOL_REQUEST_UNAVAILABLE", message: "Parent tool request is unavailable" });
+      return;
+    }
+    try {
+      const encodedArgs = JSON.stringify(frame.args == null ? {} : frame.args);
+      if (encodedArgs === undefined || encodedArgs.length > 1_048_576) throw new Error("invalid request args");
+    } catch (error) {
+      respond(false, { code: "TOOL_REQUEST_INVALID", message: "Parent tool request is invalid" });
+      return;
+    }
+
+    const pending = { sessionId, controller: new AbortController() };
+    proc.toolRequests.set(requestId, pending);
+    Promise.resolve().then(() => waiter.onToolRequest({ sessionId, requestId, name, args: frame.args == null ? {} : frame.args, signal: pending.controller.signal }))
+      .then((result) => {
+        if (proc.toolRequests.get(requestId) !== pending || proc.waiters.get(sessionId) !== waiter) return;
+        proc.toolRequests.delete(requestId);
+        respond(true, result);
+      }, (error) => {
+        if (proc.toolRequests.get(requestId) !== pending || proc.waiters.get(sessionId) !== waiter) return;
+        proc.toolRequests.delete(requestId);
+        respond(false, safeToolError(error));
+      });
+  }
+
+  function failRunnerProcess(proc, code, error) {
+    if (proc.protocolFailed) return;
+    proc.protocolFailed = true;
+    proc.ready = false;
+    if (proc.readyTimer) clearTimeout(proc.readyTimer);
+    proc.readyTimer = null;
+    proc.pendingTasks?.clear();
+    for (const request of [...(proc.metadataRequests?.values() || [])]) request.finish({ ok: false, code: "MODEL_INFO_UNAVAILABLE" });
+    clearToolRequests(proc);
+    for (const [sid, waiter] of [...proc.waiters.entries()]) {
+      proc.waiters.delete(sid);
+      if (waiter.timeoutTimer) clearTimeout(waiter.timeoutTimer);
+      if (waiter.abortGraceTimer) clearTimeout(waiter.abortGraceTimer);
+      waiter.resolve({ ok: false, code, error, text: "", steps: waiter.steps || [] });
+    }
+    try { proc.child.kill(); } catch { /* process close cleanup follows */ }
+  }
+
+  function failProtocol(proc, code = "DSH_PROTOCOL_MISMATCH") {
+    failRunnerProcess(proc, code, "DSH runner protocol negotiation failed");
+  }
+
+  function observeUncorrelatedRunnerError(proc, normalized) {
+    proc.lastControlError = { ...normalized, observedAt: Date.now() };
+    try { console.warn(`[dsh-adapter] uncorrelated runner control error ${normalized.code}: ${normalized.error}`); } catch { /* diagnostics must not interrupt protocol cleanup */ }
+  }
+
   function dispatchFrame(proc, frame) {
+    if (!frame || typeof frame !== "object" || Array.isArray(frame)) return;
+    if (frame.type === "error" && !proc.ready) {
+      if (frame.protocolVersion !== RPC_PROTOCOL_VERSION) {
+        failProtocol(proc, "DSH_PROTOCOL_MISMATCH");
+      } else {
+        const normalized = normalizeRunnerControlError(frame);
+        failRunnerProcess(proc, normalized.code, normalized.error);
+      }
+      return;
+    }
+    if (frame.type === "ready") {
+      const caps = frame.capabilities;
+      const requiredCaps = ["task-v1", "tool-rpc-v1", "abort-v1"];
+      if (frame.protocolVersion !== RPC_PROTOCOL_VERSION || frame.runner !== "persistent-runner"
+          || !Array.isArray(caps) || requiredCaps.some((cap) => !caps.includes(cap))) {
+        failProtocol(proc, "DSH_PROTOCOL_MISMATCH");
+        return;
+      }
+      if (proc.ready) { failProtocol(proc, "DSH_PROTOCOL_DUPLICATE_READY"); return; }
+      proc.ready = true;
+      proc.capabilities = [...caps];
+      for (const request of proc.metadataRequests.values()) request.dispatch();
+      if (proc.readyTimer) clearTimeout(proc.readyTimer);
+      proc.readyTimer = null;
+      for (const [sid, task] of proc.pendingTasks || []) {
+        proc.pendingTasks.delete(sid);
+        const waiter = proc.waiters.get(sid);
+        if (waiter) {
+          waiter.taskDispatched = true;
+          writeJson(proc, task);
+        }
+      }
+      return;
+    }
+    // Never accept task or tool frames until this child has passed negotiation.
+    if (!proc.ready || frame.protocolVersion !== RPC_PROTOCOL_VERSION) {
+      failProtocol(proc, "DSH_PROTOCOL_MISMATCH");
+      return;
+    }
+    if (frame.type === "model_info") {
+      const request = proc.metadataRequests.get(frame.requestId);
+      if (request) {
+        const valid = frame.ok === true && frame.provider === request.provider && frame.model === request.model
+          && Array.isArray(frame.efforts) && frame.efforts.length <= 16
+          && frame.efforts.every((item) => item && typeof item.id === "string"
+            && /^[A-Za-z0-9_-]{1,64}$/.test(item.id) && typeof item.name === "string" && item.name.length <= 128)
+          && new Set(frame.efforts.map((item) => item.id)).size === frame.efforts.length
+          && (frame.defaultEffort === undefined || frame.efforts.some((item) => item.id === frame.defaultEffort));
+        request.finish(valid ? { ok: true, provider: request.provider, model: request.model,
+          efforts: frame.efforts.map(({ id, name }) => ({ id, name })),
+          ...(frame.defaultEffort === undefined ? {} : { defaultEffort: frame.defaultEffort }) }
+          : { ok: false, code: "MODEL_INFO_UNAVAILABLE" });
+      }
+      return;
+    }
     switch (frame.type) {
-      case "ready": proc.ready = true; break;
       case "pong": case "bye": case "closed": break;
+      case "tool_request": answerToolRequest(proc, frame); break;
       case "delta": {
         const w = proc.waiters.get(frame.sessionId);
         if (w && typeof w.onDelta === "function") { try { w.onDelta(frame.text); } catch (e) {} }
@@ -395,15 +618,37 @@ function createDshRuntime(opts = {}) {
       }
       case "done": {
         const w = proc.waiters.get(frame.sessionId);
-        if (w) { proc.waiters.delete(frame.sessionId); w.resolve(frame); }
+        if (w) {
+          proc.pendingTasks.delete(frame.sessionId);
+          clearToolRequests(proc, frame.sessionId);
+          proc.waiters.delete(frame.sessionId);
+          if (w.abortGraceTimer) clearTimeout(w.abortGraceTimer);
+          if (w.timeoutTimer) clearTimeout(w.timeoutTimer);
+          if (w.timedOut) w.resolve({ ...frame, ok: false, code: "TIMEOUT", stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断" });
+          else if (w.abortRequested) w.resolve({ ...frame, ok: false, stopped: true, canceled: true, stopReason: "user", error: "已停止" });
+          else w.resolve(frame);
+          maybeEscalateAbort(proc);
+          retireDrainingProcess(proc);
+        }
         break;
       }
       case "error": {
         const sid = frame.sessionId;
+        const normalized = normalizeRunnerControlError(frame);
         if (sid) {
           const w = proc.waiters.get(sid);
-          if (w) { proc.waiters.delete(sid); w.resolve({ ok: false, error: frame.message, text: "", steps: w.steps || [] }); }
-        }
+          if (w) {
+            if (w.timedOut) { w.timeoutErrorObserved = true; break; }
+            proc.pendingTasks.delete(sid); clearToolRequests(proc, sid); proc.waiters.delete(sid);
+            if (w.timeoutTimer) clearTimeout(w.timeoutTimer);
+            if (w.abortGraceTimer) clearTimeout(w.abortGraceTimer);
+            w.resolve(w.abortRequested
+              ? { ok: false, stopped: true, canceled: true, stopReason: "user", error: "已停止", text: "", steps: w.steps || [] }
+              : { ok: false, code: normalized.code, error: normalized.error, text: "", steps: w.steps || [] });
+            maybeEscalateAbort(proc);
+            retireDrainingProcess(proc);
+          } else observeUncorrelatedRunnerError(proc, normalized);
+        } else observeUncorrelatedRunnerError(proc, normalized);
         break;
       }
       case "aborted": {
@@ -411,14 +656,11 @@ function createDshRuntime(opts = {}) {
         if (sid) {
           const w = proc.waiters.get(sid);
           if (w) {
-            proc.waiters.delete(sid);
-            const byTimeout = w.timedOut === true || proc.timedOut === true;
-            w.resolve({
-              ok: false, text: "", stopped: true,
-              error: byTimeout ? "生成超时，已中断" : "已停止",
-              stopReason: byTimeout ? "timeout" : "user",
-              steps: w.steps || [],
-            });
+            clearToolRequests(proc, sid);
+            // `aborted` acknowledges cancellation, but the SDK turn may still be
+            // unwinding. Keep the waiter until runner `done`, emitted after whenIdle/flush.
+            w.abortRequested = true;
+            w.abortAcknowledged = true;
           }
         }
         break;
@@ -461,11 +703,31 @@ function createDshRuntime(opts = {}) {
 
     if (existing) {
       try { clearInterval(existing.pollTimer); } catch (e) {}
+      clearToolRequests(existing);
       persistentProcesses.delete(key);
       for (const [sid, rec] of [...warmSessions.entries()]) if (rec && rec.tenantId === key) warmSessions.delete(sid);
     }
 
-    if (!entry) return { proc: null, fresh: false, spawnError: dshMissingHint() };
+    // Recheck every cold spawn. A previous successful discovery must not bless
+    // modified files or an override changed after runtime construction.
+    const discovered = findDshEntry(opts.dshEntry);
+    const entry = discovered.js;
+    if (!entry) return { proc: null, fresh: false, spawnError: dshMissingHint(), spawnCode: discovered.code };
+
+    let profile;
+    try {
+      profile = makeProfile(dshHome, settingsTemplate, persistentRunner);
+      require("./bootstrap-policy.cjs").assertBootstrapPolicy({ home: dshHome, workspace: spec.workspace, profileDir: profile.dir });
+    }
+    catch (error) { return { proc: null, fresh: false, spawnError: error.message, spawnCode: error.code || "PROFILE_INVALID" }; }
+    const env = buildDshChildEnv(process.env, {
+      dshHome,
+      nodePath: null,
+      powerTokensApiKey: String(spec.apiKey || ""),
+      powerTokensBaseUrl: process.env.POWERTOKENS_BASE_URL,
+    });
+    const identity = buildSpawnIdentity(opts);
+
 
     const tdir = tmpDir;
     fs.mkdirSync(tdir, { recursive: true });
@@ -475,16 +737,6 @@ function createDshRuntime(opts = {}) {
     const fdOut = fs.openSync(outFile, "w");
     const fdErr = fs.openSync(errFile, "w");
 
-    const profile = makeProfile(dshHome, settingsTemplate, persistentRunner);
-    const env = buildDshChildEnv(process.env, {
-      dshHome,
-      nodePath: opts.nodePath,
-      powerTokensApiKey: String(spec.apiKey || ""),
-      powerTokensBaseUrl: process.env.POWERTOKENS_BASE_URL,
-      dashInternalKey: process.env.PT_DASH_INTERNAL_KEY,
-      dashPort: process.env.DASH_PORT,
-    });
-    const identity = buildSpawnIdentity(opts);
 
     let child;
     try {
@@ -498,31 +750,95 @@ function createDshRuntime(opts = {}) {
     }
 
     const proc = {
-      child, outFile, errFile, fdOut, fdErr,
+      child, outFile, errFile, fdOut, fdErr, installation: discovered.installation,
       userId: spec.userId,               // 该常驻进程属于哪个 userId（1 用户 = 1 租户）
       lastSize: 0, lastUsed: Date.now(),
-      waiters: new Map(), lineBuf: "", ready: false,
-      pollTimer: null, killedByUser: false, timedOut: false, idleTimer: null,
+      metadataRequests: new Map(), chatActive: false, waiters: new Map(), toolRequests: new Map(), pendingTasks: new Map(), lineBuf: "", ready: false, protocolFailed: false,
+      pollTimer: null, idleTimer: null, draining: false, timeoutKillStarted: false, timeoutKillDeferred: false, retireScheduled: false,
     };
+    const readyTimeoutMs = Number.isSafeInteger(opts.readyTimeoutMs) && opts.readyTimeoutMs >= 250 ? opts.readyTimeoutMs : 10_000;
+    proc.readyTimer = setTimeout(() => failProtocol(proc, "DSH_PROTOCOL_HANDSHAKE_TIMEOUT"), readyTimeoutMs);
+    proc.readyTimer.unref?.();
     proc.pollTimer = setInterval(() => pollProc(proc), 50);
     persistentProcesses.set(key, proc);
 
     child.on("close", () => {
+      if (persistentProcesses.get(key) === proc && proc.draining) persistentProcesses.delete(key);
       try { clearInterval(proc.pollTimer); } catch (e) {}
+      try { clearInterval(proc.idleTimer); } catch (e) {}
+      proc.idleTimer = null;
+      if (proc.readyTimer) clearTimeout(proc.readyTimer);
+      proc.readyTimer = null;
+      clearToolRequests(proc);
+      for (const request of [...proc.metadataRequests.values()]) request.finish({ ok: false, code: "MODEL_INFO_UNAVAILABLE" });
       for (const [sid, w] of [...proc.waiters.entries()]) {
         proc.waiters.delete(sid);
-        const byTimeout = proc.timedOut === true;
+        if (w.abortGraceTimer) clearTimeout(w.abortGraceTimer);
+        if (w.timeoutTimer) clearTimeout(w.timeoutTimer);
+        const byTimeout = w.timedOut === true;
+        const byUser = w.abortRequested === true;
         w.resolve({
           ok: false, text: "",
-          error: byTimeout ? "生成超时，已中断" : (proc.killedByUser ? "已停止" : "常驻 DSH 进程退出"),
-          stopped: proc.killedByUser || byTimeout,
-          stopReason: byTimeout ? "timeout" : (proc.killedByUser ? "user" : undefined),
+          code: byTimeout ? "TIMEOUT" : "DSH_PROCESS_EXIT",
+          error: byTimeout ? "生成超时，已中断" : (byUser ? "已停止" : "常驻 DSH 进程退出"),
+          stopped: byTimeout || byUser,
+          stopReason: byTimeout ? "timeout" : (byUser ? "user" : undefined),
           steps: w.steps || [],
         });
       }
     });
 
+    // Cold read-only metadata also needs reclamation, without becoming a heartbeat target.
+    proc.idleTimer = setInterval(() => {
+      if (Date.now() - proc.lastUsed > idleMs && proc.waiters.size === 0 && proc.metadataRequests.size === 0) {
+        clearInterval(proc.idleTimer); proc.idleTimer = null;
+        proc.draining = true;
+        writeJson(proc, { type: "exit", protocolVersion: RPC_PROTOCOL_VERSION });
+        const timer = setTimeout(() => { try { proc.child.kill(); } catch {} }, 3000);
+        timer.unref?.();
+      }
+    }, Math.min(60_000, Math.max(25, idleMs)));
+    proc.idleTimer.unref?.();
     return { proc, fresh: true };
+  }
+
+  function describeModel(spec) {
+    const unavailable = (code) => Promise.resolve({ ok: false, code });
+    if (!spec || typeof spec.tenantId !== "string" || !spec.tenantId.trim()
+        || typeof spec.provider !== "string" || !/^[A-Za-z0-9_.:-]{1,128}$/.test(spec.provider)
+        || typeof spec.model !== "string" || !/^[A-Za-z0-9_./:@+-]{1,256}$/.test(spec.model)) return unavailable("MODEL_INFO_INVALID");
+    if (spec.signal?.aborted) return unavailable("MODEL_INFO_CANCELED");
+    if ([...persistentProcesses.values()].reduce((sum, proc) => sum + proc.metadataRequests.size, 0) >= 8) return unavailable("MODEL_INFO_BUSY");
+    const { proc } = getOrSpawnProcess(spec);
+    if (!proc || proc.draining || proc.protocolFailed) return unavailable("MODEL_INFO_UNAVAILABLE");
+    if (proc.metadataRequests.size) return unavailable("MODEL_INFO_BUSY");
+    return new Promise((resolve) => {
+      const requestId = "mi-" + crypto.randomBytes(16).toString("hex");
+      let timer;
+      const onAbort = () => request.finish({ ok: false, code: "MODEL_INFO_CANCELED" });
+      const request = {
+        provider: spec.provider, model: spec.model,
+        finish(result) {
+          if (!proc.metadataRequests.delete(requestId)) return;
+          clearTimeout(timer); spec.signal?.removeEventListener("abort", onAbort);
+          resolve(result);
+        },
+        dispatch() {
+          if (!proc.capabilities?.includes("model-info-v1")) {
+            request.finish({ ok: false, code: "MODEL_INFO_UNSUPPORTED" }); return;
+          }
+          writeJson(proc, { type: "describe_model", protocolVersion: RPC_PROTOCOL_VERSION,
+            requestId, provider: spec.provider, model: spec.model });
+        },
+      };
+      proc.metadataRequests.set(requestId, request);
+      const timeout = Number.isSafeInteger(opts.metadataTimeoutMs) && opts.metadataTimeoutMs >= 25
+        ? Math.min(opts.metadataTimeoutMs, 10_000) : 5000;
+      timer = setTimeout(() => request.finish({ ok: false, code: "MODEL_INFO_TIMEOUT" }), timeout);
+      spec.signal?.addEventListener("abort", onAbort, { once: true });
+      if (spec.signal?.aborted) onAbort();
+      else if (proc.ready) request.dispatch();
+    });
   }
 
   function run(spec) {
@@ -531,13 +847,24 @@ function createDshRuntime(opts = {}) {
     const workspace = spec.workspace;
 
     return new Promise((resolve) => {
-      const { proc, fresh, spawnError } = getOrSpawnProcess(spec);
+      const { proc, fresh, spawnError, spawnCode } = getOrSpawnProcess(spec);
       if (spawnError || !proc) {
         return resolve({
-          ok: false, code: "SPAWN", text: "", ms: 0, error: spawnError || "常驻进程启动失败",
+          ok: false, code: spawnCode || "SPAWN", text: "", ms: 0, error: spawnError || "常驻进程启动失败",
           workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")), fresh: false,
         });
       }
+      if (proc.draining) {
+        return resolve({ ok: false, code: "DSH_PROCESS_DRAINING", text: "", ms: 0,
+          error: "常驻 DSH 进程正在收敛，暂不可接收新任务", stopped: false,
+          workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")), fresh: false });
+      }
+      if (spec.recordModelIntents === true && proc.ready && !proc.capabilities?.includes("model-intent-v1")) {
+        return resolve({ ok: false, code: "DSH_MODEL_INTENT_UNSUPPORTED", text: "", ms: 0,
+          error: "DSH runner does not support durable model intents", stopped: false, fresh: false });
+      }
+
+      proc.chatActive = true;
 
       // 冷/热判断：新鲜进程 = 无存活 session，视为冷启动（补历史 + 用全新 sessionId）
       const warmRec = sessionKey ? warmSessions.get(sessionKey) : null;
@@ -562,35 +889,32 @@ function createDshRuntime(opts = {}) {
 
       const t0 = Date.now();
       let waiter; // 声明提前，供 job.abort() 引用 steps（避免 TDZ）
+      let timeoutTimer = null;
       const job = {
         stopped: false,
         abort() {
+          if (this.stopped) return;
           this.stopped = true;
-          writeJson(proc, { type: "abort", sessionId });
-          // 立即 resolve 为 stopped=true，不依赖 DSH done 帧
-          if (proc.waiters.has(sessionId)) {
-            proc.waiters.delete(sessionId);
-            resolve({
-          ok: false, text: "", ms: Date.now() - t0, error: "已停止",
-          stopped: true, stopReason: "user", steps: waiter.steps || [], fresh: !warm,
-          artifacts: collectRoundArtifacts(workspace, t0),
-          workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
-        });
+          if (!requestWaiterAbort(proc, sessionId) && !proc.pendingTasks.has(sessionId)) {
+            // onSpawn can observe an already-aborted signal before waiter creation.
+            return;
           }
         },
         kill() {
           this.abort();
-          setTimeout(() => {
-            if (proc.waiters.has(sessionId)) {
-              proc.killedByUser = true;
-              try { proc.child.kill(); } catch (e) {}
-            }
-          }, 3000);
         },
       };
       if (typeof spec.onSpawn === "function") { try { spec.onSpawn(job); } catch (e) {} }
+      if (job.stopped) {
+        resolve({ ok: false, text: "", ms: Date.now() - t0, error: "已停止", stopped: true, stopReason: "user", steps: [], fresh: !warm,
+          artifacts: collectRoundArtifacts(workspace, t0), workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")) });
+        return;
+      }
 
       waiter = {
+        onToolRequest: typeof spec.onToolRequest === "function"
+          ? (request) => spec.onToolRequest(request)
+          : null,
         onArtifact: spec.onArtifact,
         wsDir: workspace,
         onDelta: spec.onDelta,
@@ -599,15 +923,24 @@ function createDshRuntime(opts = {}) {
         extendDeadline,
         steps: [],
         resolve: (frame) => {
+          if (timeoutTimer) clearTimeout(timeoutTimer);
+          if (waiter.abortGraceTimer) clearTimeout(waiter.abortGraceTimer);
           const stopped = frame.stopped === true || frame.canceled === true || waiter.timedOut === true;
           const stopReason = stopped ? (frame.stopReason || (waiter.timedOut ? "timeout" : "user")) : undefined;
           resolve({
             ok: frame.ok !== false,
+            code: frame.code || null,
             text: frame.text || "",
             media: Array.isArray(frame.media) ? frame.media : null,
             artifacts: collectRoundArtifacts(workspace, t0),
             report: frame.report || null,
+            installation: proc.installation,
             usage: frame.usage || null,
+            budget: frame.budget && typeof frame.budget === "object" ? frame.budget : null,
+            usageEvidence: frame.usageEvidence && typeof frame.usageEvidence === "object" ? frame.usageEvidence : null,
+            modelIdentity: normalizeModelIdentity(frame.modelIdentity),
+            imageInput: frame.imageInput?.kind==='dsh-native-images-v1'&&Number.isSafeInteger(frame.imageInput.newImageCount)&&frame.imageInput.newImageCount>=0&&frame.imageInput.newImageCount<=4
+              ? {kind:'dsh-native-images-v1',newImageCount:frame.imageInput.newImageCount,capabilityChecked:frame.imageInput.capabilityChecked===true}:null,
             ms: frame.ms || (Date.now() - t0),
             error: frame.error || (frame.reasonDetail ? (frame.reasonDetail.code + ": " + frame.reasonDetail.message) : null),
             stopped,
@@ -619,34 +952,28 @@ function createDshRuntime(opts = {}) {
         },
       };
       proc.waiters.set(sessionId, waiter);
-      writeJson(proc, { type: "task", sessionId, task: fullTask, model: spec.model, tenantId });
+      const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, task: fullTask, model: spec.model, ...(spec.reasoningEffort === undefined ? {} : {reasoningEffort:spec.reasoningEffort}), tenantId,
+        ...((spec.inputImages !== undefined || (!warm && spec.historyInputImages?.length))
+          ? {inputImages:[...(!warm?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
+        ...(spec.recordModelIntents === true ? { recordModelIntents: true } : {}),
+        ...(spec.budgetProfile === "csv" || /^media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+      if (proc.ready) { waiter.taskDispatched = true; writeJson(proc, taskFrame); }
+      else proc.pendingTasks.set(sessionId, taskFrame);
 
       // 成功发送后标记 warm（会话在 DSH 侧存活；记录实际 sessionId）
       if (sessionKey) warmSessions.set(sessionKey, { tenantId, sessionId });
 
-      // 超时保护：先按 sessionId 优雅取消，3 秒没收敛再杀进程并返回超时。
+      // 超时先按 sessionId 优雅取消并保留 waiter；grace 到期后仅在没有
+      // 仍需保护的 sibling waiter 时才允许终止共享 child。
       // deadline 可被 extendDeadline() 动态放宽 —— 视频生成等长任务靠它把 3 分钟提到 65 分钟。
       const budget0 = spec.timeoutMs || taskTimeoutMs;
       let deadline = Date.now() + budget0;
-      let timeoutTimer = setTimeout(fireTimeout, budget0);
+      timeoutTimer = setTimeout(fireTimeout, budget0);
+      waiter.timeoutTimer = timeoutTimer;
       function fireTimeout() {
         if (!proc.waiters.has(sessionId)) return;
-        proc.timedOut = true;                    // 标记「这一轮是被超时掐断的」，与用户手动停止区分
         const w0 = proc.waiters.get(sessionId);
-        if (w0) w0.timedOut = true;
-        writeJson(proc, { type: "abort", sessionId });
-        setTimeout(() => {
-          if (!proc.waiters.has(sessionId)) return;
-          proc.waiters.delete(sessionId);
-          proc.killedByUser = true;
-          try { proc.child.kill(); } catch (e) {}
-          resolve({
-            ok: false, code: "TIMEOUT", text: "", ms: Date.now() - t0,
-            error: "生成超时，已中断", stopped: true, stopReason: "timeout", steps: w0 ? (w0.steps || []) : [], fresh: !warm,
-            artifacts: collectRoundArtifacts(workspace, t0),
-            workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
-          });
-        }, 3000);
+        if (w0) requestWaiterAbort(proc, sessionId, "timeout");
       }
       /** 放宽这一轮的超时预算到 now + ms（只放宽、不收紧），供视频生成等长任务动态提额。 */
       function extendDeadline(ms) {
@@ -656,19 +983,11 @@ function createDshRuntime(opts = {}) {
         deadline = next;
         try { clearTimeout(timeoutTimer); } catch (e) {}
         timeoutTimer = setTimeout(fireTimeout, Math.max(0, deadline - now));
+        waiter.timeoutTimer = timeoutTimer;
         return true;
       }
 
-      // 空闲回收：定时扫，超时退出进程
-      if (!proc.idleTimer) {
-        proc.idleTimer = setInterval(() => {
-          if (Date.now() - proc.lastUsed > idleMs && proc.waiters.size === 0) {
-            try { clearInterval(proc.idleTimer); proc.idleTimer = null; } catch (e) {}
-            writeJson(proc, { type: "exit" });
-            setTimeout(() => { try { proc.child.kill(); } catch (e) {} }, 3000);
-          }
-        }, 60 * 1000);
-      }
+
     });
   }
 
@@ -682,7 +1001,7 @@ function createDshRuntime(opts = {}) {
       // 心跳只针对「已存在且仍存活」的常驻进程，绝不为其冷启动新进程：
       // 这样才不会把心跳浪费在很久没登录、进程早已被回收的账号上。
       const proc = persistentProcesses.get(tenantId);
-      if (!proc || !proc.child || proc.child.exitCode !== null || proc.child.killed) {
+      if (!proc || !proc.chatActive || proc.draining || !proc.child || proc.child.exitCode !== null || proc.child.killed) {
         return resolve({ ok: false, skipped: true, error: "非活跃租户，跳过心跳（常驻进程已被回收）" });
       }
       const sessionId = "hb-" + Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex");
@@ -692,7 +1011,7 @@ function createDshRuntime(opts = {}) {
       const finish = (r) => {
         if (settled) return;
         settled = true;
-        writeJson(proc, { type: "close", sessionId }); // 用完即弃，防内存堆积 / 上下文增长
+        writeJson(proc, { type: "close", protocolVersion: RPC_PROTOCOL_VERSION, sessionId }); // 用完即弃，防内存堆积 / 上下文增长
         resolve(r);
       };
       const waiter = {
@@ -702,7 +1021,10 @@ function createDshRuntime(opts = {}) {
         resolve: (frame) => finish({ ok: frame.ok !== false, ms: frame.ms || (Date.now() - t0), error: frame.error || null, usage: frame.usage || null }),
       };
       proc.waiters.set(sessionId, waiter);
-      writeJson(proc, { type: "task", sessionId, task, model: spec.model, tenantId });
+      const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, task, model: spec.model, tenantId,
+        ...(spec.budgetProfile === "csv" || /^media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+      if (proc.ready) writeJson(proc, taskFrame);
+      else proc.pendingTasks.set(sessionId, taskFrame);
       setTimeout(() => {
         if (proc.waiters.has(sessionId)) {
           proc.waiters.delete(sessionId);
@@ -717,7 +1039,7 @@ function createDshRuntime(opts = {}) {
   function activeTenants() {
     const out = [];
     for (const [tenantId, proc] of persistentProcesses.entries()) {
-      if (proc && proc.child && proc.child.exitCode === null && !proc.child.killed) {
+      if (proc && proc.chatActive && !proc.draining && proc.child && proc.child.exitCode === null && !proc.child.killed) {
         out.push({ tenantId, userId: proc.userId || tenantId, lastUsed: proc.lastUsed || null });
       }
     }
@@ -732,7 +1054,7 @@ function createDshRuntime(opts = {}) {
     const dshSid = (rec && rec.sessionId) || sid;
     for (const proc of persistentProcesses.values()) {
       if (proc && proc.child && proc.child.exitCode === null) {
-        writeJson(proc, { type: "abort", sessionId: dshSid });
+        requestWaiterAbort(proc, dshSid);
       }
     }
   }
@@ -745,7 +1067,9 @@ function createDshRuntime(opts = {}) {
     const dshSid = (rec && rec.sessionId) || sid;
     for (const proc of persistentProcesses.values()) {
       if (proc && proc.child && proc.child.exitCode === null) {
-        writeJson(proc, { type: "close", sessionId: dshSid });
+        clearToolRequests(proc, dshSid);
+        proc.pendingTasks.delete(dshSid);
+        writeJson(proc, { type: "close", protocolVersion: RPC_PROTOCOL_VERSION, sessionId: dshSid });
       }
     }
   }
@@ -756,12 +1080,14 @@ function createDshRuntime(opts = {}) {
       try { clearInterval(proc.pollTimer); } catch (e) {}
       try { clearInterval(proc.idleTimer); } catch (e) {}
       persistentProcesses.delete(key);
-      writeJson(proc, { type: "exit" });
+      clearToolRequests(proc);
+      for (const request of [...proc.metadataRequests.values()]) request.finish({ ok: false, code: "MODEL_INFO_UNAVAILABLE" });
+      writeJson(proc, { type: "exit", protocolVersion: RPC_PROTOCOL_VERSION });
       setTimeout(() => { try { proc.child.kill(); } catch (e) {} }, 3000);
     }
   }
 
-  return { run, pulse, activeTenants, abort, closeSession, close };
+  return { run, describeModel, pulse, activeTenants, abort, closeSession, close };
 }
 
 module.exports = {
@@ -777,6 +1103,8 @@ module.exports = {
   findDshEntry,
   dshMissingHint,
   makeProfile,
+  rebuildProfile,
+  recoverProfile,
   buildDshChildEnv,
   buildSpawnIdentity,
 };

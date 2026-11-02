@@ -70,6 +70,7 @@ async function initConversations(db) {
       preview: preview.slice(0, 40),
       msgCount: msgs.length,
       archived: !!row.archived,
+      model_preference: row.model_preference ?? null,
       created_at: iso(row.created_at),
       updated_at: iso(row.updated_at),
     };
@@ -108,19 +109,21 @@ async function initConversations(db) {
   /** 列表：按最近更新时间倒序。 */
   async function list(userId) {
     const r = await db.query(
-      "SELECT id, title, messages, archived, created_at, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC, created_at DESC",
+      "SELECT id, title, messages, archived, model_preference, created_at, updated_at FROM conversations WHERE user_id = $1 ORDER BY updated_at DESC, created_at DESC",
       [userId]
     );
     return r.rows.map(rowToSummary);
   }
 
   /** 新建一个空对话，返回它的行。 */
-  async function create(userId) {
+  async function create(userId, options = {}) {
+    const model = options.modelPreference == null ? null : normalizeModel(options.modelPreference);
+    if (options.modelPreference != null && !model) return { ok: false, error: "模型不能为空或无效" };
     const r = await db.query(
-      `INSERT INTO conversations (user_id, title, messages, created_at, updated_at)
-       VALUES ($1, $2, '[]'::jsonb, now(), now())
-       RETURNING id, title, archived, created_at, updated_at`,
-      [userId, "新对话"]
+      `INSERT INTO conversations (user_id, title, messages, model_preference, created_at, updated_at)
+       VALUES ($1, $2, '[]'::jsonb, $3, now(), now())
+       RETURNING id, title, archived, model_preference, created_at, updated_at`,
+      [userId, "新对话", model]
     );
     const row = r.rows[0];
     return {
@@ -128,6 +131,7 @@ async function initConversations(db) {
       title: displayTitle(row.title),
       messages: [],
       archived: !!row.archived,
+      model_preference: row.model_preference ?? null,
       created_at: iso(row.created_at),
       updated_at: iso(row.updated_at),
     };
@@ -136,7 +140,7 @@ async function initConversations(db) {
   /** 读某用户某对话的完整历史；无权限/不存在返回 null。 */
   async function get(userId, id) {
     const r = await db.query(
-      "SELECT id, title, messages, archived, created_at, updated_at FROM conversations WHERE id = $1 AND user_id = $2",
+      "SELECT id, title, messages, archived, model_preference, created_at, updated_at FROM conversations WHERE id = $1 AND user_id = $2",
       [id, userId]
     );
     if (!r.rows.length) return null;
@@ -146,6 +150,7 @@ async function initConversations(db) {
       title: displayTitle(row.title),
       messages: normalize(row.messages),
       archived: !!row.archived,
+      model_preference: row.model_preference ?? null,
       created_at: iso(row.created_at),
       updated_at: iso(row.updated_at),
     };
@@ -202,16 +207,53 @@ async function initConversations(db) {
     if (!query) return [];
     const pattern = "%" + query + "%";
     const r = await db.query(
-      "SELECT id, title, messages, archived, created_at, updated_at FROM conversations " +
+      "SELECT id, title, messages, archived, model_preference, created_at, updated_at FROM conversations " +
       "WHERE user_id = $1 AND (title ILIKE $2 OR messages::text ILIKE $2) ORDER BY updated_at DESC",
       [userId, pattern]
     );
     return r.rows.map(rowToSummary);
   }
 
+  // Catalog eligibility belongs to the router; storage accepts bounded opaque model IDs.
+  function normalizeModel(model) {
+    if (typeof model !== "string") return null;
+    const value = model.trim();
+    return value && value.length <= 512 && !/[\u0000-\u001f\u007f]/.test(value) ? value : null;
+  }
+
+  /** null outer result means inaccessible/missing; null field means not snapshotted. */
+  async function getModelPreference(userId, id) {
+    const r = await db.query("SELECT model_preference FROM conversations WHERE id = $1 AND user_id = $2", [id, userId]);
+    return r.rows.length ? { modelPreference: r.rows[0].model_preference ?? null } : null;
+  }
+
+  async function writeModelPreference(userId, id, model, snapshotOnly) {
+    const value = normalizeModel(model);
+    if (!value) return { ok: false, error: "模型不能为空或无效" };
+    // One row update serializes competing snapshots, and never inserts an unknown conversation.
+    const r = await db.query(
+      `UPDATE conversations SET model_preference = ${snapshotOnly ? "COALESCE(model_preference, $1)" : "$1, reasoning_effort = NULL"}
+       WHERE id = $2 AND user_id = $3 RETURNING model_preference`, [value, id, userId]);
+    return r.rows.length ? { ok: true, modelPreference: r.rows[0].model_preference } : { ok: false, notFound: true };
+  }
+
+  async function getModelSelection(userId, id) {
+    const result = await db.query("SELECT model_preference, reasoning_effort FROM conversations WHERE id=$1 AND user_id=$2", [id,userId]);
+    return result.rows.length ? { model: result.rows[0].model_preference, reasoningEffort: result.rows[0].reasoning_effort ?? null } : null;
+  }
+  async function setModelSelection(userId, id, model, reasoningEffort = null) {
+    const value = normalizeModel(model);
+    if (!value || (reasoningEffort !== null && (value === "AUTO" || typeof reasoningEffort !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(reasoningEffort)))) return {ok:false};
+    const result = await db.query("UPDATE conversations SET model_preference=$1, reasoning_effort=$2 WHERE id=$3 AND user_id=$4 RETURNING model_preference, reasoning_effort", [value,reasoningEffort,id,userId]);
+    return result.rows.length ? {ok:true, model:result.rows[0].model_preference, reasoningEffort:result.rows[0].reasoning_effort ?? null} : {ok:false,notFound:true};
+  }
+
+  const setModelPreference = (userId, id, model) => writeModelPreference(userId, id, model, false);
+  const ensureModelPreference = (userId, id, defaultModel) => writeModelPreference(userId, id, defaultModel, true);
+
   await backfillLegacy();
 
-  return { list, create, get, rename, remove, saveMessages, setArchived, search };
+  return { list, create, get, rename, remove, saveMessages, setArchived, search, getModelPreference, setModelPreference, ensureModelPreference, getModelSelection, setModelSelection };
 }
 
 module.exports = { initConversations };

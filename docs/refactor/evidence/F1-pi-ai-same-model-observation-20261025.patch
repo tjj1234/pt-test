@@ -1,0 +1,16 @@
+# DRAFT ONLY — do not apply to shell/node_modules or ship as a live patch.
+# Exact installed input: @earendil-works/pi-ai 0.82.1, dist/api/openai-completions.js.
+# Production requires a controlled upstream/fork release with a pinned artifact.
+--- a/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
++++ b/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
+@@ -309,10 +309,10 @@
+                 // OpenAI documents ChatCompletionChunk.id as the unique chat completion identifier,
+                 // and each chunk in a streamed completion carries the same id.
+                 output.responseId ||= chunk.id;
+-                if (typeof chunk.model === "string" && chunk.model.length > 0 && chunk.model !== model.id) {
++                if (typeof chunk.model === "string" && chunk.model.length > 0) {
+                     output.responseModel ||= chunk.model;
+                 }
+                 if (chunk.usage) {
+                     output.usage = parseChunkUsage(chunk.usage, model);
+                 }

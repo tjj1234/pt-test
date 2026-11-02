@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "packageName": "@deepseek-ai/dsh",
+  "version": "0.1.1-rc.2",
+  "entry": "lib/bin.js",
+  "files": {
+    "LICENSE": "ebb4f09972aee8608be255debaf78451a68e95c290f55c240dec2ecfa16ea6be",
+    "README.i18n.yaml": "847ea7a03667479bde2c88073c9eeab4ed1900fee0966041ae95ebae160798b9",
+    "README.md": "800b93592c9fe99f5af4e2cac9eacf56388792af07542a7934b7e2e1bd210b61",
+    "README.zh.md": "820ae570e45cc7ef9e563c4d7dce69e872ab621a134f740fdf5c346406ae4ea6",
+    "config/agent-presets/code/agent.cordis.yml": "bdecfe0b26a9d56a2ffcb79694fc123bc395247969e135c62945a1ec8fb92e87",
+    "config/agent-presets/code/preset.yml": "ec3e1d288532a96dc35fd96c16c08ea6fd92893323039018f71a37988fc72580",
+    "config/agent-presets/cordis/agent.cordis.yml": "ddd9d54859c8888256046d32f569be7a07ae135c8380a75341fa4d9fcfe8ca94",
+    "config/agent-presets/cordis/preset.yml": "7c5f009d82dda01b0e3b4e24c143eaa988f275a8322719800a574bd05c72c0da",
+    "config/agent-presets/cordis/skills/cordis-plugin-development/SKILL.md": "01811d3ee9c03a466abae12d54d229e7de7bd74ca6b730c54ce9d5e696b294aa",
+    "config/agent-presets/cordis/skills/editing-cordis-compositions/SKILL.md": "b223233e9df5c8cbedeb7dee8d38ddc47d545af54b323abe3830f4748b688f6c",
+    "config/agent-presets/minimal/agent.cordis.yml": "c952e72ff87cb09e6d2700dcf806c6584a67cf867adcd103ec822a6c538d4f87",
+    "config/agent-presets/minimal/preset.yml": "f33f87aab99479706b9b969bc88090783ec7eb1390ab37d562618358a00a83fe",
+    "config/agent-presets/standard/agent.cordis.yml": "fa14feb98daef20b810fef30bb7239a89a786de3c45c602b37743f7100d9a5af",
+    "config/agent-presets/standard/preset.yml": "3c61b4ce68e5dd5cb2c099693fdcb30b91d5f22bbbef546e233321b0fa68f0e4",
+    "lib/bin.js": "c0226687bb20f45c603ec6fe50f3de16d1c3510c3a803304ec575ef9bc366c62",
+    "lib/dump-config-D-jtgwY3.js": "f75ee5e1f3a7392103029f1b254188975c57c41ef6f959c887c2163bc7aaf47d",
+    "lib/plugin-9h8shc4d.js": "6f4459da44f0e5bdb3c72471f4be0ee1929913be352baf8b0da7b700afc1804c",
+    "lib/profile-boot-BnJoK_kl.js": "778c5b338674d986a49972be920c965d28b2c8cac85364ae77f8587070397663",
+    "lib/profile-boot-DG5t9aNs.js": "f83ffea6a4d30cfbe02b41dabcc05104c4ad27bf79c74f601f0ddb6ccdf88969",
+    "package.json": "dc930c0b18158f49ae3753ceaf6b1b7ae71dc6c8f45c85a2d679b142024addf7"
+  },
+  "lock": {
+    "resolved": "file:vendor/deepseek-ai-dsh-0.1.1-rc.2.tgz",
+    "integrity": "sha512-UP1UIh6q3Gme/yXRn/QL2P8IsVlv8Shpg22TRJIZPsCRWLm4CBiA1MUvXmJAfsOEETBMLAl+xWPtFw6ICsN3wg=="
+  },
+  "vendorSha256": "47ec05f45ada5ab87779ae18a90456b5ebff5421dc0ff5c179677d65e1c16057",
+  "lockfileSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4"
+}

@@ -20,7 +20,7 @@ const crypto = require("crypto");
 
 const SHELL = __dirname;
 const REPO_ROOT = path.resolve(SHELL, "..");
-const RUNTIME = path.join(REPO_ROOT, "runtime");
+const RUNTIME = process.env.PT_RUNTIME_DIR ? path.resolve(process.env.PT_RUNTIME_DIR) : path.join(REPO_ROOT, "runtime");
 
 const WORKSPACES_ROOT = path.join(RUNTIME, "workspaces");
 const DSH_HOME = path.join(RUNTIME, "dsh-home");
@@ -180,6 +180,22 @@ function closeRuntime() {
 /* ============================================================================
  * runDshForUser(userId, question, opts) —— 业务组装 + 委托 runtime
  * ========================================================================== */
+async function describeModelForUser(userId, model, opts = {}) {
+  const uid = typeof userId === "string" ? userId.trim() : "";
+  if (!uid) return {ok:false,code:"NO_USER"};
+  if (opts.signal?.aborted) return {ok:false,code:"MODEL_INFO_CANCELED"};
+  try {
+    const decrypt = await resolveDecryptApiKey(opts);
+    const apiKey = decrypt && await decrypt(uid);
+    if (!apiKey || !String(apiKey).trim()) return {ok:false,code:NO_API_KEY_CODE};
+    const tenantId = String(opts.tenantId || uid);
+    const {workspace} = initTenantWorkspace(tenantId,opts);
+    const runtime = createRuntime();
+    if (typeof runtime.describeModel !== "function") return {ok:false,code:"MODEL_INFO_UNSUPPORTED"};
+    return await runtime.describeModel({tenantId,userId:uid,workspace,apiKey,provider:"powertokens",model,signal:opts.signal});
+  } catch { return {ok:false,code:"MODEL_INFO_UNAVAILABLE"}; }
+}
+
 async function runDshForUser(userId, question, opts = {}) {
   const uid = String(userId || "").trim();
   if (!uid) return { ok: false, code: "NO_USER", error: "缺少 userId" };
@@ -220,6 +236,9 @@ async function runDshForUser(userId, question, opts = {}) {
     sessionKey: opts.conversationId,
     tenantId,
     model: opts.model,
+    reasoningEffort: opts.reasoningEffort,
+    budgetProfile: opts.budgetProfile,
+    recordModelIntents: opts.recordModelIntents === true,
     apiKey,
     workspace,
     userId: uid,
@@ -228,6 +247,8 @@ async function runDshForUser(userId, question, opts = {}) {
     capabilities: opts.capabilities,
     memory: opts.memory,
     imageNote: opts.imageNote,
+    inputImages: opts.inputImages,
+    historyInputImages: opts.historyInputImages,
     docNote: opts.docNote,
     mediaNote: opts.mediaNote,
     gaNote: opts.gaNote,
@@ -237,6 +258,7 @@ async function runDshForUser(userId, question, opts = {}) {
     onDelta: opts.onDelta,
     onStep: opts.onStep,
     onSpawn: opts.onSpawn,
+    onToolRequest: opts.onToolRequest,
     timeoutMs: opts.timeoutMs,
   });
 }
@@ -301,6 +323,7 @@ module.exports = {
   initTenantWorkspace,
   ensureTenantWorkspace,
   runDshForUser,
+  describeModelForUser,
   heartbeat,
   activeHeartbeatTargets,
   closeDshSession,

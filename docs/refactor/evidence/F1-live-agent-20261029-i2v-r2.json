@@ -1,0 +1,115 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-30T01:48:44.626Z",
+  "models": [],
+  "runs": [
+    {
+      "taskType": "image2video",
+      "requestModel": "dreamina-seedance-2-0-mini-260615",
+      "status": "completed",
+      "at": "2026-10-30T01:48:47.910Z",
+      "inputSourceSha256": "3730be1b01a4450f902ee6ccbbd33006f3dcb5235189c349bb4e0a5d79daa550",
+      "inputByteCount": 119992,
+      "runId": "ec5acbc4-d9f4-433c-90a4-42625048e63f",
+      "httpStatus": 200,
+      "authorization": "explicit-single-submission",
+      "streamTail": "489Z\",\"parameterSummary\":\"本次固定5秒、720P、16:9。\"}}\n\nid: 8\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成5秒720P 16:9的视频，保留蓝色陶瓷咖啡杯和白色桌子，添加柔和的镜头移动效果\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2video\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\"}}\n\nid: 21\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成5秒720P 16:9的视频，保留蓝色陶瓷咖啡杯和白色桌子，添加柔和的镜头移动效果\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2video\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"已生成图生视频\",\"isError\":false}}\n\nid: 27\ndata: {\"delta\":\"已为您生成符合要求的图生视频，视频保留了蓝色陶瓷咖啡杯与白色桌子，搭配了柔和的镜头移动，参数为5秒时长、720P分辨率、16:9画幅。\"}\n\nid: 29\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-30T01:48:48.476Z\",\"role\":\"user\",\"text\":\"Use media_route exactly once with taskType image2video and the current uploaded image to generate one 5 second 720P 16:9 video. Keep the blue ceramic coffee cup and white table, with gentle camera movement. Actually call the video tool, then briefly confirm completion.\",\"image\":\"/uploads/dc67c238-a399-45b3-8335-9329817d8d0c/0a91b947895da9b861aaf0f90bdc2f72.jpg\",\"taskType\":\"image2video\",\"imageEvidence\":{\"ref\":\"/uploads/dc67c238-a399-45b3-8335-9329817d8d0c/0a91b947895da9b861aaf0f90bdc2f72.jpg\",\"size\":119992,\"sha256\":\"3730be1b01a4450f902ee6ccbbd33006f3dcb5235189c349bb4e0a5d79daa550\"}},{\"ts\":\"2026-10-30T01:50:44.251Z\",\"role\":\"assistant\",\"text\":\"已为您生成符合要求的图生视频，视频保留了蓝色陶瓷咖啡杯与白色桌子，搭配了柔和的镜头移动，参数为5秒时长、720P分辨率、16:9画幅。\",\"media\":[{\"url\":\"/api/run-media/ec5acbc4-d9f4-433c-90a4-42625048e63f/8cca3b88-f77e-4a97-8d48-50bc8c3032cb.mp4\",\"type\":\"video\"}],\"runId\":\"ec5acbc4-d9f4-433c-90a4-42625048e63f\",\"steps\":[{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"生成5秒720P 16:9的视频，保留蓝色陶瓷咖啡杯和白色桌子，添加柔和的镜头移动效果\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"image2video\\\\\\\",\\\\\\\"inputImageUrl\\\\\\\":\\\\\\\"current-upload\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"已生成图生视频\",\"isError\":false,\"modelName\":\"dreamina-seedance-2-0-mini-260615\",\"durationMs\":106304}]}],\"reply\":\"已为您生成符合要求的图生视频，视频保留了蓝色陶瓷咖啡杯与白色桌子，搭配了柔和的镜头移动，参数为5秒时长、720P分辨率、16:9画幅。\",\"turns\":1}\n\n",
+      "externalOperations": {
+        "operations": [
+          {
+            "operationId": "0fe84d17-417d-4e0f-b55c-11617a5c4b75",
+            "runId": "ec5acbc4-d9f4-433c-90a4-42625048e63f",
+            "operationKey": "ec5acbc4-d9f4-433c-90a4-42625048e63f:51359f8d-d634-459c-903c-504807d881ed",
+            "provider": "powertokens-video",
+            "status": "succeeded",
+            "taskId": "task_OaItZ2M4bHpvWtPpKoS1Um1qAth8h2Br",
+            "queryAttempts": 0,
+            "nextQueryAt": null,
+            "lastQuery": {
+              "reason": null,
+              "source": "host",
+              "attempt": 0,
+              "outcome": "succeeded",
+              "queried": false,
+              "observedAt": "2026-10-30T01:50:35.471Z",
+              "providerStatus": "succeeded"
+            },
+            "createdAt": "2026-10-30T01:49:00.670Z",
+            "updatedAt": "2026-10-30T01:50:35.471Z"
+          },
+          {
+            "operationId": "530d7ceb-165a-4a3c-9066-ad2f8be123ad",
+            "runId": "ec5acbc4-d9f4-433c-90a4-42625048e63f",
+            "operationKey": "ec5acbc4-d9f4-433c-90a4-42625048e63f:51359f8d-d634-459c-903c-504807d881ed:asset",
+            "provider": "powertokens_asset",
+            "status": "succeeded",
+            "taskId": "task_2610300948597021167",
+            "queryAttempts": 0,
+            "nextQueryAt": null,
+            "lastQuery": {
+              "reason": null,
+              "source": "host",
+              "attempt": 0,
+              "outcome": "succeeded",
+              "queried": true,
+              "observedAt": "2026-10-30T01:49:00.508Z",
+              "providerStatus": "succeeded"
+            },
+            "createdAt": "2026-10-30T01:48:57.047Z",
+            "updatedAt": "2026-10-30T01:49:00.509Z"
+          }
+        ],
+        "nextCursor": "530d7ceb-165a-4a3c-9066-ad2f8be123ad",
+        "hasMore": false
+      },
+      "managedMedia": {
+        "media": [
+          {
+            "type": "video",
+            "url": "/api/run-media/ec5acbc4-d9f4-433c-90a4-42625048e63f/8cca3b88-f77e-4a97-8d48-50bc8c3032cb.mp4",
+            "size": 2403785,
+            "sha256": "35373ee13f2b7eefd949cb763a1ae07e47c82a3016e69ef007ad0ae6feb6f6f7"
+          }
+        ],
+        "hasMore": false
+      },
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 1,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 2,
+            "maxOutputTokens": 512,
+            "maxToolCallsPerKey": 1
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 114153.141917,
+            "toolCalls": 1,
+            "costStatus": "unlimited",
+            "modelCalls": 2,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 1
+          }
+        }
+      ],
+      "inputBound": true,
+      "download": {
+        "status": 200,
+        "byteCount": 2403785,
+        "sha256": "35373ee13f2b7eefd949cb763a1ae07e47c82a3016e69ef007ad0ae6feb6f6f7",
+        "mime": "video/mp4"
+      },
+      "anonymousStatus": 401,
+      "historyManagedUrl": true
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-30T01:50:44.289Z"
+}

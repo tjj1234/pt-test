@@ -1,0 +1,20 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T09:09:51.053Z",
+  "models": [],
+  "runs": [],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "auto": {
+    "runId": "32c1b6f8-a12a-429b-b947-196a5ceaa686",
+    "status": "failed",
+    "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"done\":true,\"ok\":false,\"stopped\":false,\"messages\":[],\"turns\":0,\"code\":\"NO_ELIGIBLE_MODEL\",\"error\":\"没有满足当前文字对话资格的模型，请检查模型目录和资格状态。\",\"reasonCodes\":[\"CAPABILITY_UNKNOWN\",\"RUNTIME_UNVERIFIED\"]}\n\n",
+    "modelSelections": [],
+    "budgets": [],
+    "historyExpectedText": false
+  },
+  "result": "INCOMPLETE",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T09:09:54.396Z"
+}

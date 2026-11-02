@@ -1,0 +1,91 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T07:02:44.186Z",
+  "models": [],
+  "runs": [
+    {
+      "taskType": "text2image",
+      "requestModel": "seedream-5-0-260128",
+      "status": "completed",
+      "at": "2026-10-29T07:02:47.079Z",
+      "runId": "203ecaca-09a8-4b60-9dce-6a5616e79913",
+      "httpStatus": 200,
+      "authorization": "explicit-single-submission",
+      "streamTail": "ecaca-09a8-4b60-9dce-6a5616e79913\",\"taskType\":\"text2image\",\"expiresAt\":\"2026-10-29T07:04:47.421Z\",\"parameterSummary\":\"本次固定1张、2048×2048；Seedream 5.0关闭系列生成。\"}}\n\nid: 7\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"a single blue ceramic coffee cup on a white table\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2image\\\\\\\"}\\\"\",\"name\":\"media_route\"}}\n\nid: 13\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"a single blue ceramic coffee cup on a white table\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2image\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"已生成文生图\",\"isError\":false}}\n\nid: 15\ndata: {\"delta\":\"已\"}\n\nid: 16\ndata: {\"delta\":\"为\"}\n\nid: 17\ndata: {\"delta\":\"你\"}\n\nid: 18\ndata: {\"delta\":\"生成\"}\n\nid: 19\ndata: {\"delta\":\"符合\"}\n\nid: 20\ndata: {\"delta\":\"要求\"}\n\nid: 21\ndata: {\"delta\":\"的\"}\n\nid: 22\ndata: {\"delta\":\"蓝色\"}\n\nid: 23\ndata: {\"delta\":\"陶瓷\"}\n\nid: 24\ndata: {\"delta\":\"咖啡\"}\n\nid: 25\ndata: {\"delta\":\"杯\"}\n\nid: 26\ndata: {\"delta\":\"置于\"}\n\nid: 27\ndata: {\"delta\":\"白色\"}\n\nid: 28\ndata: {\"delta\":\"桌面\"}\n\nid: 29\ndata: {\"delta\":\"的\"}\n\nid: 30\ndata: {\"delta\":\"文\"}\n\nid: 31\ndata: {\"delta\":\"生\"}\n\nid: 32\ndata: {\"delta\":\"图\"}\n\nid: 33\ndata: {\"delta\":\"。\"}\n\nid: 39\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T07:02:47.410Z\",\"role\":\"user\",\"text\":\"Use media_route exactly once with taskType text2image to generate a single blue ceramic coffee cup on a white table. Do not provide instructions; actually call the image generation tool, then briefly confirm completion.\",\"taskType\":\"text2image\"},{\"ts\":\"2026-10-29T07:03:15.258Z\",\"role\":\"assistant\",\"text\":\"已为你生成符合要求的蓝色陶瓷咖啡杯置于白色桌面的文生图。\",\"media\":[{\"url\":\"/api/run-media/203ecaca-09a8-4b60-9dce-6a5616e79913/9b2c4915-349f-46fd-ac37-d6c60f613f4c.jpg\",\"type\":\"image\"}],\"runId\":\"203ecaca-09a8-4b60-9dce-6a5616e79913\",\"steps\":[{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"a single blue ceramic coffee cup on a white table\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2image\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"已生成文生图\",\"isError\":false,\"modelName\":\"seedream-5-0-260128\",\"durationMs\":18313}]}],\"reply\":\"已为你生成符合要求的蓝色陶瓷咖啡杯置于白色桌面的文生图。\",\"turns\":1}\n\n",
+      "externalOperations": {
+        "operations": [
+          {
+            "operationId": "5e3d6cdc-eb54-4b4c-bcee-b637d49ec669",
+            "runId": "203ecaca-09a8-4b60-9dce-6a5616e79913",
+            "operationKey": "203ecaca-09a8-4b60-9dce-6a5616e79913:8848f685-7a25-49cb-b99c-f82900c4d257",
+            "provider": "powertokens-image",
+            "status": "succeeded",
+            "taskId": null,
+            "queryAttempts": 0,
+            "nextQueryAt": null,
+            "lastQuery": {
+              "reason": null,
+              "source": "host",
+              "attempt": 0,
+              "outcome": "succeeded",
+              "queried": false,
+              "observedAt": "2026-10-29T07:03:10.210Z",
+              "providerStatus": "succeeded"
+            },
+            "createdAt": "2026-10-29T07:02:55.040Z",
+            "updatedAt": "2026-10-29T07:03:10.211Z"
+          }
+        ],
+        "nextCursor": "5e3d6cdc-eb54-4b4c-bcee-b637d49ec669",
+        "hasMore": false
+      },
+      "managedMedia": {
+        "media": [
+          {
+            "type": "image",
+            "url": "/api/run-media/203ecaca-09a8-4b60-9dce-6a5616e79913/9b2c4915-349f-46fd-ac37-d6c60f613f4c.jpg",
+            "size": 150097,
+            "sha256": "d934c68191d0f15edf135d18811a72cdd3c74a314503c426f47f79bcf4e49a2c"
+          }
+        ],
+        "hasMore": false
+      },
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 1,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 2,
+            "maxOutputTokens": 512,
+            "maxToolCallsPerKey": 1
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 25845.227875,
+            "toolCalls": 1,
+            "costStatus": "unlimited",
+            "modelCalls": 2,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 1
+          }
+        }
+      ],
+      "download": {
+        "status": 200,
+        "byteCount": 150097,
+        "sha256": "d934c68191d0f15edf135d18811a72cdd3c74a314503c426f47f79bcf4e49a2c",
+        "mime": "image/jpeg"
+      },
+      "anonymousStatus": 401,
+      "historyManagedUrl": true
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "result": "PASS",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T07:03:15.293Z"
+}

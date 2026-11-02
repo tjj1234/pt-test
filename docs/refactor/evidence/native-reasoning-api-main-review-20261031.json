@@ -1,0 +1,1 @@
+{"result":"NATIVE_VALIDATION_VERIFIED","metadataSource":"actual ctx.llm.resolveModelInfo","validation":"actual ctx.llm.resolveCallWithInfo / resolveCallConfig","supported":["low","high"],"unsupportedRejectedBeforeStream":true,"providerCalls":0}

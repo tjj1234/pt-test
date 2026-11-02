@@ -1,0 +1,14 @@
+{
+  "repository": "https://github.com/tjj1234/powertokens-video",
+  "commit": "0a601f4e91ae5993ddd275c1446290146bb7a4dd",
+  "originalGitBlob": "7a01e4131e8ea32dbebaa38a674533603debab24",
+  "license": "MIT",
+  "licenseGitBlob": "750b84f17777b9da1134c3e1fd84cc714d0b5e72",
+  "r3Patch": "docs/refactor/candidates/powertokens-video-engine-hardening-r3-20261027.patch",
+  "r3PatchSha256": "3a133d9d73948c8913526d6a3fdb53e2b84b4b3290e83bad10df5cf198bde2bd",
+  "mainOverlay": "docs/refactor/candidates/ptvideo-r3-main-overlay-20261028.patch",
+  "mainOverlaySha256": "6f0691dc0362731f206e59eab2dbc5b86f1140b2d73c0e6a95f9fb1f7a017afe",
+  "engineSha256": "08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351",
+  "licenseSha256": "40fee169a984cc6ffb627661d42f373d9bf200aad4a5f640e20049bef74c51c1",
+  "status": "reviewed-engine-and-host-adapter-wired; controlled-entry-default-off; no-provider-acceptance"
+}

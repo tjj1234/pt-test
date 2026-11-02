@@ -299,7 +299,7 @@ const ctx = vm.createContext({
   alert: () => {}, confirm: () => false, prompt: () => null,
   FileReader,
   Event: EventStub,
-  URLSearchParams,
+  URL, URLSearchParams,
   setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask,
 });
 // 先挂 chat-media.js（app.js 里 renderMessage 会用到 window.renderMediaInto）
@@ -630,7 +630,25 @@ console.log("\n[7] chat-media.js：audio 分支与既有行为");
   })()`);
   ok("音频加载失败时渲染兜底块", r5.cls === "bubmedia-fallback", r5.cls);
   ok("兜底文案说「音频」而不是「图片」", /音频加载失败/.test(String(r5.msg)), String(r5.msg));
-  ok("兜底块带上失败的 URL", String(r5.url) === "/uploads/broken.mp3", String(r5.url));
+  ok("兜底块不显示可能带签名的 URL", r5.url === undefined, String(r5.url));
+
+  const unsafe = run(`(function(){
+    var bub = document.createElement("div");
+    var any = window.renderMediaInto(bub, [
+      { type: "image", url: "javascript:alert(1)" },
+      { type: "image", url: "data:image/png;base64,AAAA" },
+      { type: "image", url: "https://user:secret@example.test/a.png" }
+    ]);
+    return { any: any, n: bub.children.length };
+  })()`);
+  ok("历史媒体拒绝危险协议和内嵌凭据", unsafe.any === false && unsafe.n === 0, JSON.stringify(unsafe));
+
+  const poster = run(`(function(){
+    var bub = document.createElement("div");
+    window.renderMediaInto(bub, [{ type: "video", url: "/uploads/safe.mp4", poster: "javascript:alert(1)" }]);
+    return bub.children[0].children[0].poster;
+  })()`);
+  ok("视频封面也拒绝危险协议", !poster, String(poster));
 
   // 视频兜底文案不受影响
   const r6 = run(`(function(){

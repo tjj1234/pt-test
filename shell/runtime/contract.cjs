@@ -27,6 +27,7 @@
  *     capabilities: object[],// [能力] 段（可空，如 [{ name, description }]，按当前用户授权过滤）
  *     memory: string,        // 长期记忆（可空）
  *     imageNote: string,     // 图片说明（可空）
+ *     inputImages: object[], // 可信宿主核验的{data:canonicalBase64,mediaType,name?}；Runner调用DSH原生附件服务，不接受外部URL/引用
  *     docNote: string,       // 文档正文说明（可空，纯文本上传后注入的上下文）
  *     mediaNote: string,     // 视频/音频附件说明（可空，模型无法解析内容，仅注入提示）
  *     gaNote: string,        // GA 查询已知错误码的固定说明（可空，防止 AI 现场编造入口/误判错误含义）
@@ -37,6 +38,9 @@
  *     onStep:  (step)=>void, // 工具轨迹回调
  *     onSpawn: (job)=>void,  // 返回 { abort(), kill() } 停止句柄
  *     timeoutMs: number,     // 超时（可选）
+ *     budgetProfile: string, // 可选可信host选择：csv或media:<已授权taskType>；工具args不得指定
+ *     recordModelIntents: boolean, // 可选：在真实模型请求前经 onToolRequest 确认宿主调用意图已持久化
+ *     onToolRequest: (request)=>Promise<object>, // 宿主 RPC（业务工具及保留的模型调用意图通道）
  *   }
  *
  * RunResult 形状（normalizeRunResult 归一）：

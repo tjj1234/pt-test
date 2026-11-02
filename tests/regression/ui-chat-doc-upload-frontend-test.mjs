@@ -124,14 +124,18 @@ async function fakeFetch(url, opts) {
     const b = JSON.parse((opts && opts.body) || "{}");
     const name = String(b.name || "");
     const ext = (name.split(".").pop() || "").toLowerCase();
-    if (["txt", "md", "csv"].indexOf(ext) < 0) return res({ ok: false, error: "仅支持 .txt / .md / .csv 纯文本文档" }, 400);
+    if (["txt", "md", "csv", "docx"].indexOf(ext) < 0) return res({ ok: false, error: "支持 .txt / .md / .csv / .docx" }, 400);
     const dm = /base64,([\s\S]*)$/.exec(String(b.data || ""));
     const buf = Buffer.from(dm ? dm[1] : "", "base64");
     if (!buf.length) return res({ ok: false, error: "文档数据无效" }, 400);
-    if (buf.length > 5 * 1024 * 1024) return res({ ok: false, error: "文档过大（单文件上限 5MB）" }, 400);
-    if (buf.indexOf(0) >= 0) return res({ ok: false, error: "不是有效的纯文本文件" }, 400);  // 对齐 decodeTextBuffer：NUL 一律拒绝
+    if (buf.length > (ext==='docx'?20:5) * 1024 * 1024) return res({ ok: false, error: "文档过大" }, 400);
+    if (ext!=='docx'&&buf.indexOf(0) >= 0) return res({ ok: false, error: "不是有效的纯文本文件" }, 400);  // DOCX内容解析由独立HTTP/worker测试覆盖
     db.docUploads++;
     return res({ ok: true, url: "/uploads/" + TENANT + "/doc" + db.docUploads + "." + ext, name, size: buf.length, chars: buf.length });
+  }
+  if (u === "/api/csv/selection-preview" && method === "POST") {
+    return res({ ok: true, preview: { sourceSha256: "a".repeat(64), columnLabel: "C1",
+      samples: [{ value: "0" }], type: "decimal", reason: null } });
   }
   if (u === "/api/chat" && method === "POST") {
     db.lastChatBody = JSON.parse((opts && opts.body) || "{}");
@@ -185,7 +189,7 @@ console.log("\n[1] 上传入口与拖拽复用");
   ok("聊天输入区有文档上传按钮 #docBtn", /id="docBtn"/.test(html));
   ok("有隐藏的 #docInput 文件选择框", /id="docInput"/.test(html));
   const acc = /id="docInput"[^>]*accept="([^"]*)"/.exec(html);
-  ok("accept 只收 .txt/.md/.csv", !!acc && /\.txt/.test(acc[1]) && /\.md/.test(acc[1]) && /\.csv/.test(acc[1]) && !/image|\.pdf/i.test(acc[1]), acc && acc[1]);
+  ok("accept 包含文本及DOCX", !!acc && /\.txt/.test(acc[1]) && /\.md/.test(acc[1]) && /\.csv/.test(acc[1]) && /\.docx/.test(acc[1]) && !/image|\.pdf/i.test(acc[1]), acc && acc[1]);
   ok("#docInput 允许多选（documents 是数组）", /id="docInput"[^>]*multiple/.test(html));
   ok("有提示条容器 #composerNotice", /id="composerNotice"/.test(html));
 
@@ -194,7 +198,7 @@ console.log("\n[1] 上传入口与拖拽复用");
   ok("拖拽逻辑仍只有一份（文档上传复用 attachDropZone，没重写）", dragCount === 1, "dragenter 出现 " + dragCount + " 次");
   ok("聊天输入区挂的是 handleComposerFile", /attachDropZone\(emptyInputEl,\s*handleComposerFile\)/.test(src));
 
-  ok("客户端扩展名白名单与后端一致", run("Array.from(DOC_EXT_WHITELIST).sort().join(',')") === "csv,md,txt");
+  ok("客户端扩展名白名单与后端一致", run("Array.from(DOC_EXT_WHITELIST).sort().join(',')") === "csv,docx,md,pptx,txt,xlsx");
   ok("客户端上限与后端默认一致（5MB）", run("DOC_MAX_BYTES") === 5 * 1024 * 1024);
 }
 
@@ -203,17 +207,31 @@ console.log("\n[2] 合法文档：点选 / 拖拽都能上传");
   resetComposer();
   ok("初始没有附加文档", run("pendingDocs.length") === 0);
 
-  for (const nm of ["a.txt", "b.md", "c.csv"]) {
+  for (const nm of ["a.txt", "b.md", "c.csv", "d.docx"]) {
     ctx.__F = mkFile(nm, 30, "text/plain");
     const r = await run("uploadDocFile(__F)");
     ok("上传 " + nm + " 成功", r === true);
   }
-  ok("三个文档都进了 pendingDocs", run("pendingDocs.length") === 3, "len=" + run("pendingDocs.length"));
+  ok("四个文档都进了 pendingDocs", run("pendingDocs.length") === 4, "len=" + run("pendingDocs.length"));
   ok("存的是后端返回的 /uploads/<租户>/... URL",
     run("pendingDocs.every(function(d){ return /^\\/uploads\\/[^/]+\\/[^/]+$/.test(d.url); })") === true,
     JSON.stringify(run("pendingDocs.map(function(d){return d.url;})")));
   ok("上传成功后有回执提示", /已附加/.test(noticeText()), noticeText());
-  ok("胶囊列表渲染出 3 个", ctx.document.querySelector("#docList").children.length === 3);
+  ok("胶囊列表渲染出 4 个", Array.from(ctx.document.querySelector("#docList").children).filter(child => child.className === "doc-chip").length === 4);
+  const chooseCsv = Array.from(ctx.document.querySelector("#docList").children).find(child => child.className === "doc-csv-select");
+  ok("CSV 显示显式列选择入口", Boolean(chooseCsv));
+  chooseCsv.dispatch("click");
+  const form = ctx.document.querySelector("#docList").children.at(-1);
+  ok("列选择表单含三个坐标输入", form.className === "doc-csv-selection" && form.children.slice(0, 3).every(label => label.children[0].tagName === "input"));
+  form.children[3].dispatch("click");
+  await tick();
+  ok("预览展示列名、样本、判定类型", /C1｜0｜decimal/.test(form.children[5].textContent));
+  ok("预览通过后可确认", form.children[4].disabled === false);
+  form.children[4].dispatch("click");
+  ok("确认后保存来源哈希和范围", run("pendingDocs[2].csvSelection.sourceSha256") === "a".repeat(64));
+  run("state.busy = false; state.activeId = 'c1'; var __csvCap = null; runChat = function(p){ __csvCap = p; };");
+  await run("ask('计算已确认的 CSV 列之和')");
+  ok("确认范围随聊天请求提交", run("Array.isArray(__csvCap?.csvSelections) && __csvCap.csvSelections[0]?.column === 1"));
 
   // 拖拽入口：往 #emptyInput 丢一个 .txt
   resetComposer();
@@ -239,7 +257,7 @@ console.log("\n[3] 非法文件：都要被拒绝且说清原因");
   resetComposer();
   ctx.__F = mkFile("report.pdf", 100, "application/pdf");
   ok("非文档扩展名被前端拒绝", (await run("uploadDocFile(__F)")) === false);
-  ok("提示里说清了只支持哪几类", /只支持 \.txt \/ \.md \/ \.csv/.test(noticeText()), noticeText());
+  ok("提示里说清了支持哪几类", /支持 \.txt \/ \.md \/ \.csv \/ \.docx/.test(noticeText()), noticeText());
   ok("被拒后不进 pendingDocs", run("pendingDocs.length") === 0);
   ok("被拒后没有真的发请求", db.docUploads === uploadCountBefore, "docUploads=" + db.docUploads + " vs " + uploadCountBefore);
 

@@ -1,0 +1,61 @@
+{
+  "source": "operator relay in conversation; summarized field counts, not raw cache contents",
+  "probeSha256": "d32772b6f281fe5d3a7db02b25a76f0c0b55140afec39904b4607e3cbd0ce52a",
+  "runtime": "/var/lib/northstar/runtime",
+  "filesScanned": 6,
+  "records": 480,
+  "allEnvelopesValid": true,
+  "readParseOrLimitErrors": 0,
+  "ptEndpointTasksMissing": 480,
+  "otherCheckedFieldShapeErrors": 0,
+  "files": [
+    {
+      "number": 1,
+      "sha256": "46c6e452d8fd7be69d4405bd7b1a6e0f76f45cbe00a6f8320250c631e761e250",
+      "bytes": 293316,
+      "mtime": "2026-10-22T10:15:56.000Z",
+      "records": 80,
+      "ptEndpointTasksMissing": 80
+    },
+    {
+      "number": 2,
+      "sha256": "a3aef4cb1e8eb8408ee2108eb3a236035643b3337442b223e4aab0c56c6ee300",
+      "bytes": 293556,
+      "mtime": "2026-10-22T06:09:09.861Z",
+      "records": 80,
+      "ptEndpointTasksMissing": 80
+    },
+    {
+      "number": 3,
+      "sha256": "a5e3a9d03d7281be0e2fc976c6e08211ea11ebe1fd9abee8e8e2b27740cb4f6a",
+      "bytes": 293556,
+      "mtime": "2026-10-22T07:48:19.915Z",
+      "records": 80,
+      "ptEndpointTasksMissing": 80
+    },
+    {
+      "number": 4,
+      "sha256": "4ff1061bd93f1ff52b6af4a16369cfc35f7751b4aeec5e02f073e7643255b0f9",
+      "bytes": 293556,
+      "mtime": "2026-10-22T07:38:45.990Z",
+      "records": 80,
+      "ptEndpointTasksMissing": 80
+    },
+    {
+      "number": 5,
+      "sha256": "e89ada9f0bd4ca6e57ce693dd52597d92e723d2da37bbc44f6b68323b8142898",
+      "bytes": 293556,
+      "mtime": "2026-10-23T01:45:04.360Z",
+      "records": 80,
+      "ptEndpointTasksMissing": 80
+    },
+    {
+      "number": 6,
+      "sha256": "d934ef137772cb35aa4657f496047944970fb06206a3c1ff7e4948e33e442f55",
+      "bytes": 293556,
+      "mtime": "2026-10-23T02:30:57.822Z",
+      "records": 80,
+      "ptEndpointTasksMissing": 80
+    }
+  ]
+}

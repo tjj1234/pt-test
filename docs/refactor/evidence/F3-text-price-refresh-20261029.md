@@ -1,0 +1,3 @@
+# F3 文本价格观察刷新（2026-10-29）
+
+只读核对[PT qwen3.8-flash模型页](https://powertokens.ai/models/qwen3.8-flash)与[官方价格页](https://powertokens.ai/pricing)：标准档USD/百万token，输入0.150、输出0.470、隐式/显式缓存读取均0.016、缓存创建0.200。新候选 `pt-text-prices-observed-20261029.json` 以2026-10-29T07:40:17Z为**观察时刻**，本地24小时有效窗口至2026-10-30T07:40:17Z；不主张该时间是供应商历史生效/失效时间，也不覆盖其他模型或档位。使用当前选择器离线核验：窗口内`selected`，窗口前`unknown/NO_MATCHING_SNAPSHOT`。此外在临时PGlite完成真实目录迁移、审核导入及按时刻选择，`selected`，目录ID`acdecffe830fc19f54f654534dc9112caf97c76663e273c0639956e88a8e4e3b`，来源SHA`ce78e45524348135bd81dd6b20626c439bd23aa88f4b8943bd8bb8505430105f`；测试库已删除。未导入产品库、未用于历史Run重新计费、未读取官方实际账单；生产导入仍需维护者确认来源正文与版本。

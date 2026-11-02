@@ -1,0 +1,54 @@
+--- a/pt-consume-record-r2-candidate.cjs
++++ b/pt-consume-record-r2-candidate.cjs
+@@ -162,6 +162,15 @@
+     }
+   }
+ 
++  function addStringBytes(value) {
++    // Reject on UTF-16 length before scanning an oversized string for UTF-8 bytes.
++    const remaining = MAX_PAYLOAD_BYTES - accumulatedBytes;
++    if (value.length > remaining) {
++      throw createInvalidError("Payload size exceeds maximum allowed boundary of 16 KiB");
++    }
++    addBytes(Buffer.byteLength(value, "utf8"));
++  }
++
+   function validateObjectLayer(obj, allowedKeys, maxKeys, depth, layerName) {
+     if (depth > MAX_DEPTH) {
+       throw createInvalidError("Maximum object depth exceeded");
+@@ -200,7 +209,7 @@
+       if (!allowedKeys.has(key)) {
+         throw createInvalidError(`Unknown field detected in ${layerName}`);
+       }
+-      addBytes(Buffer.byteLength(key, "utf8"));
++      addStringBytes(key);
+     }
+ 
+     // Inspect descriptors one by one
+@@ -231,7 +240,7 @@
+         }
+         addBytes(8);
+       } else if (typeof val === "string") {
+-        addBytes(Buffer.byteLength(val, "utf8"));
++        addStringBytes(val);
+       } else if (typeof val === "object") {
+         // Nested layer validation
+         if (layerName === "root" && key === "usage") {
+@@ -284,7 +293,7 @@
+       if (!ALLOWED_BILLING_KEYS.has(key)) {
+         throw createInvalidError("Unknown field detected in billing");
+       }
+-      addBytes(Buffer.byteLength(key, "utf8"));
++      addStringBytes(key);
+     }
+ 
+     for (let i = 0; i < ownNames.length; i++) {
+@@ -316,7 +325,7 @@
+         }
+         addBytes(8);
+       } else if (typeof val === "string") {
+-        addBytes(Buffer.byteLength(val, "utf8"));
++        addStringBytes(val);
+       } else {
+         throw createInvalidError("Forbidden data type in billing");
+       }

@@ -16,7 +16,7 @@ const browser=crypto.randomBytes(32).toString('base64url');
 const cfg={GOOGLE_CLIENT_ID:'client-test',GOOGLE_CLIENT_SECRET:'test-only-not-real',GOOGLE_REDIRECT_URI:'http://127.0.0.1:8090/api/auth/google/callback'};
 async function fixture() {
  const db=new PGlite();await db.waitReady;
- for(const f of ['001_auth.sql','012_google_identities.sql'])await db.exec(fs.readFileSync(path.join(root,'shell/db-migrations',f),'utf8'));
+ for(const f of ['001_auth.sql','012_google_identities.sql','019_account_disable.sql'])await db.exec(fs.readFileSync(path.join(root,'shell/db-migrations',f),'utf8'));
  let activeNonce='',claims={},exchangeFail=false,tamper=false,seenBody,tokenCalls=0;let clock=Date.now();
  const fetchImpl=async(url,opts)=>{
   if(String(url)===JWKS_URL)return new Response(JSON.stringify({keys:[jwk]}),{status:200,headers:{'Content-Type':'application/json'}});
@@ -92,6 +92,102 @@ test('concurrent callbacks for one subject create only one tenant and user',()=>
 
 test('token exchange failures expose no upstream secrets and consume state',()=>withFixture(async f=>{
  f.failExchange();const b=await f.begin(),result=await f.callback(b);assert.equal(result.ok,false);assert.ok(!JSON.stringify(result).includes('secret-auth-code'));assert.equal((await f.callback(b)).code,'INVALID_OAUTH_STATE');
+}));
+
+test('trusted account disable revokes sessions and blocks later Google sign-in; re-enable restores access',()=>withFixture(async f=>{
+ const signedIn=await f.callback(await f.begin());assert.equal(signedIn.ok,true);
+ const dbmod=require('./db.cjs'),original=dbmod.open;let legacy;
+ try{dbmod.open=async()=>({db:f.db,close:async()=>{}});legacy=await require('./auth.cjs').initAuth({migrationsDir:path.join(root,'tests/probes/nonexistent-migrations')});}finally{dbmod.open=original;}
+ assert.equal((await legacy.getSession(signedIn.token)).user.id,signedIn.user.id);
+ assert.deepEqual(await legacy.setAccountDisabled(signedIn.user.id,true),{ok:true,disabled:true});
+ assert.equal(await legacy.getSession(signedIn.token),null,'existing cookie must stop authenticating immediately');
+ assert.equal((await f.db.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1',[signedIn.user.id])).rows[0].n,0,'disable revokes persisted sessions');
+ assert.equal((await f.callback(await f.begin())).code,'ACCOUNT_DISABLED','Google callback cannot mint another session');
+ assert.equal((await f.db.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1',[signedIn.user.id])).rows[0].n,0);
+ assert.deepEqual(await legacy.setAccountDisabled(signedIn.user.id,false),{ok:true,disabled:false});
+ assert.equal((await f.callback(await f.begin())).ok,true,'trusted re-enable permits a new Google session');
+ assert.equal((await legacy.setAccountDisabled('not-a-uuid',true)).code,'INVALID_USER_ID');
+}));
+
+test('password session issuance serializes with account disable and cannot reappear after re-enable',()=>withFixture(async f=>{
+ const dbmod=require('./db.cjs'),originalOpen=dbmod.open;let legacy;
+ try{dbmod.open=async()=>({db:f.db,close:async()=>{}});legacy=await require('./auth.cjs').initAuth({migrationsDir:path.join(root,'tests/probes/nonexistent-migrations')});}finally{dbmod.open=originalOpen;}
+ const tenant=(await f.db.query("INSERT INTO tenants(name) VALUES ('disable-race') RETURNING id")).rows[0];
+ const {hashPassword}=require('./auth.cjs');
+ const user=(await f.db.query("INSERT INTO users(tenant_id,username,email,password_hash,role) VALUES ($1,'disable-race','disable-race@example.test',$2,'admin') RETURNING id",[tenant.id,hashPassword('RaceTest123')])).rows[0];
+ let entered,release;
+ const locked=new Promise(resolve=>{entered=resolve;});
+ const gate=new Promise(resolve=>{release=resolve;});
+ const txOriginal=f.db.transaction.bind(f.db);
+ f.db.transaction=(callback,...args)=>txOriginal(tx=>callback({
+  ...tx,
+  query:async(sql,params)=>{
+   const result=await tx.query(sql,params);
+   if(/SELECT .*password_hash.*FOR UPDATE/s.test(sql)){entered();await gate;}
+   return result;
+  },
+ }),...args);
+ try {
+  const loginPromise=legacy.login({username:'disable-race',password:'RaceTest123'});
+  await locked;
+  const disablePromise=legacy.setAccountDisabled(user.id,true);
+  release();
+  const [login,disabled]=await Promise.all([loginPromise,disablePromise]);
+  assert.equal(login.ok,true,'login that acquired the account lock may finish before disable');
+  assert.deepEqual(disabled,{ok:true,disabled:true});
+  assert.equal((await f.db.query('SELECT count(*)::int n FROM sessions WHERE user_id=$1',[user.id])).rows[0].n,0,'disable deletes a session issued immediately before it');
+  assert.deepEqual(await legacy.setAccountDisabled(user.id,false),{ok:true,disabled:false});
+  assert.equal(await legacy.getSession(login.token),null,'re-enable cannot resurrect the pre-disable cookie');
+ } finally {f.db.transaction=txOriginal;}
+}));
+
+test('disable-first lock wait makes password login reject without inserting a session',()=>withFixture(async f=>{
+ const dbmod=require('./db.cjs'),originalOpen=dbmod.open;let legacy;
+ try{dbmod.open=async()=>({db:f.db,close:async()=>{}});legacy=await require('./auth.cjs').initAuth({migrationsDir:path.join(root,'tests/probes/nonexistent-migrations')});}finally{dbmod.open=originalOpen;}
+ const tenant=(await f.db.query("INSERT INTO tenants(name) VALUES ('disable-first') RETURNING id")).rows[0];
+ const {hashPassword}=require('./auth.cjs');
+ const user=(await f.db.query("INSERT INTO users(tenant_id,username,email,password_hash,role) VALUES ($1,'disable-first','disable-first@example.test',$2,'admin') RETURNING id",[tenant.id,hashPassword('RaceTest123')])).rows[0];
+ let announceDisable,releaseDisable,announceLoginWait,disableComplete;
+ const disableStarted=new Promise(resolve=>{announceDisable=resolve;});
+ const disableGate=new Promise(resolve=>{releaseDisable=resolve;});
+ const loginWaiting=new Promise(resolve=>{announceLoginWait=resolve;});
+ const disabledCommitted=new Promise(resolve=>{disableComplete=resolve;});
+ const query=f.db.query.bind(f.db);
+ const txOriginal=f.db.transaction.bind(f.db);
+ // PGlite deliberately serializes its transactions, so model the row-lock
+ // wait at the transaction adapter seam while executing each SQL statement
+ // against the real fixture database after the preceding transaction commits.
+ f.db.transaction=async callback=>{
+  let isDisable=false;
+  try {
+   return await callback({
+    query:async(sql,params)=>{
+     if(/^\s*UPDATE users SET disabled_at/i.test(sql)) {
+      isDisable=true;
+      announceDisable();
+      await disableGate;
+     }
+     if(/SELECT .*password_hash.*FOR UPDATE/s.test(sql)) {
+      announceLoginWait();
+      await disabledCommitted;
+     }
+     return query(sql,params);
+    },
+    exec:async sql=>f.db.exec(sql),
+   });
+  } finally { if(isDisable)disableComplete(); }
+ };
+ try {
+  const disablePromise=legacy.setAccountDisabled(user.id,true);
+  await disableStarted;
+  const loginPromise=legacy.login({username:'disable-first',password:'RaceTest123'});
+  await loginWaiting;
+  releaseDisable();
+  const [disabled,login]=await Promise.all([disablePromise,loginPromise]);
+  assert.deepEqual(disabled,{ok:true,disabled:true});
+  assert.equal(login.ok,false,'login resumes after the disable transaction and sees the locked row state');
+  assert.equal((await query('SELECT count(*)::int n FROM sessions WHERE user_id=$1',[user.id])).rows[0].n,0,'disable-first path creates no session');
+ } finally {f.db.transaction=txOriginal;}
 }));
 
 test('fixed configuration rejects arbitrary redirect protocol',async()=>{

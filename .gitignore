@@ -92,3 +92,7 @@ conv/run-local.cjs
 conv/run-browser-server.cjs
 conv/test-v11.cjs
 conv/hello.txt
+
+# Northstar TLS material: keep private keys out of Git and release archives.
+/adorado.top.key
+/adorado.top.pem

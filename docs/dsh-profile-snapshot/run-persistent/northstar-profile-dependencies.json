@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "shellLockfileSha256": "795b97b08935f4320c8d2567ff101d051b2e643c316093513f2031c7ffc9f912",
+  "shellNpmrcSha256": "a093bb2fed59d699b7f9a62a5203cc196054c624e9c39c6d908c9e7db5dd2464",
+  "bundles": {
+    "@deepseek-ai/dsh-base": {
+      "version": "0.1.1-rc.2",
+      "resolved": "https://registry.npmjs.org/@deepseek-ai/dsh-base/-/dsh-base-0.1.1-rc.2.tgz",
+      "integrity": "sha512-DT1kSaseoTZ0b8pwZ5biRkqez2K8AnsLataRiCPsn3uUuxupZOjM1e8x9W+kpkWWFykWy1mbCPhzDRVJ+pLCbg=="
+    }
+  }
+}

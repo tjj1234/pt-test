@@ -159,9 +159,23 @@ run('mergeArtifacts([{ rel: "c.html", kind: "html", url: "/api/artifact?p=c.html
 ok("merge 并入新项", run("artItems.length") === 3);
 ok("merge 去重", run("artItems.filter((x) => x.rel === 'b.md').length") === 1);
 ok("merge 非数组不炸", (() => { try { run("mergeArtifacts(null); mergeArtifacts(undefined);"); return true; } catch (e) { return false; } })());
+run('artItems = []; artIndex = 0; pushArtifact({ rel: "safe/report.pdf", url: "https://evil.example/x", kind: "html", name: "spoof" });');
+ok("忽略历史URL/类型伪造并重建同源产物链接", run('artItems[0].url === "/api/artifact?p=safe%2Freport.pdf" && artItems[0].kind === "pdf"'));
+const beforeUnsafe = run("artItems.length");
+run('pushArtifact({ rel: "../outside.pdf", url: "/api/artifact?p=../outside.pdf" }); pushArtifact({ rel: "https://evil.example/a.pdf", url: "https://evil.example/a.pdf" }); pushArtifact({ rel: "notes.txt", url: "/api/artifact?p=notes.txt" });');
+ok("拒绝越界路径、URL形路径及不支持扩展名", run("artItems.length") === beforeUnsafe);
+
+/* ---------------- 历史会话重新打开 ---------------- */
+console.log("\n[5] renderChat：恢复历史产物并清除上一会话状态");
+run('renderChat([{ role: "user", text: "请生成报告" }, { role: "assistant", text: "已生成", artifacts: [{ rel: "reports/old.pdf", kind: "pdf", url: "javascript:alert(1)", name: "伪造名称" }] }]);');
+ok("历史 assistant 产物恢复到面板", run('artItems.length === 1 && artItems[0].rel === "reports/old.pdf"'));
+ok("重新打开历史对话时展示面板", run('document.querySelector("#artPane").hidden === false'));
+ok("恢复后的预览URL仍为本地API", run('document.querySelector("#artBody").children[0].src === "/api/artifact?p=reports%2Fold.pdf"'));
+run('renderChat([{ role: "user", text: "新对话" }]);');
+ok("切换到无产物会话清空旧状态、隐藏面板并移除旧iframe", run('artItems.length === 0 && document.querySelector("#artPane").hidden === true && document.querySelector("#artBody").children.length === 0'));
 
 /* ---------------- 面板渲染 ---------------- */
-console.log("\n[5] renderArtifactPane：iframe / md");
+console.log("\n[6] renderArtifactPane：iframe / md");
 run("artItems = []; artIndex = 0;");
 run('pushArtifact({ rel: "r.pdf", kind: "pdf", url: "/api/artifact?p=r.pdf", name: "r.pdf" });');
 run("renderArtifactPane();");
@@ -186,6 +200,12 @@ await new Promise((r) => setTimeout(r, 10));
 ok("md 拉的是产物 URL", lastFetched === "/api/artifact?p=d.md");
 ok("md 渲染成 HTML", run('document.querySelector("#artBody").children[0].innerHTML').indexOf("<h1>") === 0);
 ok("md 不走 iframe", run('document.querySelector("#artBody").children[0].tagName') === "div");
+
+run("artItems = []; artIndex = 0;");
+run('pushArtifact({ rel: "results/a.csv", kind: "html", url: "https://evil.example/a.csv", name: "a.csv" });');
+run("renderArtifactPane();");
+ok("CSV 使用同源下载链接", run('document.querySelector("#artBody").children[0].href') === "/api/artifact?p=results%2Fa.csv");
+ok("CSV 不在 iframe 中预览", run('document.querySelector("#artBody").children[0].tagName') === "a");
 
 run("closeArtifactPane();");
 ok("关闭后面板隐藏", run('document.querySelector("#artPane").hidden') === true);

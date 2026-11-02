@@ -1,0 +1,91 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T06:53:46.034Z",
+  "models": [],
+  "runs": [
+    {
+      "taskType": "text2image",
+      "requestModel": "seedream-5-0-260128",
+      "status": "failed",
+      "at": "2026-10-29T06:53:49.219Z",
+      "runId": "2b6a40f6-97e3-4a5c-bfb3-a03428fc390d",
+      "httpStatus": 200,
+      "authorization": "explicit-single-submission",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 5\ndata: {\"mediaAuthorization\":{\"runId\":\"2b6a40f6-97e3-4a5c-bfb3-a03428fc390d\",\"taskType\":\"text2image\",\"expiresAt\":\"2026-10-29T06:55:49.576Z\",\"parameterSummary\":\"本次固定1张、2048×2048；Seedream 5.0关闭系列生成。\"}}\n\nid: 7\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"a single blue ceramic coffee cup on a white table\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2image\\\\\\\"}\\\"\",\"name\":\"media_route\"}}\n\nid: 13\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"a single blue ceramic coffee cup on a white table\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2image\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"Error: tool \\\"media_route\\\" returned invalid output: \\\"value.managed\\\" is not a declared property (additionalProperties: false)\",\"isError\":true}}\n\nid: 15\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"a single blue ceramic coffee cup on a white table\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2image\\\\\\\"}\\\"\",\"name\":\"media_route\"}}\n\nid: 16\ndata: {\"step\":{\"args\":\"\\\"{\\\\\\\"prompt\\\\\\\":\\\\\\\"a single blue ceramic coffee cup on a white table\\\\\\\",\\\\\\\"taskType\\\\\\\":\\\\\\\"text2image\\\\\\\"}\\\"\",\"name\":\"media_route\",\"result\":\"Error: Run stopped because the tool-call budget was exhausted\",\"isError\":true}}\n\nid: 22\ndata: {\"done\":true,\"ok\":false,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-29T06:53:49.565Z\",\"role\":\"user\",\"text\":\"Use media_route exactly once with taskType text2image to generate a single blue ceramic coffee cup on a white table. Do not provide instructions; actually call the image generation tool, then briefly confirm completion.\",\"taskType\":\"text2image\"},{\"ts\":\"2026-10-29T06:54:22.187Z\",\"role\":\"assistant\",\"text\":\"（DSH 执行失败：Run stopped because the model-call budget was exhausted）\",\"runId\":\"2b6a40f6-97e3-4a5c-bfb3-a03428fc390d\"}],\"reply\":\"（DSH 执行失败：Run stopped because the model-call budget was exhausted）\",\"turns\":1,\"code\":\"RUN_MODEL_CALL_LIMIT\",\"error\":\"Run stopped because the model-call budget was exhausted\"}\n\n",
+      "externalOperations": {
+        "operations": [
+          {
+            "operationId": "f52c5658-faf3-4bca-8015-abe6d1dc236f",
+            "runId": "2b6a40f6-97e3-4a5c-bfb3-a03428fc390d",
+            "operationKey": "2b6a40f6-97e3-4a5c-bfb3-a03428fc390d:148de2e5-ad7a-4616-83cf-ffb22019940b",
+            "provider": "powertokens-image",
+            "status": "succeeded",
+            "taskId": null,
+            "queryAttempts": 0,
+            "nextQueryAt": null,
+            "lastQuery": {
+              "reason": null,
+              "source": "host",
+              "attempt": 0,
+              "outcome": "succeeded",
+              "queried": false,
+              "observedAt": "2026-10-29T06:54:14.508Z",
+              "providerStatus": "succeeded"
+            },
+            "createdAt": "2026-10-29T06:53:57.867Z",
+            "updatedAt": "2026-10-29T06:54:14.509Z"
+          }
+        ],
+        "nextCursor": "f52c5658-faf3-4bca-8015-abe6d1dc236f",
+        "hasMore": false
+      },
+      "managedMedia": {
+        "media": [
+          {
+            "type": "image",
+            "url": "/api/run-media/2b6a40f6-97e3-4a5c-bfb3-a03428fc390d/44741701-8a94-489c-8a35-5f949d2a5cb8.jpg",
+            "size": 121400,
+            "sha256": "30e605ddba5062a911f75bc06895c71d633d8d1e293ffee71bde696d06957194"
+          }
+        ],
+        "hasMore": false
+      },
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 1,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 2,
+            "maxOutputTokens": 512,
+            "maxToolCallsPerKey": 1
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 30994.602833,
+            "toolCalls": 1,
+            "costStatus": "unlimited",
+            "modelCalls": 2,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 1
+          }
+        }
+      ],
+      "download": {
+        "status": 200,
+        "byteCount": 121400,
+        "sha256": "30e605ddba5062a911f75bc06895c71d633d8d1e293ffee71bde696d06957194",
+        "mime": "image/jpeg"
+      },
+      "anonymousStatus": 401,
+      "historyManagedUrl": false
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "result": "INCOMPLETE",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T06:54:22.217Z"
+}

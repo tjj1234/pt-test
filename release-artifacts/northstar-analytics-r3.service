@@ -1,0 +1,25 @@
+[Unit]
+Description=Northstar Analytics (Controlled Trial)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=northstar
+Group=northstar
+WorkingDirectory=/opt/northstar/releases/controlled-trial-20261021-r3/analytics
+EnvironmentFile=/etc/northstar/northstar.env
+ExecStart=/usr/local/bin/node /opt/northstar/releases/controlled-trial-20261021-r3/analytics/start.cjs --no-seed
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=45
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/northstar/analytics
+SyslogIdentifier=northstar-analytics
+
+[Install]
+WantedBy=multi-user.target

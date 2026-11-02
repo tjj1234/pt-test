@@ -1,0 +1,926 @@
+{
+  "at": "2026-10-30T04:06:45.606Z",
+  "scope": "same-Key-GET-only-model-facts",
+  "httpStatus": 200,
+  "count": 83,
+  "models": [
+    {
+      "id": "audio1.0",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "vidu"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "deepseek-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "deepseek-v3-2-251201",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "deepseek-v4-1-flash-260910",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "deepseek-v4-pro",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "dola-seedream-5-0-pro-260628",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "dreamina-seedance-2-0-260128",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "byteplus"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "dreamina-seedance-2-0-fast-260128",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "byteplus"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "dreamina-seedance-2-0-mini-260615",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "byteplus"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "dreamina-seedance-2-5-260628",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "byteplus"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-4.5-air",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-4.7",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-4.7-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-5",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-5-turbo",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-5.1",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-5.2",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-5.3",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "glm-5.3-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "happyhorse-1.1-i2v",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "happyhorse-1.1-r2v",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "happyhorse-1.1-t2v",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "image-01",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "kling-image-o1",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "kling"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "kling-v2-5-turbo",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "kling",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "kling-v3",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "kling",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "kling-v3-omni",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "kling",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "kling-video-o1",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "kling",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "mimo-v2.6-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "mimo-v2.6-pro",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-H3-Max",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-Hailuo-02",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-Hailuo-2.3",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-Hailuo-2.3-Fast",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-M2.5",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-M2.5-highspeed",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-M2.7",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-M2.7-highspeed",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-M3",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "MiniMax-M3.1-Flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen-image-2.0-pro",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen-image-3.0-pro",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3-coder-plus",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3-max",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3-tts-instruct-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3.5-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3.6-plus",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3.7-max",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3.7-plus",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3.8-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "qwen3.8-max",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seed-1-6-250915",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seed-1-6-flash-250715",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seed-1-8-251228",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seed-2-0-lite-260228",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seed-2-0-mini-260215",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seed-2-0-pro-260328",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "anthropic",
+        "openai",
+        "openai-response"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seedance-1-0-pro-250528",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "byteplus"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seedance-1-0-pro-fast-251015",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "byteplus"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seedance-1-5-pro-251215",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "byteplus"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seedream-4-0-250828",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seedream-4-5-251128",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "seedream-5-0-260128",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "speech-02-hd",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "speech-02-turbo",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "speech-2.6-hd",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "speech-2.6-turbo",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "speech-2.8-hd",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "speech-2.8-turbo",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "viduq2",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "vidu"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "viduq3",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "vidu",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "viduq3-pro",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "vidu",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "viduq3-pro-fast",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "vidu",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "viduq3-turbo",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "vidu",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "viduq4-preview",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "vidu",
+        "openai-video"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan2.1-kf2v-plus",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan2.2-kf2v-flash",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan2.7-i2v",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan2.7-image-pro",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "image-generation",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan2.7-r2v",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan2.7-t2v",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan3.0-video",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    },
+    {
+      "id": "wan3.0-video-prime",
+      "inputModalities": null,
+      "outputModalities": null,
+      "supportedTasks": null,
+      "endpoints": [
+        "openai-video",
+        "openai"
+      ],
+      "explicitImageUnderstanding": null
+    }
+  ],
+  "paidPosts": 0
+}

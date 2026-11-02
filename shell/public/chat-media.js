@@ -20,12 +20,24 @@
   function pickUrl(m) {
     if (!m || typeof m !== "object") return null;
     const u = m.url != null ? m.url : m.src;
-    return (typeof u === "string" && u.trim()) ? u.trim() : null;
+    if (typeof u !== "string" || !u.trim()) return null;
+    try {
+      const parsed = new URL(u.trim(), location.href);
+      if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return null;
+      if (parsed.username || parsed.password) return null;
+      return u.trim();
+    } catch (_) { return null; }
   }
 
   function pickType(m) {
     const t = m && (m.type != null ? m.type : m.kind);
     return t ? String(t).toLowerCase() : "";
+  }
+
+  function pickPoster(value) {
+    if (typeof value === "string" && value.length <= 512 * 1024 &&
+        /^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/]+={0,2}$/.test(value)) return value;
+    return pickUrl({ url: value });
   }
 
   /* 给媒体起个下载文件名：优先用 URL 末段；拿不到扩展名就按类型补 .mp4/.mp3/.png */
@@ -87,7 +99,7 @@
   }
 
   /* 加载失败兜底：用一段文案替换破图标 / 空白。kind 决定文案（图片/视频/音频）。 */
-  function makeFallback(kind, url) {
+  function makeFallback(kind) {
     const fb = document.createElement("div");
     fb.className = "bubmedia-fallback";
     const label = kind === "video" ? "视频" : (kind === "audio" ? "音频" : "图片");
@@ -95,20 +107,14 @@
     msg.className = "bubmedia-fallback-msg";
     msg.textContent = label + "加载失败，请检查链接";
     fb.appendChild(msg);
-    if (url) {
-      const u = document.createElement("span");
-      u.className = "bubmedia-fallback-url";
-      u.textContent = url;
-      fb.appendChild(u);
-    }
     return fb;
   }
 
   /* 绑定 onerror：加载失败时把破媒体节点替换成兜底文案（优先 replaceChild，降级 appendChild）。
      媒体元素现在包在 wrap 里，所以优先在 el.parentNode（wrap）内替换；都不行就追加到 bub。 */
-  function attachErrorFallback(el, kind, url, bub) {
+  function attachErrorFallback(el, kind, bub) {
     el.onerror = function () {
-      const fb = makeFallback(kind, url);
+      const fb = makeFallback(kind);
       const parent = el.parentNode;
       if (parent && parent.replaceChild) {
         try { parent.replaceChild(fb, el); return; } catch (e) { /* fallthrough */ }
@@ -130,19 +136,20 @@
       if (type === "video") {
         const v = document.createElement("video");
         v.className = "bubmedia bubvideo";
-        attachErrorFallback(v, "video", url, bub); // 先绑 onerror 再设 src，避免漏掉错误事件
+        attachErrorFallback(v, "video", bub); // 先绑 onerror 再设 src，避免漏掉错误事件
         v.src = url;
         v.controls = true;
         v.preload = "metadata";
         // 上传时截好的首帧：有的话先显示，别让气泡里先黑一块再出画面
-        if (m.poster) v.poster = m.poster;
+        const poster = pickPoster(m.poster);
+        if (poster) v.poster = poster;
         v.setAttribute("playsinline", "");
         el = v;
       } else if (type === "audio") {
         // 音频：与 video 分支同一套写法，只换成 <audio>（自带浏览器原生播放器，无需 poster/playsinline）
         const a = document.createElement("audio");
         a.className = "bubmedia bubaudio";
-        attachErrorFallback(a, "audio", url, bub); // 先绑 onerror 再设 src
+        attachErrorFallback(a, "audio", bub); // 先绑 onerror 再设 src
         a.src = url;
         a.controls = true;
         a.preload = "metadata";
@@ -150,7 +157,7 @@
       } else {
         const img = document.createElement("img");
         img.className = "bubmedia";
-        attachErrorFallback(img, "image", url, bub); // 先绑 onerror 再设 src
+        attachErrorFallback(img, "image", bub); // 先绑 onerror 再设 src
         img.src = url;
         img.alt = "图片";
         img.loading = "lazy";

@@ -453,3 +453,4 @@ node tests/regression/seam-smoke.mjs
 - PT 能力来源：[官方模型目录](https://powertokens.ai/models)、[官方文档索引](https://docs.powertokens.ai/llms.txt)；实际鉴权元数据与可调用端点由 T00 获取并固化。
 
 **任务包完成不代表功能完成。当前可交付的是实施规格与验收边界；一期产品完成必须以 AC01–AC18 的真实证据为准。**
+x V

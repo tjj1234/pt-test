@@ -53,22 +53,29 @@ async function createStorage(opts = {}) {
     close,  // 唯一 close 所有权，并发／重复调用不重复关闭
   });
 
-  // ③ 领域仓储：复用同一个 db，签名不变，加契约断言
-  const keys = assertRepository(await keysMod.initKeys({ db, masterKeyFile: opts.masterKeyFile }),
-    ["encryptApiKey", "decryptApiKey", "getKeyMeta"]);
-  const conversations = assertRepository(await convMod.initConversations(db),
-    ["list", "create", "get", "rename", "remove", "saveMessages", "setArchived", "search"]);
-  const memory = assertRepository(await memoryMod.initMemory(db),
-    ["list", "set", "del", "memoryLines", "getModel", "setModel"]);
+  try {
+    // ③ 领域仓储：复用同一个 db，签名不变，加契约断言
+    const keys = assertRepository(await keysMod.initKeys({ db, masterKeyFile: opts.masterKeyFile }),
+      ["encryptApiKey", "decryptApiKey", "getKeyMeta"]);
+    const conversations = assertRepository(await convMod.initConversations(db),
+      ["list", "create", "get", "rename", "remove", "saveMessages", "setArchived", "search"]);
+    const memory = assertRepository(await memoryMod.initMemory(db),
+      ["list", "set", "del", "memoryLines", "getModel", "setModel"]);
 
-  return {
-    adapter,
-    repositories: { auth, conversations, keys, memory },
-    db,               // 过渡期：老代码若还引用 db 仍可拿到（目标是逐步去掉）
-    ownsDb: false,    // auth 拥有连接；storage 借用，close 委托给 auth.close
-    migrate: () => dbmod.migrate(db, migrationsDir),  // 幂等重跑（升级用）
-    close: adapter.close,
-  };
+    return {
+      adapter,
+      repositories: { auth, conversations, keys, memory },
+      db,               // 过渡期：老代码若还引用 db 仍可拿到（目标是逐步去掉）
+      ownsDb: false,    // auth 拥有连接；storage 借用，close 委托给 auth.close
+      migrate: () => dbmod.migrate(db, migrationsDir),  // 幂等重跑（升级用）
+      close: adapter.close,
+    };
+  } catch (error) {
+    // auth owns the connection after opening it; don't leak it when a later
+    // repository initializer or its contract assertion fails.
+    try { await close(); } catch { /* Preserve the original initialization failure. */ }
+    throw error;
+  }
 }
 
 module.exports = { createStorage, DEFAULT_MIGRATIONS_DIR };

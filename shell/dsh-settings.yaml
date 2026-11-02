@@ -9,14 +9,19 @@ llm-pi-ai:
       api: openai-completions
       baseURL: https://api.powertokens.ai/v1
       # 多模态能力核实结论（2026-10-10，已核对 PT 网关 /v1/models 的 supported_endpoint_types 与官方文档）：
-      # 当前手写对话模型里没有任何一个原生支持图片输入——
+      # 未经逐模型核对的路由仍以文本为默认；下面明确 input 的条目另有来源。
       #   · deepseek-v4-pro / deepseek-v3-2-251201：纯文本（DeepSeek 官方视觉模型是
       #     deepseek-flash / 已下线的 deepseek-v4-flash-vision-exp，均不在本网关）
       #   · glm-4.5-air / glm-4.7(-flash) / glm-5 / glm-5-turbo / glm-5.1 / glm-5.2：纯文本
       #     （智谱视觉模型 glm-5v-turbo / glm-5.3-flash / glm-5.3-flashx 均不在本网关）
-      # 因此如实声明 [ text ]，不再用 provider 级 defaultInput:[text,image] 一刀切假设所有模型能收图。
+      # 2026-10-30: qwen3.8-flash 的图片输入按 PT 精确模型页面审核，单独声明；不推定其他模型。
+      # https://powertokens.ai/models/qwen3.8-flash
       # 图片生成/编辑不依赖对话模型视觉，统一走 media.route 工具 + 文本 imageNote。
       defaultInput: [ text ]
+      # Controlled trial: do not retry failed paid model requests automatically.
+      retryPolicy:
+        mode: normal
+        maxRetries: 0
       # 仅保留真正支持多轮对话的文本大模型（依据 /v1/models 的 supported_endpoint_types 含
       # anthropic/openai-response 判定为对话模型）。图片/视频/音频/TTS/生成类模型
       # （seedream/seedance/kling/wan/hailuo/speech/happyhorse/viduq/mimo/qwen-image 等）
@@ -26,6 +31,10 @@ llm-pi-ai:
           name: MiniMax M3
         - id: deepseek-v3-2-251201
         - id: deepseek-v4-pro
+        # Exact IDs confirmed present/textChat in the r14 same-credential catalog.
+        # Configuration enables manual qualification; it grants no AUTO verification.
+        - id: deepseek-flash
+        - id: deepseek-v4-1-flash-260910
         - id: glm-4.5-air
         - id: glm-4.7
         - id: glm-4.7-flash
@@ -40,6 +49,8 @@ llm-pi-ai:
         - id: qwen3-coder-plus
         - id: qwen3-max
         - id: qwen3.5-flash
+        - id: qwen3.8-flash
+          input: [text, image]
         - id: qwen3.6-plus
         - id: seed-1-6-250915
         - id: seed-1-6-flash-250715

@@ -59,7 +59,7 @@ const DATA_DIR = process.env.PT_DASH_DATA_DIR || path.join(ROOT, ".pgdata");
 const MIGRATIONS = path.join(ROOT, "backend", "db");
 const FRONTEND = path.join(ROOT, "frontend");
 const DIST = path.join(ROOT, "backend");                 // 编译产物目录
-const URL_FILE = path.join(ROOT, ".delivery-url.txt");
+const URL_FILE = path.join(DATA_DIR, ".delivery-url.txt");
 
 // P0-2 安全：token/secret 不再内置默认值，必须从环境变量显式提供，缺失拒绝启动。
 const RO_TOKEN = process.env.PT_DASH_TOKEN || null;
@@ -88,8 +88,9 @@ function pidAlive(pid) {
 }
 
 async function reapStaleInstances() {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
   const victims = [];
-  for (const f of fs.readdirSync(ROOT)) {
+  for (const f of fs.readdirSync(DATA_DIR)) {
     if (!/^\.delivery-(\d+)\.lock$/.test(f)) continue;
     const pid = Number(f.match(/^\.delivery-(\d+)\.lock$/)[1]);
     if (pid === process.pid) continue;
@@ -120,10 +121,10 @@ async function reapStaleInstances() {
   }
   if (remaining.length > 0) await new Promise((r) => setTimeout(r, 800));
 
-  for (const f of fs.readdirSync(ROOT)) {
+  for (const f of fs.readdirSync(DATA_DIR)) {
     if (/^\.delivery-\d+\.lock$/.test(f)) {
       try {
-        fs.unlinkSync(path.join(ROOT, f));
+        fs.unlinkSync(path.join(DATA_DIR, f));
       } catch {
         /* ignore */
       }
@@ -132,11 +133,11 @@ async function reapStaleInstances() {
   log(`  已清理 ${victims.length} 个残留实例（已确认退出）`);
 }
 function writeLock() {
-  fs.writeFileSync(path.join(ROOT, `.delivery-${process.pid}.lock`), String(Date.now()), "utf8");
+  fs.writeFileSync(path.join(DATA_DIR, `.delivery-${process.pid}.lock`), String(Date.now()), "utf8");
 }
 function clearLock() {
   try {
-    fs.unlinkSync(path.join(ROOT, `.delivery-${process.pid}.lock`));
+    fs.unlinkSync(path.join(DATA_DIR, `.delivery-${process.pid}.lock`));
   } catch {
     /* ignore */
   }
@@ -432,7 +433,7 @@ async function main() {
   } catch {
     urlFileWritten = null;
     try {
-      const alt = path.join(ROOT, `.delivery-url-${process.pid}.txt`);
+      const alt = path.join(DATA_DIR, `.delivery-url-${process.pid}.txt`);
       fs.writeFileSync(alt, url, "utf8");
       urlFileWritten = alt;
     } catch {

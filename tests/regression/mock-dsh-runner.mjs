@@ -11,7 +11,7 @@
 import { writeSync } from "node:fs";
 
 function emit(obj) {
-  try { writeSync(1, JSON.stringify(obj) + "\n"); } catch (e) { /* stdout 已关 */ }
+  try { writeSync(1, JSON.stringify({ ...obj, protocolVersion: 1 }) + "\n"); } catch (e) { /* stdout 已关 */ }
 }
 
 const MODE = process.env.MOCK_MODE || "ok";
@@ -67,4 +67,4 @@ process.stdin.on("data", (chunk) => {
 });
 process.stdin.on("end", () => process.exit(0));
 
-emit({ type: "ready" });
+emit({ type: "ready", runner: "persistent-runner", capabilities: ["task-v1", "tool-rpc-v1", "abort-v1"] });

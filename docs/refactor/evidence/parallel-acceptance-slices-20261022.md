@@ -1,0 +1,14 @@
+# Parallel strict acceptance slices, 2026-10-22
+
+所有结果均来自当前本地工作树；没有部署、互联网调用、提交或状态提升。源代码/测试修改由各切片拥有者保留在工作树中。
+
+| Slice | Verified change/evidence | Targeted result | Remaining gate |
+|---|---|---|---|
+| T01 storage init cleanup | `shell/storage/index.cjs` closes the auth-owned DB if a later repository initializer fails, preserves the original initialization error, and attempts close once. | `node --test tests/regression/storage-init-cleanup-test.mjs tests/regression/storage-upgrade-test.mjs`: 3/3 PASS. | Real PostgreSQL, clean package/upgrade and target restore remain absent. Failure inside `auth.initAuth` migration still needs cleanup review. |
+| T03/T04 cancellation crash recovery | `tests/regression/t03-cancelling-crash-recovery-test.mjs` proves crash recovery exposes a cancelling paid Run as interrupted and queryable without resubmitting the provider operation. | Cancellation/recovery group: 4/4 PASS. | Fixture/PGlite only; target PostgreSQL, provider cancellation and browser/multi-instance behavior remain unverified. |
+| T09/AC21 strict format rejection | CSV analysis rejects currency/percent/unit/date-like non-decimals with source coordinate; document upload rejects PDF/XLSX/DOCX/PPTX/ZIP before persistence. | `csv-analysis`, `csv-document-http`, `csv-parser`, `csv-source`: 23/23 PASS. | No real trial samples/expected calculations, expanded parser formats, ZIP attack matrix, Run/UI citation or derived-data deletion proof. |
+| T11 budget evidence | Runner summary and `run_budget` projection preserve malformed/missing counters as `null`; valid zero counters remain zero. | `run-budget-event-test.mjs`, `run-budget-summary-test.mjs`: 5 tests PASS; included in aggregate below. | No provider-backed cost source or real Run/database event result. Candidate-18 is a local frozen release candidate, not deployed. |
+| T14/AC15/AC20 fail-closed profile | Even with seed settings enabling web-search/CLI, the generated production profile only binds the base bundle and disables `tool-web`; lock provenance is checked. | `t13-t14-profile-fail-closed-test.mjs` + `profile-dependencies-test.mjs`: 8/8 PASS. | No product web handler/domain allowlist/redirect-SSRF validation or process egress boundary; see business decisions in the progress report. |
+| T16 candidate-18 package | Candidate-18 USTAR archive/unit are checksum-bound; 318 members, 19 migrations, path safety, no AppleDouble/forbidden entries, runner bytes match current source. | `t16-candidate18-ustar-release-test.mjs`: 3/3 PASS. | No target install, systemd cutover, rollback, target Linux/host or database restore rehearsal. |
+
+Combined impacted regression command (budget, package, storage, CSV and profile suites): **42/42 PASS**. `node --check shell/persistent-runner.mjs`, Python package script compilation and `git diff --check` passed. None of these bounded slices satisfies T00–T18 or AC01–AC24 end-to-end acceptance.

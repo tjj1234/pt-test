@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "status": "PENDING_TARGET_PREFLIGHT",
+  "archive": "northstar-controlled-trial-20261030-candidate-34-r14.tar.gz",
+  "archiveSha256": "f0001e9bef26293443561c0519948258687769b374a5231a06aadffd17a0b993",
+  "sourceDraft": "northstar-controlled-trial-20261030-candidate-34-r13-draft",
+  "sourcePlanSha256": "81b400c1b58f1a24d9feec6cf1365a0fc33aa34280bf6bc471005bdc0d7a1420",
+  "sourceUnitSha256": "61e920d257076d6a0798610d09789810ec1aa004c7b14bf08d109d42e392eda0",
+  "unit": "northstar-shell-candidate-34-r14.service",
+  "unitSha256": "ef51137bcd05ce82a5cbce366a6fc6596538d3d1378401927e43b8f9202a25d3",
+  "targetReleaseDirectory": "/opt/northstar/releases/controlled-trial-20261030-candidate-34-r14",
+  "gates": [
+    "target read-only baseline and rollback mapping",
+    "target clean install and closure",
+    "service switch",
+    "local and public health",
+    "same-version product acceptance"
+  ]
+}

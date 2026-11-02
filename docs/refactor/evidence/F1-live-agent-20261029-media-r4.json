@@ -1,0 +1,22 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T06:49:46.591Z",
+  "models": [],
+  "runs": [
+    {
+      "taskType": "text2image",
+      "requestModel": "seedream-5-0-260128",
+      "status": "submitted_to_local_server",
+      "at": "2026-10-29T06:49:49.793Z",
+      "runId": "dd977625-bda5-4d1c-8cf2-51ff6fc6e638",
+      "httpStatus": 200
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "result": "INCOMPLETE",
+  "errorCode": "LOCAL_HTTP_409",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T06:49:50.924Z"
+}

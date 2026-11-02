@@ -1,0 +1,58 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-30T04:11:58.270Z",
+  "models": [],
+  "runs": [
+    {
+      "name": "manual-image",
+      "status": "completed",
+      "at": "2026-10-30T04:12:01.804Z",
+      "runId": "23a0f00c-082c-4195-8d9d-d9b4c3388d0d",
+      "streamTail": "id: 1\ndata: {\"queued\":true}\n\nid: 4\ndata: {\"connecting\":true}\n\nid: 6\ndata: {\"delta\":\"RTK2\"}\n\nid: 13\ndata: {\"done\":true,\"ok\":true,\"stopped\":false,\"messages\":[{\"ts\":\"2026-10-30T04:12:02.178Z\",\"role\":\"user\",\"text\":\"Read the four black characters printed in this image. Reply only with those four characters. Do not use tools.\",\"image\":\"/uploads/5f705333-f4c6-4041-b226-15315447bd93/5c0f1acf244a675ef0a758799b9db671.png\",\"imageEvidence\":{\"ref\":\"/uploads/5f705333-f4c6-4041-b226-15315447bd93/5c0f1acf244a675ef0a758799b9db671.png\",\"size\":7294,\"sha256\":\"780ee825fea2ba5a1ca8a6fb6b6dd252a525e3a58818d76a231ce456d9368124\"}},{\"ts\":\"2026-10-30T04:12:05.567Z\",\"role\":\"assistant\",\"text\":\"RTK2\",\"runId\":\"23a0f00c-082c-4195-8d9d-d9b4c3388d0d\",\"steps\":[]}],\"reply\":\"RTK2\",\"turns\":1}\n\n",
+      "imageQualified": true,
+      "selections": [
+        {
+          "requested": "qwen3.8-flash",
+          "resolved": "qwen3.8-flash",
+          "task": "imageUnderstanding"
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 2756.380834,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "answer": "RTK2",
+      "expectedAnswer": "R7K2",
+      "answerMatches": false
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 83,
+  "input": {
+    "sha256": "780ee825fea2ba5a1ca8a6fb6b6dd252a525e3a58818d76a231ce456d9368124",
+    "bytes": 7294,
+    "fixture": "native-vision-fixture-20261030.png"
+  },
+  "result": "INCOMPLETE",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-30T04:12:05.620Z"
+}

@@ -1,0 +1,94 @@
+{
+  "scope": "local-product-live-PT-real-pinned-DSH",
+  "startedAt": "2026-10-29T03:57:13.788Z",
+  "models": [
+    "qwen3.5-flash",
+    "seed-2-0-lite-260228"
+  ],
+  "runs": [
+    {
+      "requestedModel": "qwen3.5-flash",
+      "status": "completed",
+      "at": "2026-10-29T03:57:17.074Z",
+      "httpStatus": 200,
+      "runId": "f7deeb4a-4f81-4c92-9282-3c10414d960b",
+      "expectedTextPresent": true,
+      "modelSelections": [
+        {
+          "requestedModelId": "qwen3.5-flash",
+          "resolvedModelId": "qwen3.5-flash",
+          "upstreamModelId": null
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 1853.7302500000003,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "errorCodes": []
+    },
+    {
+      "requestedModel": "seed-2-0-lite-260228",
+      "status": "failed",
+      "at": "2026-10-29T03:57:21.129Z",
+      "httpStatus": 200,
+      "runId": "a93d3667-f376-4b47-bcf1-81c5dcd0c905",
+      "expectedTextPresent": true,
+      "modelSelections": [
+        {
+          "requestedModelId": "seed-2-0-lite-260228",
+          "resolvedModelId": "seed-2-0-lite-260228",
+          "upstreamModelId": null
+        }
+      ],
+      "budgets": [
+        {
+          "limits": {
+            "maxRetries": 0,
+            "maxToolCalls": 0,
+            "maxDurationMs": 180000,
+            "maxModelCalls": 1,
+            "maxOutputTokens": 128,
+            "maxToolCallsPerKey": 0
+          },
+          "snapshot": {
+            "retries": 0,
+            "elapsedMs": 56.74570800000038,
+            "toolCalls": 0,
+            "costStatus": "unlimited",
+            "modelCalls": 1,
+            "clockStatus": "monotonic",
+            "policyStatus": "configured",
+            "duplicateToolCalls": 0
+          }
+        }
+      ],
+      "errorCodes": []
+    }
+  ],
+  "noTransportMocks": true,
+  "catalogCount": 82,
+  "historyAssistantCount": 2,
+  "historyExpectedTextCount": 1,
+  "result": "INCOMPLETE",
+  "serverLogCredentialLeak": false,
+  "credentialStorage": "temporary-encrypted-BYOK-db-removed",
+  "endedAt": "2026-10-29T03:57:21.806Z"
+}

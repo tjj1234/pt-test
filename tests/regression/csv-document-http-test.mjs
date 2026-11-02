@@ -1,0 +1,257 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+const require = createRequire(import.meta.url);
+const { createStorage } = require('../../shell/storage/index.cjs');
+const { exportDocumentCandidate } = require('../../shell/exports/document-export-candidate.cjs');
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+
+test('CSV upload and host context preserve source evidence, literal values, tenant isolation and explicit truncation', { timeout: 45000 }, async () => {
+  assert.equal(Object.keys(process.env).some(k => k.startsWith('PT_PG_') && process.env[k]), false);
+  const temp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'northstar-csv-http-'));
+  const dbDir = path.join(temp, 'db'), masterKeyFile = path.join(temp, 'key'), recordFile = path.join(temp, 'context.jsonl');
+  let storage, child, output = ''; const tenants = [], cookies = [], users = [];
+  const records = () => fs.existsSync(recordFile) ? fs.readFileSync(recordFile, 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse) : [];
+  try {
+    storage = await createStorage({ dataDir: dbDir, masterKeyFile });
+    for (let i = 0; i < 2; i++) {
+      const registered = await storage.repositories.auth.register({ username: 'csv-http-' + i, email: `csv-${i}@example.test`, password: 'FixtureReview123' });
+      assert.equal(registered.ok, true); const user = registered.user; users.push(user.id); tenants.push(user.tenant_id);
+      await storage.db.query('INSERT INTO google_identities(issuer,subject,user_id,email) VALUES($1,$2,$3,$4)', ['https://accounts.google.com', 'fixture-csv-' + i, user.id, user.email]);
+      const token = crypto.randomBytes(32).toString('hex');
+      await storage.db.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)', [user.id, sha(token), new Date(Date.now() + 120000).toISOString()]);
+      cookies.push('pt_session=' + token);
+    }
+    await storage.close(); storage = null;
+    const listener = createServer(); await new Promise((resolve, reject) => listener.once('error', reject).listen(0, '127.0.0.1', resolve));
+    const port = listener.address().port; await new Promise(resolve => listener.close(resolve)); const origin = 'http://127.0.0.1:' + port;
+    const preload = path.join(temp, 'fixtures.cjs');
+    fs.writeFileSync(preload, `const Module=require('node:module'),fs=require('node:fs'),load=Module._load;
+Module._load=function(name,parent,isMain){const loaded=load.apply(this,arguments);
+if(parent?.filename.endsWith('/server.cjs')&&name==='./models/dsh-configured-catalog.cjs')return {...loaded,configuredModels:()=>['fixture-csv']};
+if(parent?.filename.endsWith('/server.cjs')&&name==='./model-catalog.cjs')return {...loaded,getCatalog:async()=>({models:[{id:'fixture-csv',availability:'present',permission:true,localPolicy:{enabled:true,tasks:['textChat']},tasks:{textChat:{value:true}},inputModalities:{value:['text']},outputModalities:{value:['text']},states:{textChat:{adapted:true,endpointCompatible:true,verified:true,autoEligible:true}}}],availability:{status:'available',modelIds:['fixture-csv']},syncedAt:Date.now()})};
+if(parent?.filename.endsWith('/server.cjs')&&name==='./tenant.cjs')return {...loaded,runDshForUser:async(uid,q,opts)=>{fs.appendFileSync(${JSON.stringify(recordFile)},JSON.stringify({uid,question:q,tenantId:opts.tenantId,docNote:opts.docNote,budgetProfile:opts.budgetProfile||null})+'\\n');if(opts.recordModelIntents)await opts.onToolRequest({name:'northstar.model_request_intent',requestId:require('node:crypto').randomUUID(),args:{model:opts.model,provider:'fixture',turn:1,step:1,maxTokens:128}});if(q.startsWith('CSV_HOST_TEST:')){if(opts.budgetProfile!=='csv')throw Error('CSV budget not selected');const args=JSON.parse(q.slice('CSV_HOST_TEST:'.length));const result=await opts.onToolRequest({name:'csv.analyze',requestId:require('node:crypto').randomUUID(),args});return {ok:true,text:'Host CSV analysis completed',steps:[{name:'csv.analyze',args,result,isError:false,modelName:opts.model}],artifacts:[result.artifact]};}return loaded.runDshForUser(uid,q,opts);}};
+return loaded;};`);
+    const env = { PATH: process.env.PATH, HOME: temp, PT_DB_DIR: dbDir, PT_MASTER_KEY_FILE: masterKeyFile, PT_LOG_DIR: path.join(temp, 'logs'), PT_SHELL_PORT: String(port), PT_LISTEN_HOST: '127.0.0.1', PT_KEY_LIVE_VERIFY: '0', PT_CHAT_DRYRUN: '1', PT_DOC_CONTEXT_CHARS: '1200' };
+    child = spawn(process.execPath, ['--require', preload, 'shell/server.cjs', '--port', String(port)], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+    child.stdout.on('data', b => output += b); child.stderr.on('data', b => output += b);
+    async function req(route, { user = 0, method = 'GET', body } = {}) { return fetch(origin + route, { method, headers: { Cookie: cookies[user], ...(body ? { 'Content-Type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }); }
+    async function json(route, options) { const response = await req(route, options); assert.equal(response.status, 200, await response.clone().text()); return response.json(); }
+    let ready = false;
+    for (let i = 0; i < 150; i++) { if (child.exitCode !== null) throw Error(output); try { if ((await req('/api/auth/me')).status === 200) { ready = true; break; } } catch {} await new Promise(resolve => setTimeout(resolve, 50)); }
+    assert.equal(ready, true, output.slice(-2500));
+    await json('/api/auth/key', { method: 'POST', body: { key: 'fixture-no-paid-model-key' } });
+    const upload = (bytes, name = 'fixture.csv') => req('/api/upload-doc', { method: 'POST', body: { name, data: bytes.toString('base64') } });
+    const files = () => { try { return fs.readdirSync(path.join(root, 'runtime/_uploads', tenants[0])); } catch { return []; } };
+    const before = files();
+    const invalid = await upload(Buffer.from('id,"unclosed'));
+    assert.equal(invalid.status, 400, await invalid.clone().text());
+    assert.deepEqual(files(), before, 'malformed CSV must be rejected before persistence');
+    for (const name of ['report.pdf', 'report.xlsx', 'report.docx', 'report.pptx', 'archive.zip']) {
+      const unsupported = await upload(Buffer.from('not parsed'), name);
+      assert.equal(unsupported.status, 400, `${name} must be explicitly rejected by the current format allowlist`);
+      assert.deepEqual(files(), before, `${name} must not be persisted as a supported text document`);
+    }
+    const fixture = Buffer.from('\ufeff,0\r\n');
+    const response = await upload(fixture); assert.equal(response.status, 200, await response.clone().text()); const uploaded = await response.json();
+    assert.match(uploaded.url, new RegExp('^/uploads/' + tenants[0] + '/'));
+    assert.equal(uploaded.size, fixture.length);
+    const saved = fs.readFileSync(path.join(root, 'runtime/_uploads', tenants[0], path.basename(uploaded.url)));
+    assert.deepEqual(saved, fixture, 'source bytes, including BOM and CRLF, must remain intact');
+    const selection = { sourceRef: uploaded.url, headerRow: null, startRow: 1, column: 2 };
+    const preview = await json('/api/csv/selection-preview', { method: 'POST', body: selection });
+    assert.equal(preview.preview.sourceSha256, sha(fixture));
+    assert.equal(preview.preview.type, 'decimal');
+    assert.equal(preview.preview.samples[0].value, '0');
+    const invalidSelection = await req('/api/csv/selection-preview', { method: 'POST', body: { ...selection, startRow: 2 } });
+    assert.equal(invalidSelection.status, 400);
+    const crossPreview = await req('/api/csv/selection-preview', { user: 1, method: 'POST', body: selection });
+    assert.equal(crossPreview.status, 400);
+    const cid = (await json('/api/conversations', { method: 'POST' })).id;
+    const chat = async (user, conversationId, message, url, csvSelections) => req('/api/chat', { user, method: 'POST', body: { conversationId, message, documents: [url], ...(csvSelections ? { csvSelections } : {}) } });
+    const confirmed = [{ sourceRef: uploaded.url, sourceSha256: sha(fixture), headerRow: null, startRow: 1, column: 2 }];
+    const full = await chat(0, cid, 'literal CSV', uploaded.url, confirmed); assert.equal(full.status, 200); assert.match(await full.text(), /"done":true/);
+    const runEvents = await json('/api/runs/' + full.headers.get('x-agent-run-id') + '/events');
+    const modelIntent = runEvents.events.find(event => event.payload?.action === 'model_request_intent');
+    assert.ok(modelIntent, 'the host persists a model request intent before acknowledging the runner');
+    assert.equal(modelIntent.payload.price.coverage, 'unknown');
+    assert.equal(modelIntent.payload.price.reasonCode, 'NO_RECORDED_CATALOG');
+    assert.equal(modelIntent.payload.parameters.maxOutputTokens, 128);
+    const received = records().find(r => r.question === 'literal CSV'); assert.ok(received);
+    assert.equal(received.uid, users[0]); assert.equal(received.tenantId, tenants[0]);
+    assert.equal(received.budgetProfile, 'csv');
+    assert.match(received.docNote, /CSV_SELECTED_RANGE/);
+    const note = received.docNote, contentHash = sha(fixture), refHash = sha(uploaded.url);
+    assert.ok(note.includes(`[csv:${contentHash}:${refHash}:R1C1]`));
+    assert.match(note, /R1C1\] sourceLine=1; sourceColumn=1; value=""/);
+    assert.match(note, /R1C2\] sourceLine=1; sourceColumn=2; value="0"/);
+    assert.match(note, /rows=1; columnsMin=2; columnsMax=2; totalCells=2; bytes=7/);
+    assert.match(note, /shownCells=2; omittedCells=0; truncated=false; firstOmitted=none/);
+    const initialHistory = (await json('/api/conversations/' + cid)).conversation.messages;
+    assert.deepEqual(initialHistory[0].documentEvidence, [{ ref: uploaded.url, sha256: contentHash, size: fixture.length }]);
+    assert.deepEqual(initialHistory[0].csvSelections, confirmed);
+    const callsBeforeRegenerate = records().length;
+    const regenerated = await req('/api/chat', { method: 'POST', body: { conversationId: cid, regenerate: true } });
+    assert.equal(regenerated.status, 200);
+    const regeneratedFrames = await regenerated.text();
+    assert.match(regeneratedFrames, /"done":true/);
+    assert.match(regeneratedFrames, /"ok":true/);
+    assert.equal(records().length, callsBeforeRegenerate + 1, 'unchanged stored snapshot remains executable');
+    assert.equal(records().at(-1).budgetProfile, 'csv');
+    assert.ok(records().at(-1).docNote.includes(`[csv:${contentHash}:${refHash}:R1C1]`));
+    const historyBefore = (await json('/api/conversations/' + cid)).conversation.messages;
+    assert.equal(historyBefore.length, 2, 'fixture requires a completed attached user/assistant pair');
+    // Exercise the real HTTP/Run/registry/host/artifact path; only the model decision is a fixture.
+    const toolConversation = (await json('/api/conversations', { method: 'POST' })).id;
+    const toolArgs = { sourceRef: uploaded.url, sourceSha256: contentHash, operation: 'sum', startRow: 1, column: 2 };
+    const toolResponse = await chat(0, toolConversation, 'CSV_HOST_TEST:' + JSON.stringify(toolArgs), uploaded.url, confirmed);
+    assert.equal(toolResponse.status, 200);
+    const toolFrames = (await toolResponse.text()).split('\n').filter(line => line.startsWith('data: ')).map(line => JSON.parse(line.slice(6)));
+    assert.equal(toolFrames.find(frame => frame.done)?.ok, true, JSON.stringify(toolFrames));
+    const toolRunId = toolResponse.headers.get('x-agent-run-id');
+    const toolEvents = await json('/api/runs/' + toolRunId + '/events');
+    const artifactEvent = toolEvents.events.find(event => event.type === 'artifact');
+    assert.ok(artifactEvent, 'host computation emits a durable artifact in the same Run');
+    const artifact = artifactEvent.payload.artifact;
+    assert.ok(artifact.rel.includes(toolRunId), 'result path belongs to the exact Run');
+    const download = await req('/api/artifact?p=' + encodeURIComponent(artifact.rel));
+    assert.equal(download.status, 200);
+    assert.match(download.headers.get('content-type'), /text\/csv/);
+    assert.match(download.headers.get('content-disposition'), /attachment/);
+    const resultCsv = await download.text();
+    assert.match(resultCsv, /summary/);
+    assert.ok(resultCsv.includes(contentHash), 'export retains immutable source provenance');
+    const toolHistory = (await json('/api/conversations/' + toolConversation)).conversation.messages;
+    assert.equal(toolHistory.at(-1).runId, toolRunId);
+    assert.equal(toolHistory.at(-1).artifacts[0].rel, artifact.rel);
+    const reopenedDownload = await req(toolHistory.at(-1).artifacts[0].url);
+    assert.equal(reopenedDownload.status, 200);
+    assert.equal(await reopenedDownload.text(), resultCsv, 'history reopens the generated bytes');
+    assert.equal((await req('/api/artifact?p=' + encodeURIComponent(artifact.rel), { user: 1 })).status, 404,
+      'another tenant cannot download the generated result');
+    const callsBefore = records().length;
+    fs.writeFileSync(path.join(root, 'runtime/_uploads', tenants[0], path.basename(uploaded.url)), Buffer.from('\ufeff,1\r\n'));
+    for (const command of [{ regenerate: true }, { branchFrom: 1 }]) {
+      const rejected = await req('/api/chat', { method: 'POST', body: { conversationId: cid, ...command } });
+      assert.equal(rejected.status, 200, 'durable execution reports context rejection through SSE');
+      const frames = await rejected.text();
+      assert.match(frames, /"done":true/);
+      assert.match(frames, /"ok":false/);
+      assert.match(frames, /"code":"CHAT_ATTACHMENT_CHANGED"/);
+      assert.deepEqual((await json('/api/conversations/' + cid)).conversation.messages, historyBefore,
+        'a changed valid CSV must not truncate regeneration/branch history');
+      assert.equal(records().length, callsBefore, 'changed content must fail before the tenant executes');
+    }
+    fs.writeFileSync(path.join(root, 'runtime/_uploads', tenants[0], path.basename(uploaded.url)), '"unclosed');
+    const invalidNew = await chat(0, cid, 'invalid attached CSV', uploaded.url);
+    assert.equal(invalidNew.status, 200); assert.match(await invalidNew.text(), /"ok":false/);
+    assert.deepEqual((await json('/api/conversations/' + cid)).conversation.messages, historyBefore, 'malformed new attachment cannot append an orphan user turn');
+    assert.equal(records().length, callsBefore);
+    fs.writeFileSync(path.join(root, 'runtime/_uploads', tenants[0], path.basename(uploaded.url)), fixture);
+    const other = (await json('/api/conversations', { user: 1, method: 'POST' })).id;
+    const cross = await chat(1, other, 'cross tenant CSV', uploaded.url); assert.equal(cross.status, 400, await cross.clone().text());
+    assert.equal(records().some(r => r.question === 'cross tenant CSV'), false);
+    const large = Buffer.from(Array.from({ length: 30 }, (_, i) => 'row-' + i + ',0').join('\n'));
+    const largeResponse = await upload(large); assert.equal(largeResponse.status, 200); const largeUpload = await largeResponse.json();
+    const truncated = await chat(0, cid, 'truncated CSV', largeUpload.url); assert.equal(truncated.status, 200); await truncated.text();
+    const partial = records().find(r => r.question === 'truncated CSV')?.docNote; assert.ok(partial);
+    assert.equal(records().find(r => r.question === 'truncated CSV')?.budgetProfile, null);
+    assert.match(partial, /rows=30; columnsMin=2; columnsMax=2; totalCells=60/);
+    assert.match(partial, /shownCells=\d+; omittedCells=[1-9]\d*; truncated=true; firstOmitted=R\d+C\d+/);
+    assert.ok(partial.includes('sha256=' + sha(large)));
+    assert.equal(partial.includes(':R30C2]'), false, 'context must not claim omitted tail cells');
+
+    const shortText = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('标题🙂\n仅此一页')]);
+    const shortUploadResponse = await upload(shortText, 'short.md'); assert.equal(shortUploadResponse.status, 200);
+    const shortUpload = await shortUploadResponse.json();
+    const shortTurn = await chat(0, cid, 'short UTF-8 markdown', shortUpload.url);
+    assert.equal(shortTurn.status, 200); await shortTurn.text();
+    const shortNote = records().find(r => r.question === 'short UTF-8 markdown')?.docNote; assert.ok(shortNote);
+    assert.ok(shortNote.length <= 1200);
+    assert.ok(shortNote.includes('未展示的文本或单元格不可用于完整资料结论'));
+    assert.match(shortNote, new RegExp(`sourceByteRange=\\[0,${shortText.length}\\); totalBytes=${shortText.length}; firstOmittedByte=none; truncated=false`));
+    assert.ok(shortNote.includes('UNTRUSTED_TEXT_EXCERPT_BEGIN (only the marked source byte range is provided)\n标题🙂\n仅此一页\n'));
+
+    const longText = Buffer.from('开源🙂é'.repeat(1200));
+    const longUploadResponse = await upload(longText, 'long.txt'); assert.equal(longUploadResponse.status, 200);
+    const longUpload = await longUploadResponse.json();
+    const longTurn = await chat(0, cid, 'truncated UTF-8 text', longUpload.url);
+    assert.equal(longTurn.status, 200); await longTurn.text();
+    const longNote = records().find(r => r.question === 'truncated UTF-8 text')?.docNote; assert.ok(longNote);
+    assert.ok(longNote.length <= 1200);
+    const excerpt = /UNTRUSTED_TEXT_EXCERPT_BEGIN \(only the marked source byte range is provided\)\n([\s\S]*?)\n\[UNTRUSTED_TEXT_EXCERPT_END; sourceByteRange=\[0,(\d+)\); totalBytes=(\d+); firstOmittedByte=(\d+); truncated=true\]/.exec(longNote);
+    assert.ok(excerpt, 'truncated text must be marked as a bounded, untrusted excerpt');
+    const [, shownText, rangeEnd, totalBytes, firstOmittedByte] = excerpt;
+    assert.ok(longText.toString('utf8').startsWith(shownText));
+    assert.equal(Buffer.from(shownText, 'utf8').toString('utf8'), shownText, 'the excerpt must end on a UTF-8 code point boundary');
+    assert.equal(Number(rangeEnd), Buffer.byteLength(shownText, 'utf8'));
+    assert.equal(Number(totalBytes), longText.length);
+    assert.equal(Number(firstOmittedByte), Number(rangeEnd));
+    assert.ok(Number(firstOmittedByte) < Number(totalBytes));
+
+    const docx = exportDocumentCandidate({ title: '中文原始资料', sections: [{ heading: '明细', paragraphs: ['编号00123，金额42元。', '=SUM(A1:A2)只是文档文本。'] }] }, { format: 'docx' }).buffer;
+    const docxResponse = await upload(docx, 'source.docx');
+    assert.equal(docxResponse.status, 200, await docxResponse.clone().text());
+    const docxUpload = await docxResponse.json();
+    const docxTurn = await chat(0, cid, 'DOCX literal evidence', docxUpload.url);
+    assert.equal(docxTurn.status, 200); await docxTurn.text();
+    const docxNote = records().find(r => r.question === 'DOCX literal evidence')?.docNote;
+    assert.ok(docxNote && docxNote.length <= 1200);
+    assert.ok(docxNote.includes('sha256=' + sha(docx)));
+    assert.match(docxNote, /编号00123，金额42元/);
+    assert.match(docxNote, /=SUM\(A1:A2\)只是文档文本/);
+    assert.match(docxNote, /locator=extracted-text-block-not-original-page/);
+    assert.match(docxNote, /DOCX_COVERAGE blocks=\d+\/\d+; chars=\d+\/\d+; truncated=false/);
+    const docxCalls = records().length;
+    const crossDocx = await chat(1, other, 'cross tenant DOCX', docxUpload.url);
+    assert.equal(crossDocx.status, 400); assert.equal(records().length, docxCalls);
+    fs.writeFileSync(path.join(root, 'runtime/_uploads', tenants[0], path.basename(docxUpload.url)), Buffer.from('changed DOCX'));
+    const changedDocx = await req('/api/chat', { method: 'POST', body: { conversationId: cid, regenerate: true } });
+    assert.match(await changedDocx.text(), /"code":"CHAT_ATTACHMENT_CHANGED"/);
+    assert.equal(records().length, docxCalls, 'changed DOCX fails before runtime execution');
+    const {spreadsheet,presentation}=require('../helpers/office-structured-fixtures.cjs');
+    for(const [format,bytes,expected] of [['xlsx',spreadsheet(),'编号00123中文'],['pptx',presentation(),'中文演示第一段']]){
+      const uploadedResponse=await upload(bytes,'source.'+format);
+      assert.equal(uploadedResponse.status,200,await uploadedResponse.clone().text());
+      const uploaded=await uploadedResponse.json();
+      const response=await chat(0,cid,format+' structured evidence',uploaded.url);
+      assert.equal(response.status,200);await response.text();
+      const note=records().find(r=>r.question===format+' structured evidence')?.docNote;
+      assert.ok(note&&note.length<=1200);assert.ok(note.includes(expected));
+      assert.ok(note.includes('sha256='+sha(bytes)));assert.match(note,/EXTRACTED_BLOCK 1/);
+      assert.ok(note.includes(format==='xlsx'?'sheet-cell-raw-value':'slide-paragraph-text-only'));
+      const beforeCross=records().length;
+      const denied=await chat(1,other,'cross tenant '+format,uploaded.url);
+      assert.equal(denied.status,400);assert.equal(records().length,beforeCross);
+    }
+
+    const beforeExport=await json('/api/conversations/'+cid);
+    const word=await req('/api/conversations/'+cid+'/export?fmt=docx');
+    assert.equal(word.status,200);assert.match(word.headers.get('content-type'),/wordprocessingml/);
+    assert.match(word.headers.get('content-disposition'),/attachment; filename="conversation-/);
+    const wordBytes=Buffer.from(await word.arrayBuffer());
+    assert.equal(word.headers.get('x-content-sha256'),sha(wordBytes));
+    const {parseOfficeDocument}=require('../../shell/attachments/office-document-parser.cjs');
+    const wordText=(await parseOfficeDocument({bytes:wordBytes,format:'docx'})).text;
+    assert.ok(wordText.includes('DOCX literal evidence'));assert.ok(wordText.includes('xlsx structured evidence'));
+    const afterExport=await json('/api/conversations/'+cid);
+    assert.deepEqual(afterExport,beforeExport,'export must not mutate or replace conversation history');
+    const wordAgain=await req('/api/conversations/'+cid+'/export?fmt=docx');assert.equal(wordAgain.status,200);
+    assert.equal(wordAgain.headers.get('x-export-source-sha256'),word.headers.get('x-export-source-sha256'));await wordAgain.arrayBuffer();
+    assert.equal((await req('/api/conversations/'+cid+'/export?fmt=docx',{user:1})).status,404);
+    assert.equal((await fetch(origin+'/api/conversations/'+cid+'/export?fmt=docx')).status,401);
+  } finally {
+    if (child && child.exitCode === null) { const exited = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGTERM'); await exited; }
+    if (storage) await storage.close();
+    for (const tenant of tenants) for (const part of ['workspaces', 'tenants', '_uploads']) fs.rmSync(path.join(root, 'runtime', part, tenant), { recursive: true, force: true });
+    fs.rmSync(temp, { recursive: true, force: true });
+  }
+});

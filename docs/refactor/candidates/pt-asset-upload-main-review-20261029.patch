@@ -1,0 +1,217 @@
+--- a/pt_video.py
++++ b/pt_video.py
+@@ -1077,7 +1077,7 @@
+     }
+ 
+ 
+-def upload_asset_for_product(
++def _upload_asset_shared(
+     content,
+     filename="reference.png",
+     key=None,
+@@ -1087,6 +1087,7 @@
+     sleep=None,
+     cancel_token=None,
+     poll_timeout=120,
++    _group_name=None,
+     **kwargs
+ ):
+     """产品级资产上传入口（同步调用，确定性结果字典）。"""
+@@ -1105,6 +1106,7 @@
+         h = hashlib.sha256(content).hexdigest()
+         return _make_asset_result("not_submitted", False, None, None, "CONTENT_SIZE_EXCEEDED", False, len(content), h)
+ 
++    content = bytes(content)
+     byte_count = len(content)
+     sha256_hex = hashlib.sha256(content).hexdigest()
+ 
+@@ -1123,8 +1125,8 @@
+ 
+     try:
+         poll_timeout = float(poll_timeout)
+-        if poll_timeout <= 0 or poll_timeout > 120.0:
+-            poll_timeout = 120.0
++        if not math.isfinite(poll_timeout) or poll_timeout <= 0 or poll_timeout > 120.0:
++            return _make_asset_result("not_submitted", False, None, None, "INVALID_TIMEOUT", False, byte_count, sha256_hex)
+     except (TypeError, ValueError):
+         poll_timeout = 120.0
+ 
+@@ -1177,7 +1179,7 @@
+         return _make_asset_result("cancelled", False, None, None, "CANCELLED", False, byte_count, sha256_hex)
+ 
+     try:
+-        body_bytes, content_type = _build_asset_multipart(content, filename)
++        body_bytes, content_type = _build_asset_multipart(content, filename, group_name=_group_name)
+     except Exception:
+         return _make_asset_result("not_submitted", False, None, None, "MULTIPART_BUILD_FAILED", False, byte_count, sha256_hex)
+ 
+@@ -1196,7 +1198,7 @@
+     if now >= deadline:
+         return _make_asset_result("poll_timeout", False, None, None, "POLL_TIMEOUT", False, byte_count, sha256_hex)
+ 
+-    post_timeout = min(60.0, max(0.1, deadline - now))
++    post_timeout = min(60.0, deadline - now)
+     submission_may_have_started = True
+ 
+     try:
+@@ -1218,8 +1220,10 @@
+         return _make_asset_result("unknown_submission", False, None, None, "MALFORMED_POST_ENVELOPE", True, byte_count, sha256_hex)
+ 
+     code = post_json.get("code")
++    if type(code) is not int:
++        return _make_asset_result("unknown_submission", False, None, None, "INVALID_POST_CODE", True, byte_count, sha256_hex)
+     if code != 200:
+-        return _make_asset_result("rejected", False, None, None, f"UPSTREAM_CODE_{code}", True, byte_count, sha256_hex)
++        return _make_asset_result("rejected" if 400 <= code < 500 and code not in (408, 429) else "unknown_submission", False, None, None, "UPSTREAM_REJECTED", True, byte_count, sha256_hex)
+ 
+     data_obj = post_json.get("data")
+     if not isinstance(data_obj, dict):
+@@ -1237,6 +1241,12 @@
+         except Exception:
+             return _make_asset_result("task_id_persisting_failed", False, task_id, None, "HOOK_ON_TASK_ID_FAILED", True, byte_count, sha256_hex)
+ 
++    return _poll_uploaded_asset(task_id, hooks, do_request, clock, sleep, is_cancelled,
++                                deadline, byte_count, sha256_hex)
++
++
++def _poll_uploaded_asset(task_id, hooks, do_request, clock, sleep, is_cancelled,
++                         deadline, byte_count=0, sha256_hex=""):
+     query_url = ASSET_GET_ID.format(urllib.parse.quote(task_id, safe=""))
+     get_req = urllib.request.Request(
+         query_url,
+@@ -1253,7 +1263,7 @@
+         if rem_time <= 0:
+             return _make_asset_result("poll_timeout", False, task_id, None, "POLL_TIMEOUT", True, byte_count, sha256_hex)
+ 
+-        query_timeout = min(30.0, max(0.1, rem_time))
++        query_timeout = min(30.0, rem_time)
+         get_json = None
+         try:
+             with do_request(get_req, timeout=query_timeout) as r:
+@@ -1265,8 +1275,8 @@
+             pass
+ 
+         if isinstance(get_json, dict):
+-            if get_json.get("code") is not None and get_json.get("code") != 200:
+-                return _make_asset_result("get_asset_id_rejected", False, task_id, None, f"UPSTREAM_GET_CODE_{get_json.get('code')}", True, byte_count, sha256_hex)
++            if type(get_json.get("code")) is not int or get_json["code"] != 200:
++                return _make_asset_result("get_asset_id_rejected", False, task_id, None, "UPSTREAM_GET_REJECTED", True, byte_count, sha256_hex)
+ 
+             data_section = get_json.get("data")
+             if isinstance(data_section, dict):
+@@ -1286,6 +1296,11 @@
+                         except Exception:
+                             return _make_asset_result("asset_id_persisting_failed", False, task_id, raw_aid, "HOOK_ON_ASSET_ID_FAILED", True, byte_count, sha256_hex)
+ 
++                    if is_cancelled():
++                        return _make_asset_result("cancelled", False, task_id, raw_aid, "CANCELLED", True, byte_count, sha256_hex)
++                    if clock() >= deadline:
++                        return _make_asset_result("poll_timeout", False, task_id, raw_aid, "POLL_TIMEOUT", True, byte_count, sha256_hex)
++
+                     return _make_asset_result("succeeded", True, task_id, raw_aid, None, True, byte_count, sha256_hex)
+ 
+         if is_cancelled():
+@@ -1296,6 +1311,51 @@
+ 
+         sleep_dur = min(2.0, max(0.0, deadline - now))
+         sleep(sleep_dur)
++
++
++def recover_uploaded_asset_for_product(task_id, hooks=None, transport=None, clock=None,
++                                       sleep=None, cancel_token=None, poll_timeout=120):
++    """GET-only recovery of an already persisted task; never submits bytes."""
++    if not isinstance(task_id, str) or not _ASSET_TASK_ID_RE.fullmatch(task_id):
++        return _make_asset_result("not_submitted", False, None, None, "INVALID_TASK_ID", False, 0, "")
++    if type(poll_timeout) not in (int, float) or not math.isfinite(poll_timeout) or not 0 < poll_timeout <= 120:
++        return _make_asset_result("not_submitted", False, task_id, None, "INVALID_TIMEOUT", True, 0, "")
++    hooks = hooks if hooks is not None else {}
++    if not isinstance(hooks, dict) or set(hooks) - {"on_asset_id"} or any(not callable(v) for v in hooks.values()):
++        return _make_asset_result("not_submitted", False, task_id, None, "INVALID_HOOKS", True, 0, "")
++    clock = clock or time.monotonic
++    sleep = sleep or time.sleep
++    def cancelled():
++        if cancel_token is None:
++            return False
++        try:
++            if callable(cancel_token):
++                return bool(cancel_token())
++            value = cancel_token.is_cancelled
++            return bool(value() if callable(value) else value)
++        except Exception:
++            return True
++    def do_request(request, timeout):
++        if request.get_method() != "GET":
++            raise ValueError("Recovery cannot submit")
++        if transport is not None:
++            if hasattr(transport, "open"):
++                return transport.open(request, timeout=timeout)
++            if callable(transport):
++                return transport(request, timeout=timeout)
++            raise ValueError("Invalid recovery transport")
++        return _ASSET_NO_REDIRECT_OPENER.open(request, timeout=timeout)
++    return _poll_uploaded_asset(task_id, hooks, do_request, clock, sleep, cancelled,
++                                clock() + poll_timeout)
++
++
++def upload_asset_for_product(content, filename="reference.png", key=None, hooks=None,
++                             transport=None, clock=None, sleep=None, cancel_token=None,
++                             poll_timeout=120, **kwargs):
++    if kwargs:
++        return _make_asset_result("not_submitted", False, None, None, "INVALID_ARGUMENTS", False, 0, "")
++    return _upload_asset_shared(content, filename, key, hooks, transport, clock, sleep,
++                                cancel_token, poll_timeout)
+ 
+ 
+ def upload_asset(key, path, group_name=None, poll_timeout=120):
+@@ -1324,45 +1384,12 @@
+             return res.get("asset_id")
+         raise ApiError(0, f"资产上传失败：{res.get('outcome')} ({res.get('error_code')})")
+ 
+-    body_bytes, content_type = _build_asset_multipart(content, fn, group_name=group_name)
+-    req = urllib.request.Request(
+-        ASSET_UPLOAD, data=body_bytes,
+-        headers={"Authorization": key.strip(), "Content-Type": content_type, "User-Agent": "pt-media-skill"},
+-        method="POST",
+-    )
+-    try:
+-        with _ASSET_NO_REDIRECT_OPENER.open(req, timeout=60) as r:
+-            body_data = _read_bounded_asset_response(r)
+-            data = json.loads(body_data.decode("utf-8"))
+-    except urllib.error.HTTPError as e:
+-        raise ApiError(e.code, f"资产上传失败 HTTP {e.code}")
+-    except Exception as e:
+-        raise ApiError(0, "资产上传网络请求失败")
+-
+-    if data.get("code") != 200:
+-        raise ApiError(data.get("code", 0), f"资产上传失败：{data.get('code')}")
+-    task_id = (data.get("data") or {}).get("task_id")
+-    if not task_id or not isinstance(task_id, str) or not _ASSET_TASK_ID_RE.fullmatch(task_id):
+-        raise ApiError(0, "上传未返回有效 task_id")
+-
+-    deadline = time.monotonic() + min(float(poll_timeout), 120.0)
+-    query_url = ASSET_GET_ID.format(urllib.parse.quote(task_id, safe=""))
+-    get_req = urllib.request.Request(query_url, headers={"User-Agent": "pt-media-skill"}, method="GET")
+-
+-    while True:
+-        try:
+-            with _ASSET_NO_REDIRECT_OPENER.open(get_req, timeout=30) as r:
+-                body_data = _read_bounded_asset_response(r)
+-                j = json.loads(body_data.decode("utf-8"))
+-        except Exception:
+-            j = {}
+-        if isinstance(j, dict) and j.get("code") == 200:
+-            aid = (j.get("data") or {}).get("asset_id")
+-            if aid and isinstance(aid, str) and _ASSET_ID_RE.fullmatch(aid):
+-                return aid
+-        if time.monotonic() >= deadline:
+-            raise ApiError(0, f"轮询 asset_id 超时（>{poll_timeout}s）")
+-        time.sleep(2)
++    if not isinstance(group_name, str) or len(group_name.encode('utf-8')) > 1024 or any(c in group_name for c in "\r\n"):
++        raise ApiError(0, "Invalid asset group")
++    res = _upload_asset_shared(content, filename=fn, key=key.strip(), poll_timeout=poll_timeout, _group_name=group_name)
++    if res.get("ok"):
++        return res.get("asset_id")
++    raise ApiError(0, "Asset upload failed")
+ 
+ 
+ 

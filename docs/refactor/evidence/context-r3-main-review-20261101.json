@@ -1,0 +1,36 @@
+{
+  "status": "BLOCKED_FOR_INTEGRATION",
+  "providerCalls": 0,
+  "controlledDispatchCounterexamples": [
+    {
+      "name": "chat-ticket-without-active-run",
+      "dispatches": 1,
+      "settles": 0,
+      "error": null
+    },
+    {
+      "name": "chat-ticket-old-run-client-overrides-active-run",
+      "dispatches": 1,
+      "settles": 0,
+      "error": null
+    },
+    {
+      "name": "auxiliary-missing-required-intent-recorder",
+      "dispatches": 1,
+      "settles": 1,
+      "error": null
+    },
+    {
+      "name": "auxiliary-canceled-while-awaiting-intent",
+      "dispatches": 1,
+      "settles": 1,
+      "error": null
+    },
+    {
+      "name": "auxiliary-canceled-after-stream-created-before-consume",
+      "dispatches": 1,
+      "settles": 1,
+      "error": null
+    }
+  ]
+}

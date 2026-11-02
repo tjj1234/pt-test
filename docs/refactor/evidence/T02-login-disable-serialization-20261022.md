@@ -1,0 +1,7 @@
+# T02 · Login and account-disable serialization (2026-10-22)
+
+**Slice: local PASS; T02/AC01 remain incomplete.** Re-ran `node --test tests/regression/google-auth-test.mjs` on the live worktree: **19/19 PASS**. The suite covers both lock orderings for password login versus trusted account disable. If login owns the user-row lock first, disable follows and revokes the newly issued session; if disable commits first, the waiting login observes `disabled_at` and creates no session. The first case also verifies that re-enabling the account does not revive the pre-disable cookie.
+
+Implementation evidence: `shell/auth.cjs` rereads and locks the user row with `FOR UPDATE` inside the same transaction that inserts a password session, then rechecks disable state and password hash. `shell/auth-google.cjs` locks the bound user through Google session creation (`FOR UPDATE OF u`). `getSession` independently excludes disabled users. The test uses isolated PGlite for database state; PGlite serializes transactions, so the disable-first lock wait is deterministically modeled at the transaction adapter seam. This is not evidence of PostgreSQL lock scheduling under production concurrency.
+
+**Remaining:** no target PostgreSQL concurrency run, real OAuth/browser exercise, authorized operator workflow for invoking account disable, or BYOK credential-generation isolation for long-lived DSH processes. Policy for a Key revoked during an in-flight Run still requires product direction. This slice does not establish AC01 or whole-task T02 acceptance.

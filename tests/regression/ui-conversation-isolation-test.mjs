@@ -31,6 +31,9 @@ function ok(name, cond, extra) {
 const dom = makeDomStub();
 const chatEl = dom.el("chat");
 const convListEl = dom.el("convList");
+// Native select surface required by the real asynchronous model loader.
+Object.defineProperty(dom.el("modelSelect"), "options", { get() { return this.children; } });
+Object.defineProperty(dom.el("modelSelect"), "selectedIndex", { get() { return this.children.findIndex(option => option.value === this.value); } });
 
 /* ---------------- 内存后端 ---------------- */
 const db = {
@@ -45,6 +48,9 @@ const db = {
   chatJson: null,
   chatThrows: false,
   sse: null,
+  sses: new Map(),
+  chatCalls: [],
+  stopCalls: [],
 };
 
 function res(obj, code) {
@@ -56,7 +62,7 @@ function res(obj, code) {
 }
 
 /** 一条可以手动推事件的 SSE 响应：db.sse.push(obj) 发一段，db.sse.end() 收流。 */
-function sseResponse() {
+function sseResponse(conversationId) {
   const q = [];
   let waiter = null;
   const enc = new TextEncoder();
@@ -82,9 +88,10 @@ function sseResponse() {
     },
     end() { if (waiter) { const w = waiter; waiter = null; w({ done: true, value: undefined }); } else q.push(null); },
   };
+  db.sses.set(conversationId, db.sse);
   return {
     ok: true, status: 200,
-    headers: { get: () => "text/event-stream" },
+    headers: { get: (name) => name === "content-type" ? "text/event-stream" : name === "x-agent-run-id" ? "run-" + conversationId : null },
     body: { getReader: () => reader },
   };
 }
@@ -109,16 +116,19 @@ async function fakeFetch(url, opts) {
   }
   if (u === "/api/chat") {
     if (db.chatThrows) throw new Error("网络断了");
+    const payload = JSON.parse(opts.body || "{}");
+    db.chatCalls.push({ payload, opts });
     if (db.chatMode === "json") {
       // 故意慢一点：给测试留出「结果回来之前先把对话切走」的窗口，否则跑太快根本复现不了
       await new Promise((r) => setTimeout(r, 60));
       return res(db.chatJson || { ok: true, turns: 1, messages: [{ role: "assistant", text: "JSON回复" }] });
     }
-    return sseResponse();
+    return sseResponse(payload.conversationId);
   }
+  if (u === "/api/chat/stop" && method === "POST") { db.stopCalls.push(JSON.parse(opts.body || "{}")); return res({ ok: true, stopped: false }); }
   if (u === "/api/tools") return res({ ok: true, tools: [] });
   if (u === "/api/skills") return res({ ok: true, skills: [] });
-  if (u === "/api/models") return res({ ok: true, models: [] });
+  if (u === "/api/models" || u.startsWith("/api/models?")) return res({ ok: true, models: [], current: "AUTO", auto: "AUTO" });
   if (u === "/api/me") return res({ ok: true, user: { id: "u1" }, tenant: { id: "t1" } });
   return res({ ok: true });
 }
@@ -137,17 +147,21 @@ const ctx = vm.createContext({
   FileReader: class { readAsDataURL() { setTimeout(() => { this.result = "data:text/plain;base64,aGk="; if (this.onload) this.onload(); }, 0); } },
   Event: dom.Event,
   URLSearchParams,
-  setTimeout, clearTimeout, setInterval, clearInterval, queueMicrotask,
+  setTimeout: (fn, delay, ...args) => setTimeout(fn, delay === 1000 ? 0 : delay, ...args), clearTimeout, setInterval, clearInterval, queueMicrotask,
   TextDecoder, TextEncoder,
 });
 vm.runInContext(readFileSync(APP_JS, "utf8"), ctx, { filename: "app.js" });
 const run = (src) => vm.runInContext(src, ctx);
 const tick = (ms) => new Promise((r) => setTimeout(r, ms || 30));
 
-const reset = (list, activeId) =>
+const reset = async (list, activeId) => {
+  dom.sessionStorage.clear();
   run("(function(){ state.list = " + JSON.stringify(list) +
       "; state.activeId = " + JSON.stringify(activeId) +
       "; state.loadedId = null; state.unread = {}; state.busy = false; })()");
+  run("chatRunsByConversation.clear(); pendingSubmissionRecoveries.clear();");
+  await run("loadModels()");
+};
 const unreadKeys = () => JSON.stringify(run("Object.keys(state.unread)"));
 const activeId = () => run("state.activeId");
 const taValue = () => String(dom.el("ta").value || "");
@@ -194,7 +208,7 @@ console.log("\n[0] 源码层面：修的是根因，不是补丁");
 console.log("\n[1] Bug A（流式）：A 生成中切到 B，A 的结果不覆盖 B");
 {
   db.list = TWO();
-  reset(db.list, "A");
+  await reset(db.list, "A");
   run("state.loadedId = 'A'");
   db.chatMode = "sse"; db.chatThrows = false;
 
@@ -234,7 +248,7 @@ console.log("\n[1] Bug A（流式）：A 生成中切到 B，A 的结果不覆�
 console.log("\n[2] 对照：没切走时结果照常渲染");
 {
   db.list = TWO();
-  reset(db.list, "A");
+  await reset(db.list, "A");
   run("state.loadedId = 'A'");
   db.chatMode = "sse";
   const p = run("runChat({conversationId:'A', message:'问A'})");
@@ -248,7 +262,7 @@ console.log("\n[2] 对照：没切走时结果照常渲染");
 console.log("\n[3] 对照：切到别的页面（不是别的对话）也照常渲染");
 {
   db.list = TWO();
-  reset(db.list, "A");
+  await reset(db.list, "A");
   run("state.loadedId = 'A'");
   db.chatMode = "sse";
   const p = run("runChat({conversationId:'A', message:'问A'})");
@@ -264,7 +278,7 @@ console.log("\n[3] 对照：切到别的页面（不是别的对话）也照常�
 console.log("\n[4] 非流式（JSON）返回同样不覆盖 B");
 {
   db.list = TWO();
-  reset(db.list, "A");
+  await reset(db.list, "A");
   run("state.loadedId = 'A'");
   db.chatMode = "json";
   db.chatJson = { ok: true, turns: 1, messages: [{ role: "assistant", text: "JSON回复" }] };
@@ -281,7 +295,7 @@ console.log("\n[4] 非流式（JSON）返回同样不覆盖 B");
 console.log("\n[5] 请求异常时不往别的对话里插错误气泡");
 {
   db.list = TWO();
-  reset(db.list, "A");
+  await reset(db.list, "A");
   run("state.loadedId = 'A'");
   db.chatMode = "sse"; db.chatThrows = true;
   const p = run("runChat({conversationId:'A', message:'问A'})");
@@ -294,12 +308,57 @@ console.log("\n[5] 请求异常时不往别的对话里插错误气泡");
   db.chatThrows = false;
 }
 
+console.log("\n[5b] T04：A 运行时切到 B，B 可独立运行并只停止 B");
+{
+  db.list = TWO();
+  db.sses.clear(); db.chatCalls = []; db.stopCalls = [];
+  await reset(db.list, "A");
+  run("state.loadedId = 'A'");
+  db.chatMode = "sse"; db.chatThrows = false;
+  await run("loadModels()"); // Stabilize the asynchronous per-conversation model context before exercising concurrent Runs.
+  const pA = run("runChat({conversationId:'A', message:'问A'})");
+  await tick();
+  ok("A 的 runId 被当前会话句柄保存", run("chatRunsByConversation.get('A').runId") === "run-A");
+  ok("A 生成期间当前会话显示 busy", run("state.busy") === true);
+
+  await run("openConversation('B')");
+  ok("切到 B 后 composer 不继承 A 的 busy", run("state.busy") === false && dom.el("send").disabled === false);
+  const pB = run("runChat({conversationId:'B', message:'问B'})");
+  await tick();
+  ok("A 与 B 两个会话可同时保有运行句柄", run("chatRunsByConversation.size") === 2);
+  ok("B 开始后 stop 控件对应当前 B", run("state.busy") === true);
+  dom.el("stop").dispatch("click");
+  await tick();
+  ok("stop 同时传当前 conversationId 与 runId", JSON.stringify(db.stopCalls.at(-1)) === JSON.stringify({ conversationId: "B", runId: "run-B" }), JSON.stringify(db.stopCalls));
+
+  db.convs.A = [{ role: "assistant", text: "A独立完成" }];
+  db.sses.get("A").push({ done: true, ok: true, messages: db.convs.A });
+  await pA;
+  ok("A 完成后只释放 A 的运行状态，B 仍 busy", run("!chatRunsByConversation.has('A') && chatRunsByConversation.has('B') && state.busy") === true);
+  db.convs.B = [{ role: "assistant", text: "B独立完成" }];
+  db.sses.get("B").push({ done: true, ok: true, messages: db.convs.B });
+  await pB;
+  ok("B 完成后释放 B 且没有残留 busy", run("chatRunsByConversation.size === 0 && state.busy === false") === true);
+}
+
+console.log("\n[5c] 运行中的会话不能因列表旧缓存显示空而被新建按钮复用");
+{
+ db.created=0;db.createFails=false;db.chatMode='sse';db.sses.clear();
+ db.list=[{id:'A',title:'新对话',preview:'',msgCount:0,updated_at:Date.now()}];
+ await reset(db.list,'A');
+ const pending=run("runChat({conversationId:'A',message:'正在发送第一问'})");await tick();
+ await run('newConversation()');
+ ok('第一问运行中点击新建会创建另一会话',db.created===1&&activeId()!=='A');
+ ok('新会话可输入且旧会话句柄继续存在',run("!state.busy && chatRunsByConversation.has('A')"));
+ db.sses.get('A').push({done:true,ok:true,messages:[{role:'assistant',text:'A完成'}]});await pending;
+}
+
 console.log("\n[6] Bug B：技能「去使用」总是新开对话");
 {
   db.created = 0;
   db.createFails = false;
   db.list = [{ id: "A", title: "老对话", preview: "聊过", msgCount: 5, updated_at: Date.now() }];
-  reset(db.list, "A");
+  await reset(db.list, "A");
   dom.el("ta").value = "";
   await run("gotoChatWithQuestion('分析一下上周的投放')");
   ok("确实新建了一条对话", db.created === 1, "created=" + db.created);
@@ -314,7 +373,7 @@ console.log("\n[7] Bug B：已有空对话时复用它，不堆空记录");
     { id: "A", title: "老对话", preview: "聊过", msgCount: 5, updated_at: Date.now() },
     { id: "E", title: "新对话", preview: "", msgCount: 0, updated_at: Date.now() },
   ];
-  reset(db.list, "A");
+  await reset(db.list, "A");
   dom.el("ta").value = "";
   await run("gotoChatWithQuestion('问题Y')");
   ok("没再新建（复用了那条空的）", db.created === 0, "created=" + db.created);
@@ -326,7 +385,7 @@ console.log("\n[8] Bug B：创建失败时不默默塞进旧对话");
 {
   db.createFails = true;
   db.list = [{ id: "A", title: "老对话", preview: "聊过", msgCount: 5, updated_at: Date.now() }];
-  reset(db.list, "A");
+  await reset(db.list, "A");
   dom.el("ta").value = "原来在打的字";
   chatEl.children.length = 0;
   await run("gotoChatWithQuestion('问题Z')");

@@ -98,7 +98,8 @@ async function migrate(db, migrationsDir) {
   let files = [];
   if (fs.existsSync(migrationsDir)) {
     files = fs.readdirSync(migrationsDir)
-      .filter((f) => f.toLowerCase().endsWith(".sql"))
+      // macOS AppleDouble metadata files (._name.sql) are not migrations.
+      .filter((f) => !f.startsWith("._") && f.toLowerCase().endsWith(".sql"))
       .sort();
   }
   for (const f of files) {
