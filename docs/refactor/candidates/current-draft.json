@@ -1,9 +1,9 @@
 {
   "status": "DRAFT_NOT_FOR_DEPLOYMENT",
-  "builder": "scripts/package-northstar-candidate34-r20-draft.py",
-  "audit": "scripts/audit-northstar-candidate34-r20-draft.py",
-  "archive": "northstar-controlled-trial-20261102-candidate-34-r20-draft.tar.gz",
-  "sha256": "ac2aa8722a5a8b2df46c5ffe61fa545045e1c640212f215f7fa29586dd91f1ba",
-  "boundSources": 207,
-  "members": 409
+  "builder": "scripts/package-northstar-candidate34-r21-draft.py",
+  "audit": "scripts/audit-northstar-candidate34-r21-draft.py",
+  "archive": "northstar-controlled-trial-20261102-candidate-34-r21-draft.tar.gz",
+  "sha256": "7aac3268f97aff564e496682c752db27aab63ce0a991d614bc34078ea0e9b64c",
+  "boundSources": 209,
+  "members": 411
 }
