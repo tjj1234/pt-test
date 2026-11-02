@@ -1126,3 +1126,7 @@ r18草案SHAadce48980852b8b27b51158b99da9d3f66a772c043e390cad2434611053672eb保�
 ### 2026-11-02：第一条产品链本地验收关闭，准备独立功能提交
 从已推送保险dae46d5创建feature/northstar-integration-20261102，保险分支不动。推理核心接线已在保险中；本轮新增真实浏览器脚本和通用northstar-chain-checks机械入口、旧Runner能力拒绝回归、最终UI修正。实际浏览器暴露更多按钮被.nav button覆盖遮住会话标题，已修CSS；保存档位时保留未发送输入，清空提示不再显示空红色警告。最终源码统一验证boundaries13/13、真实app.js DOM57/57、HTTP+真实Chromium/原生DSH SDK同链1/1，开始/结束源码hash无漂移。没有付费provider。主Agent批准LOCAL_CHAIN_CLOSED，报告REASONING-PRODUCT-LOCAL-ACCEPTANCE-20261102.md；不是生产/全量交付。活动归档仍旧r19，不修改其历史文件或假装新源码可部署。
 复跑入口node scripts/northstar-chain-checks.mjs --chain reasoning --browser；输出固定JSON与完整文本日志，source绑定可verify-report。脚本覆盖其他六包机械入口，最多两个独立测试进程；是否接入仍由主Agent统一判断。Gemini批次文档的原有未提交交付汇总保持保留，第一条功能提交不混入其改动。
+
+### 2026-11-02：Context R4主审阻断，检测网保留反例
+首条本地产品链提交6c5a4cc已完成，未push新集成分支、未修改远程保险分支。Context R4原单元与localhost探针独立复跑通过，但新增context-admission-main-review-20261102.mjs的8项主审反例全部失败：缺准入证据/缺完整绑定/Infinity TTL、异步换Run、实际输出上限、审计原文泄漏、观测异常settle、未消费return。原auto:false+dummyAgent空历史/compact仍不证明真实Agent自动与维护Run手动压缩。结论BLOCKED_FOR_INTEGRATION，原件保留，未接Runner。主审报告GEMINI-CONTEXT-R4-MAIN-REVIEW-20261102.md，复跑与源码绑定在context-chain-checks-20261102.json，不能把原包通过写成已验收。
+XLSX原单元/反读探针机械复跑通过，但仍需主审依赖解析/资源边界及产品接线，不算closed。新增CHAIN-ACCEPTANCE-20261102.md统一列各链证据、提交及未关闭范围。继续下一条可闭合产品链，不等待所有候选主审完成；Context修复保持明确独立阻断，不伪装全量交付。

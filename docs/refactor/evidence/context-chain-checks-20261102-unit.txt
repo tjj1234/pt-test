@@ -1,0 +1,12 @@
+✔ Context Gate R4 - Review Blockers 1 & 2: Chat bound to authoritative active Run and client runId override rejected (2.148375ms)
+✔ Context Gate R4 - Review Blockers 3, 4 & 5: Required intent recorder, cancellation during await, and cancellation before consume (0.693584ms)
+✔ Context Gate R4 - Secure Ticket Manager: Crypto random IDs, capacity limits, and TTL pruning (121.387042ms)
+✔ Context Gate R4 - Barrier-controlled overlapping concurrent sessions isolation (0.719458ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 157.989833

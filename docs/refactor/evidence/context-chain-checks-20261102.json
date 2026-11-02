@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "chain": "context",
+  "status": "MECHANICAL_FAIL",
+  "acceptanceDecision": "MAIN_AGENT_REQUIRED",
+  "scope": "local-controlled-fixtures; no paid provider or target deployment",
+  "baseCommit": "dae46d5d9606cf8a625d6d2eae6963a23348244b",
+  "generatedAt": "2026-11-02T02:19:56.557Z",
+  "sources": {
+    "scripts/northstar-chain-checks.mjs": "0fa465ff6155ce15eac69e6ef3bd8de9079ffc43d1e0d2a9edc4bfe37264379f",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "b823a9ff8332675c4003f1eb8af1027768c31ff45c09692148a101861c2d3a73",
+    "tests/probes/context-admission-main-review-20261102.mjs": "aed4fabdbfab9d0c5e3bf17a05b7975e5c12779d710de3d0c0505f5bd8991fe0",
+    "tests/probes/dsh-native-context-r4-probe.mjs": "a7120cc7c7a7fb35a6150a53493c180a84f3d8583de5e82826af920111633fa8",
+    "tests/regression/dsh-native-context-r4-test.mjs": "18429fa4926108c5b8892b3ac801620cdc33e377adcdaf82e9d4a90b9abbbba3"
+  },
+  "sourceDrift": [],
+  "checks": [
+    {
+      "id": "unit",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/dsh-native-context-r4-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 179,
+      "log": "docs/refactor/evidence/context-chain-checks-20261102-unit.txt",
+      "logSha256": "458d3cfe166395204c6f0a6c95d168de0ce4c1368edaa42b534f264cd399d2a4"
+    },
+    {
+      "id": "main-regressions",
+      "command": [
+        "node",
+        "tests/probes/context-admission-main-review-20261102.mjs"
+      ],
+      "browser": false,
+      "exitCode": 1,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 30,
+      "log": "docs/refactor/evidence/context-chain-checks-20261102-main-regressions.txt",
+      "logSha256": "cbd393ecc2a5a1f42aa62e460b6b70292fdeb73dde7ccfa337966bdc6dd2fd46"
+    },
+    {
+      "id": "probe",
+      "command": [
+        "node",
+        "tests/probes/dsh-native-context-r4-probe.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 316,
+      "log": "docs/refactor/evidence/context-chain-checks-20261102-probe.txt",
+      "logSha256": "860b76a422704052961cc9808cd20159e1051c118938ce06ecd78e74ea2175ba"
+    }
+  ]
+}

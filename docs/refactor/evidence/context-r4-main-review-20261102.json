@@ -1,0 +1,47 @@
+{
+  "candidate": "shell/runtime/dsh-native-context-r4-candidate.mjs",
+  "status": "BLOCKED_FOR_INTEGRATION",
+  "providerCalls": 0,
+  "checks": [
+    {
+      "name": "ticket-requires-budget-admission",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "name": "ticket-requires-complete-binding",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "name": "ticket-rejects-nonfinite-ttl",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "name": "replaced-active-run-rejected-before-dispatch",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "name": "actual-output-token-cap-enforced",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "name": "intent-failure-does-not-leak-error-detail",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "name": "event-callback-failure-settles-admission",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    },
+    {
+      "name": "unconsumed-stream-return-releases-admission",
+      "passed": false,
+      "code": "ERR_ASSERTION"
+    }
+  ]
+}
