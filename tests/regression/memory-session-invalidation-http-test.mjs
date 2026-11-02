@@ -123,7 +123,7 @@ return loaded;};`);
     assert.equal(failedRefresh.status, 503);
     assert.deepEqual(await failedRefresh.json(), {
       ok: false, memorySaved: true, code: 'MEMORY_CONTEXT_INVALIDATION_FAILED',
-      error: '记忆已保存，但未能确认所有现有对话上下文已刷新。请重新打开相关对话后再继续。',
+      error: '记忆已更新，但上下文清理未完成；请重试操作后继续。',
     });
     assert.deepEqual((await json('/api/memory')).memories.map(item => item.key), ['confirmed'],
       'the explicit failure response must identify that storage succeeded while invalidation did not');

@@ -120,7 +120,7 @@ return loaded;};`);
     eq(failedDelete.status, 503, 'DELETE fails closed when cancellation is unconfirmed');
     deepEq(await failedDelete.json(), {
       ok: false, memoryDeleted: true, code: 'MEMORY_CONTEXT_INVALIDATION_FAILED',
-      error: '记忆已删除，但未能确认所有现有对话上下文已刷新。请重新打开相关对话后再继续。',
+      error: '记忆已更新，但上下文清理未完成；请重试操作后继续。',
     }, 'DELETE 503 identifies persisted deletion and failed invalidation');
     const unconfirmedRunId = runIdFor('delete-unconfirmed');
     eq((await getRun(unconfirmedRunId)).state, 'cancelling', 'unconfirmed cancellation records real Run state as cancelling');

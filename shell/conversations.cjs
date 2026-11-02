@@ -140,7 +140,7 @@ async function initConversations(db) {
   /** 读某用户某对话的完整历史；无权限/不存在返回 null。 */
   async function get(userId, id) {
     const r = await db.query(
-      "SELECT id, title, messages, archived, model_preference, source_context_start, source_revocation_pending, created_at, updated_at FROM conversations WHERE id = $1 AND user_id = $2",
+      "SELECT id, title, messages, archived, model_preference, source_context_start, source_revocation_pending, memory_revocation_pending, created_at, updated_at FROM conversations WHERE id = $1 AND user_id = $2",
       [id, userId]
     );
     if (!r.rows.length) return null;
@@ -149,6 +149,7 @@ async function initConversations(db) {
       id: row.id,
       source_context_start: row.source_context_start || 0,
       source_revocation_pending: row.source_revocation_pending === true,
+      memory_revocation_pending: row.memory_revocation_pending === true,
       title: displayTitle(row.title),
       messages: normalize(row.messages),
       archived: !!row.archived,

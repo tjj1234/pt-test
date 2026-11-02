@@ -4,19 +4,23 @@
   "status": "MECHANICAL_PASS",
   "acceptanceDecision": "MAIN_AGENT_REQUIRED",
   "scope": "local-controlled-fixtures; no paid provider or target deployment",
-  "baseCommit": "de7a895d441a90a757ee263689717ac3e88d29cd",
-  "generatedAt": "2026-11-02T04:19:16.260Z",
+  "baseCommit": "cc08ea23bc01f96051943ec3056e6fcdaac90e81",
+  "generatedAt": "2026-11-02T07:15:42.047Z",
   "sources": {
-    "scripts/northstar-chain-checks.mjs": "7a4862f38f43d7c0de1758be46fb418e8e94722d4f4907829d3103e1cd48365d",
+    "scripts/northstar-chain-checks.mjs": "223521ade193798512c653e1f6731f4ef5cc9bc65ea2d8c1030e1b5c80af1bcb",
+    "shell/attachments/source-store.cjs": "d2775a9041fe43007d48315021cad27a8dcbdf98bdb63e6c8310256e57a3b08a",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
     "shell/exports/conversation-docx.cjs": "8f334a1f94850a1a19cc5046b09ebe46afcb4c2728adb171861005b39c8b9af5",
     "shell/exports/document-export-worker.cjs": "bde0f2bf94cc724759714682ded4dc001021deba041e2733fffcaa0421d2ff30",
     "shell/exports/portable-xlsx-candidate.cjs": "3190dcdadff89bf10688b34982a246517360b7aa6e921c696a851e77d69a3905",
+    "shell/memory/provenance-store.cjs": "a1516d84911adfb4ba7ba45e15cd14d1c6faf43e5a82f642fa54f2fbf97876c3",
     "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
     "shell/persistent-runner.mjs": "6bf339cb524202649ea1200307a00d23b618942741d39b0f4ccddcdffd06ec1d",
-    "shell/public/app.js": "33d29e3aadf0814ce674c4182b3cd6c5554810966419b8612f75c8edc898660b",
+    "shell/public/app.js": "f3c2ba1ec309a4d2b13d7433b642b0f1adcb0831bf39405705c2f87195957082",
     "shell/runtime/artifacts.cjs": "a5267f689379ac1b7fc3e50fede44e7aa2948d58081284b686ac44ddd951c76f",
     "shell/runtime/csv-run-artifact.cjs": "83c9439a02fd7f0a401f22abdc960406ab29b695bf8dcca538d267b2077a1a1f",
-    "shell/server.cjs": "1394456b515c2d04b026b7a9815b4d39f2f07a28242fcf8e905688254988290d",
+    "shell/server.cjs": "2317872058ef3d4d170fdd6ba87611f18e483879385e1412ce0cf4f53ad63177",
     "shell/tasks/csv-run-handler.cjs": "bbf6b2d9e41bee43cf84125db6137e19970a8148a7bef583c1030ec75431a337",
     "shell/tasks/csv-tool-definition.cjs": "06243b7ce10a44302020dad4eba5c8517d6e646d60d811fba4246ccb7aec4be4",
     "tests/probes/portable-xlsx-candidate-probe.mjs": "7c0493db81361c67e8c39bbd43e180e82c812c7180584fec4a540605eed532aa",
@@ -45,9 +49,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 61,
+      "durationMs": 307,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-probe.txt",
-      "logSha256": "ff5fb8cc3c652632c43b88a3f77d7a26051b38adb4dadfb5ccb21c4165a1a2ae"
+      "logSha256": "badc42d26b7744cec0a0c6a8f8faf2565ca8931277976ac0074346907601077f"
     },
     {
       "id": "unit-review",
@@ -67,9 +71,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 6141,
+      "durationMs": 6542,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-unit-review.txt",
-      "logSha256": "94f1dcb4f26f8583a8dd9325466fe245bed60ba69a95c4da54a0a6d39231c2c2"
+      "logSha256": "293673df1c7a867d72db82d6cc4c4e02891de6cbe8a7aa69105882be3f4b1ef0"
     },
     {
       "id": "http-sdk",
@@ -84,9 +88,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 8301,
+      "durationMs": 17559,
       "log": "docs/refactor/evidence/xlsx-chain-checks-20261102-http-sdk.txt",
-      "logSha256": "63ed2686dc216872487a579a44e4c89ed6301d143bff9a67d84cda43df40a6e4"
+      "logSha256": "d43f20b90fe9f204c134c4b52fc224f6f4da2f75bedbf25cde16a6db7e8dbae7"
     }
   ]
 }

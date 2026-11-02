@@ -1,0 +1,21 @@
+✔ conversation model preference persists, isolates users, and snapshots atomically (9136.957667ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-memory-run-cancel-LR2Wz2/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ memory changes cancel active user Runs and reject unconfirmed remote cancellation (11990.180584ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/memory-provenance-5v9cFU/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ memory host confirmation scope source lifecycle and failed cleanup survive database reopen (12910.692792ms)
+✔ storage defaults to the same complete migration source as product auth (1.317542ms)
+✔ migration 020 preserves old totals and classifies prior rows without recomputing (8802.2725ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-lbVcYr/master.key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (9056.589083ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18033.295625

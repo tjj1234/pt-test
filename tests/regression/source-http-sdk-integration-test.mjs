@@ -21,7 +21,7 @@ const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[
 ctx.provide('loader',{await:async()=>{}});ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'powertokens',model:'fixture-office'})});ctx.provide('appExit',code=>process.exit(code));
 class Adapter extends LlmAdapter{
  async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:['text'],...(model==='fixture-office'?{reasoning:{efforts:[{id:'low',name:'Low'},{id:'high',name:'High'}],defaultEffort:'low'}}:{})};}
- async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({revoked:text.includes('REVOKED_SOURCE_MARKER'),beta:text.includes('RETAINED_BETA_MARKER'),citations:text.includes('UNTRUSTED_VERIFIED_SOURCE_CITATIONS'),inflight:text.includes('INFLIGHT_SOURCE_TEST')})+'\\n');if(text.includes('INFLIGHT_SOURCE_TEST'))await new Promise((resolve,reject)=>{if(options.signal?.aborted)reject(Error('cancelled'));else options.signal?.addEventListener('abort',()=>reject(Error('cancelled')),{once:true});});yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:'SOURCE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
+ async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({revoked:text.includes('REVOKED_SOURCE_MARKER'),beta:text.includes('RETAINED_BETA_MARKER'),citations:text.includes('UNTRUSTED_VERIFIED_SOURCE_CITATIONS'),inflight:text.includes('INFLIGHT_SOURCE_TEST'),memoryGlobal:text.includes('MEMORY_GLOBAL_MARKER'),memoryScoped:text.includes('MEMORY_SCOPED_MARKER'),memoryInference:text.includes('MEMORY_INFERENCE_MARKER'),memorySource:text.includes('MEMORY_SOURCE_MARKER'),memoryUI:text.includes('UI_MEMORY_MARKER')})+'\\n');if(text.includes('INFLIGHT_SOURCE_TEST'))await new Promise((resolve,reject)=>{if(options.signal?.aborted)reject(Error('cancelled'));else options.signal?.addEventListener('abort',()=>reject(Error('cancelled')),{once:true});});yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:'SOURCE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
 }
 ctx.llm.registerAdapter(['powertokens'],new Adapter());fs.writeFileSync(${JSON.stringify(pid)},String(process.pid));const {apply}=await import(pathToFileURL(path.join(process.env.DSH_HOME,'profiles/run-persistent/persistent-runner.mjs')));apply(ctx);
 `);
@@ -44,6 +44,38 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
   await json('/api/models/select',{method:'POST',body:{conversationId,model:'fixture-office'}});
   const calls=()=>fs.existsSync(trace)?fs.readFileSync(trace,'utf8').trim().split('\n').filter(Boolean).map(JSON.parse):[];
   const upload=async(name,text)=>json('/api/upload-doc',{method:'POST',body:{name,data:Buffer.from(text).toString('base64')}});
+  if(process.env.NORTHSTAR_MEMORY_CHAIN==='1'){
+   const memoryRun=async(id,message='Independent memory question')=>{const response=await req('/api/chat',{method:'POST',body:{conversationId:id,message}});assert.match(await response.text(),/SOURCE_CHAIN_OK/);const runId=response.headers.get('x-agent-run-id');assert.equal((await json('/api/runs/'+runId)).run.state,'completed');return runId;};
+   const save=body=>json('/api/memory',{method:'POST',body});
+   const global=await save({key:'global',value:'MEMORY_GLOBAL_MARKER'});
+   await save({key:'scoped',value:'MEMORY_SCOPED_MARKER',scope:'conversation',conversationId});
+   const proposal=await save({key:'inference',value:'MEMORY_INFERENCE_MARKER',mode:'proposal'});
+   assert.equal((await req('/api/memory',{method:'POST',body:{key:'forged',value:'x',confirmed:true}})).status,400);
+   assert.equal((await json('/api/memory',{user:1})).memories.length,0);
+   assert.equal((await req('/api/memory/confirm',{user:1,method:'POST',body:{id:proposal.id}})).status,404);
+   await memoryRun(conversationId);assert.equal(calls().at(-1).memoryGlobal,true);assert.equal(calls().at(-1).memoryScoped,true);assert.equal(calls().at(-1).memoryInference,false);
+   await json('/api/memory/confirm',{method:'POST',body:{id:proposal.id}});await memoryRun(conversationId);assert.equal(calls().at(-1).memoryInference,true);
+   const second=(await json('/api/conversations',{method:'POST'})).id;await json('/api/models/select',{method:'POST',body:{conversationId:second,model:'fixture-office'}});
+   await memoryRun(second);assert.equal(calls().at(-1).memoryGlobal,true);assert.equal(calls().at(-1).memoryScoped,false);
+   await json('/api/memory?id='+global.id,{method:'DELETE'});await memoryRun(conversationId);assert.equal(calls().at(-1).memoryGlobal,false,'revoked global memory must not survive warm or cold replay');
+   await upload('memory-source.txt','source owner evidence');const source=(await json('/api/sources')).sources[0];await save({key:'document-memory',value:'MEMORY_SOURCE_MARKER',sourceId:source.id});
+   await memoryRun(conversationId);assert.equal(calls().at(-1).memorySource,true);
+   await json('/api/sources/'+source.id,{method:'DELETE'});await memoryRun(conversationId);assert.equal(calls().at(-1).memorySource,false,'source-derived memory and old model state must expire together');
+   const active=await save({key:'active-memory',value:'MEMORY_GLOBAL_MARKER'});
+   const pending=await req('/api/chat',{method:'POST',body:{conversationId,message:'INFLIGHT_SOURCE_TEST'}});const pendingId=pending.headers.get('x-agent-run-id');
+   let started=false;for(let n=0;n<100;n++){if(calls().at(-1)?.inflight){started=true;break;}await new Promise(r=>setTimeout(r,20));}assert.equal(started,true);
+   await json('/api/memory?id='+active.id,{method:'DELETE'});await pending.text();assert.equal((await json('/api/runs/'+pendingId)).run.state,'cancelled');
+   await memoryRun(conversationId);assert.equal(calls().at(-1).memoryGlobal,false);assert.equal(calls().at(-1).inflight,false);
+   const memories=(await json('/api/memory')).memories;assert.ok(memories.find(row=>row.id===proposal.id).confirmed_by);assert.ok(memories.find(row=>row.id===proposal.id).confirmed_at);
+   if(process.env.NORTHSTAR_MEMORY_BROWSER==='1'){
+    const session='m'+crypto.randomBytes(4).toString('hex'),cli=(...args)=>execFileSync('playwright-cli',['-s='+session,...args],{cwd:root,env:{...process.env,TMPDIR:'/private/tmp'},encoding:'utf8',timeout:45000,maxBuffer:2*1024*1024});
+    const driver=fs.readFileSync(path.join(root,'tests/probes/memory-browser-driver-20261102.js'),'utf8').trim();const script=path.join(root,'.playwright-cli',session+'-driver.js');fs.mkdirSync(path.dirname(script),{recursive:true});
+    fs.writeFileSync(script,'async page => ('+driver+')(page,'+JSON.stringify({baseURL:'http://127.0.0.1:'+port,cookie:cookies[0].slice(11),conversationId,screenshot:path.join(root,'docs/refactor/evidence/memory-browser-20261102.png')})+')');
+    try{cli('open');assert.equal(JSON.parse(cli('--raw','run-code','--filename='+script)).status,'MEMORY_BROWSER_CHAIN_PASS');}finally{try{cli('close');}catch{}fs.rmSync(script,{force:true});}
+    assert.ok(calls().some(call=>call.memoryUI));await memoryRun(conversationId);assert.equal(calls().at(-1).memoryUI,false);
+   }
+   return;
+  }
   const original=await upload('alpha.txt','REVOKED_SOURCE_MARKER project Delta 730');
   await upload('beta.txt','RETAINED_BETA_MARKER project Echo 921');
   const records=(await json('/api/sources')).sources;assert.equal(records.length,2);

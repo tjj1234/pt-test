@@ -80,6 +80,7 @@ const { csvAnalyzeToolDefinition } = require("./tasks/csv-tool-definition.cjs");
 const { createTaskStore } = require("./tasks/store.cjs");
 const { createLeaseRecoverySweep } = require("./tasks/lease-recovery-sweep.cjs");
 const { createRunExecutionService } = require("./tasks/execution.cjs");
+const {createMemoryProvenanceStore}=require('./memory/provenance-store.cjs');
 const {createSourceStore}=require("./attachments/source-store.cjs");
 const { cancelActiveRunsForMemoryChange } = require("./tasks/memory-run-invalidation.cjs");
 const { buildRunBudgetUsage } = require("./tasks/run-budget-event.cjs");
@@ -366,6 +367,7 @@ let googleRoutes = null;         // Google OAuth：产品唯一登录入口
 let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
 let sources = null;
+let memoryProvenance = null;
 let memory = null;               // 用户长期记忆 / 所选模型
 let panelShares = null;          // 面板分享落库句柄
 let toolCalls = null;            // 工具调用日志落库句柄（M1）
@@ -671,6 +673,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     return rejectChat(409, { ok: false, archived: true, error: "该对话已归档，请先解除归档" });
   }
 
+  if(conv.memory_revocation_pending)return rejectChat(409,{ok:false,code:'MEMORY_CONTEXT_INVALIDATION_FAILED',error:'记忆上下文清理未完成，请重试保存或删除后继续。'});
   if(conv.source_revocation_pending)return rejectChat(409,{ok:false,code:'SOURCE_REVOCATION_PENDING',error:'资料删除正在清理上下文，请完成删除后重试。'});
   const sourceContextStart=conv.source_context_start || 0;
   let messages = Array.isArray(conv.messages) ? conv.messages : [];
@@ -890,13 +893,17 @@ async function handleChat(req, res, me, body, taskRun = null) {
   const persistConversationMessages = (value) => taskRun
     ? taskStore.saveConversationMessages({ userId: uid, tenantId: me.tenant.id }, taskRun.runId, taskRun.leaseOwner, conversationId, value)
     : conversations.saveMessages(uid, conversationId, value);
-  // 先把用户问题落库（停止/失败也不丢问题）
+  // Bind recalled provenance before saving; source deletion can discover affected history.
+  let recalled;
+  try{recalled=await memoryProvenance.recall({userId:uid,tenantId:me.tenant.id},{conversationId});}
+  catch{return rejectChat(409,{ok:false,code:'MEMORY_RECALL_FAILED',error:'记忆来源无法验证，请稍后重试。'});}
+  if(lastUser&&recalled.records.length)lastUser.memoryRecords=recalled.records;
   await persistConversationMessages(messages);
-  if (taskRun) for (const source of documentSources) await taskRun.emit("attachment.status", { status: "context_ready", ...source });
-
-  // 组装上下文（交给 tenant 常驻层决定冷/热：冷启动才补历史，热会话由 DSH session 持有轨迹）
-  let memText = "";
-  try { memText = ((memory && (await memory.memoryLines(uid))) || []).map((l) => "  · " + l).join("\n"); } catch (e) { memText = ""; }
+  if(taskRun){
+    for(const source of documentSources)await taskRun.emit('attachment.status',{status:'context_ready',...source});
+    if(recalled.records.length)await taskRun.emit('state',{action:'memory_recalled',records:recalled.records,includedChars:recalled.includedChars,maxChars:recalled.maxChars});
+  }
+  const memText=recalled.lines.map(line=>'  · '+line).join('\n');
   let histText = "";
   if (messages.length > 1) {
     histText = messages.slice(sourceContextStart, -1).slice(-6).map((c) => (c.role === "user" ? "用户" : "助手") + "：" + c.text).join("\n");
@@ -2171,43 +2178,19 @@ async function handle(req, res) {
     }
   }
 
-  // ---- ⑪ 用户长期记忆 ----
-  if (p === "/api/memory") {
-    if (req.method === "GET") {
-      const items = await memory.list(me.user.id);
-      return json(res, 200, { ok: true, memories: items });
-    }
-    if (req.method === "POST") {
-      let body = {};
-      try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
-      const r = await memory.set(me.user.id, body.key, body.value);
-      if (!r.ok) return json(res, 400, { ok: false, error: r.error });
-      let invalidation;
-      try { invalidation = await invalidateUserMemorySessions(me.user.id, me.tenant.id); }
-      catch (error) {
-        log.error("memory_context_invalidation_failed", { code: error.code || "MEMORY_CONTEXT_INVALIDATION_FAILED", failedCount: error.failedCount || null });
-        return json(res, 503, {
-          ok: false, memorySaved: true, code: "MEMORY_CONTEXT_INVALIDATION_FAILED",
-          error: "记忆已保存，但未能确认所有现有对话上下文已刷新。请重新打开相关对话后再继续。",
-        });
+  // Only authenticated host endpoints can confirm memory; request provenance/assertions are rejected.
+  if(p==='/api/memory'||p==='/api/memory/confirm'||p==='/api/memory/retry'){
+    const identity={userId:me.user.id,tenantId:me.tenant.id};
+    try{
+      if(p==='/api/memory'&&req.method==='GET')return json(res,200,{ok:true,memories:await memoryProvenance.list(identity),limit:100});
+      if(req.method==='POST'){
+        const body=JSON.parse(await readBody(req,16384));
+        return json(res,200,p.endsWith('/retry')?await memoryProvenance.recover(identity):p.endsWith('/confirm')?await memoryProvenance.confirm(identity,body.id):await memoryProvenance.set(identity,body));
       }
-      return json(res, 200, { ok: true, key: r.key, value: r.value, ...invalidation });
-    }
-    if (req.method === "DELETE") {
-      const u = new URL(req.url, "http://127.0.0.1:" + PORT);
-      const key = u.searchParams.get("key") || "";
-      await memory.del(me.user.id, key);
-      let invalidation;
-      try { invalidation = await invalidateUserMemorySessions(me.user.id, me.tenant.id); }
-      catch (error) {
-        log.error("memory_context_invalidation_failed", { code: error.code || "MEMORY_CONTEXT_INVALIDATION_FAILED", failedCount: error.failedCount || null });
-        return json(res, 503, {
-          ok: false, memoryDeleted: true, code: "MEMORY_CONTEXT_INVALIDATION_FAILED",
-          error: "记忆已删除，但未能确认所有现有对话上下文已刷新。请重新打开相关对话后再继续。",
-        });
+      if(p==='/api/memory'&&req.method==='DELETE'){
+        const query=new URL(req.url,'http://localhost').searchParams;return json(res,200,await memoryProvenance.del(identity,{id:query.get('id'),key:query.get('key')}));
       }
-      return json(res, 200, { ok: true, ...invalidation });
-    }
+    }catch(error){return json(res,error.statusCode||409,{ok:false,...(error.code==='MEMORY_CONTEXT_INVALIDATION_FAILED'?(req.method==='DELETE'?{memoryDeleted:true}:{memorySaved:true}):{}),code:error.code||'MEMORY_OPERATION_FAILED',error:error.code==='MEMORY_CONTEXT_INVALIDATION_FAILED'?'记忆已更新，但上下文清理未完成；请重试操作后继续。':'记忆操作失败，请检查范围、来源或刷新后重试。'});}
   }
 
   // ---- ⑩ 模型列表 / 选择 ----
@@ -2808,6 +2791,7 @@ async function main() {
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
   taskStore = createTaskStore(auth.db);
+  memoryProvenance=createMemoryProvenanceStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   sources=createSourceStore({db:auth.db,uploadsRoot:path.join(RUNTIME,'_uploads'),onRevoke:async(identity,conversationIds)=>{
     const affected=new Set(conversationIds);let cursor=null;
     do{const page=await taskStore.listRuns(identity,{afterRunId:cursor,limit:500});for(const run of page.runs){if(affected.has(run.conversationId)&&['queued','running','waiting_external','awaiting_confirmation','cancelling'].includes(run.state)){const result=await taskExecution.cancel(identity,run.runId);if(['queued','running','waiting_external','awaiting_confirmation','cancelling'].includes(result.run?.state))throw Error('Run not drained');}}cursor=page.hasMore?page.nextCursor:null;}while(cursor);

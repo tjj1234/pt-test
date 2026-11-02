@@ -17,8 +17,8 @@ test('conversation model preference persists, isolates users, and snapshots atom
   let handle;
   try {
     handle = await openFixture(path.join(root, 'db'));
-    await handle.db.exec(`CREATE TABLE tenants(id UUID PRIMARY KEY); CREATE TABLE users(id UUID PRIMARY KEY); INSERT INTO users VALUES ('${U1}'),('${U2}');`);
-    for (const file of ['003_conversations.sql', '004_conversations_v2.sql', '005_archive_memory.sql', '018_conversation_model_preference.sql', '024_conversation_reasoning_preference.sql', '025_document_sources.sql']) await handle.db.exec(fs.readFileSync(path.join(migrations, file), 'utf8'));
+    await handle.db.exec(`CREATE TABLE tenants(id UUID PRIMARY KEY); CREATE TABLE users(id UUID PRIMARY KEY,tenant_id UUID); INSERT INTO users(id) VALUES ('${U1}'),('${U2}');`);
+    for (const file of ['003_conversations.sql', '004_conversations_v2.sql', '005_archive_memory.sql', '018_conversation_model_preference.sql', '024_conversation_reasoning_preference.sql', '025_document_sources.sql','026_memory_provenance.sql']) await handle.db.exec(fs.readFileSync(path.join(migrations, file), 'utf8'));
     await handle.db.exec(fs.readFileSync(path.join(migrations, '018_conversation_model_preference.sql'), 'utf8'));
     let conv = await initConversations(handle.db);
     const legacy = await conv.create(U1);

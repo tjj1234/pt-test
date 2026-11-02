@@ -53,6 +53,7 @@
       <!-- ④ 能力（保留 dc8abfd 既有能力视图；运行状态/记忆入口已移除，仅保留技能） -->
       <div class="nav-group">
         <div class="nav-group-title">能力</div>
+        <button data-v="memory"><span class="ico" data-ico="layers"></span>长期记忆</button>
         <button data-v="skills"><span class="ico" data-ico="sparkle"></span>技能</button>
       </div>
     </nav>
@@ -342,10 +343,14 @@
     <!-- ============ 能力：记忆 ============ -->
     <section class="view" id="v-memory"><div class="page">
       <div class="mem-wrap">
+        <p class="muted">最多100条；每次召回最多20条、4000字符。保存、确认或删除会停止现有运行并清理旧模型上下文，历史记录保留。</p>
         <div class="mem-add">
           <input id="memKey" placeholder="记忆名（如：老板偏好）">
           <input id="memVal" placeholder="记忆内容（如：优先关注美国市场）">
-          <button id="memAdd">添加 / 更新</button>
+          <select id="memScope"><option value="user">用户范围</option><option value="conversation">当前对话范围</option></select>
+          <select id="memSource"><option value="">不绑定资料</option></select>
+          <select id="memMode"><option value="manual">本人确认的记忆</option><option value="proposal">候选推断（待确认）</option></select>
+          <button id="memAdd">添加 / 更新</button><button id="memRetry">重试上下文清理</button>
         </div>
         <div id="memList" class="mem-list"></div>
       </div>

@@ -2767,17 +2767,21 @@ async function loadMemory() {
   if (!list) return;
   list.innerHTML = '<div class="mem-empty">读取中…</div>';
   try {
+    const sourceSelect=$('#memSource');if(sourceSelect){const prior=sourceSelect.value;sourceSelect.replaceChildren(new Option('不绑定资料',''));const response=await fetch('/api/sources',{credentials:'same-origin'});if(response.ok){for(const source of (await response.json()).sources||[]){if(!source.pendingCleanup)sourceSelect.appendChild(new Option(source.name,source.id));}}sourceSelect.value=prior;}
     const j = await (await fetch("/api/memory", { credentials: "same-origin" })).json();
     const items = (j && Array.isArray(j.memories)) ? j.memories : [];
     list.innerHTML = "";
-    if (!items.length) { list.innerHTML = '<div class="mem-empty">还没有长期记忆。添加后，会注入到每次对话的上下文开头。</div>'; return; }
+    if (!items.length) { list.innerHTML = '<div class="mem-empty">还没有记忆。仅召回已确认、范围匹配且来源有效的记录。</div>'; return; }
     for (const m of items) {
       const row = document.createElement("div"); row.className = "mem-row";
       const k = document.createElement("div"); k.className = "mem-key"; k.textContent = m.key;
       const v = document.createElement("div"); v.className = "mem-val"; v.textContent = m.value;
+      const meta=document.createElement('div');meta.className='mem-meta';meta.textContent=(m.scope==='conversation'?'对话范围':'用户范围')+' · '+(m.provenance==='model-inference'?'模型推断':m.provenance==='user-verbatim-statement'?'历史原话':'用户明确确认')+' · '+(m.confirmed?'已确认':'待确认')+(m.source_id?' · '+(m.sourceValid?'来源有效':'来源已失效'):'');
+      if(!m.confirmed&&m.sourceValid){const confirm=document.createElement('button');confirm.textContent='确认';confirm.addEventListener('click',async()=>{const r=await fetch('/api/memory/confirm',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:m.id})});if(!r.ok)alert('确认失败，请检查来源或重试清理');loadMemory();});meta.appendChild(confirm);}
+      row.appendChild(meta);
       const del = document.createElement("button"); del.className = "mem-del"; del.textContent = "删除";
       del.addEventListener("click", async () => {
-        await fetch("/api/memory?key=" + encodeURIComponent(m.key), { method: "DELETE", credentials: "same-origin" });
+        const response=await fetch("/api/memory?id=" + encodeURIComponent(m.id), { method: "DELETE", credentials: "same-origin" });if(!response.ok)alert("删除未完全完成，请重试上下文清理");
         loadMemory();
       });
       row.appendChild(k); row.appendChild(v); row.appendChild(del);
@@ -2785,13 +2789,14 @@ async function loadMemory() {
     }
   } catch (e) { list.innerHTML = '<div class="mem-empty">读取失败：' + e.message + '</div>'; }
 }
+$('#memRetry')?.addEventListener('click',async()=>{const response=await fetch('/api/memory/retry',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:'{}'});if(!response.ok)alert('上下文清理仍未完成，请稍后重试');loadMemory();});
 const memAdd = $("#memAdd");
 if (memAdd) memAdd.addEventListener("click", async () => {
   const key = $("#memKey").value.trim(), val = $("#memVal").value.trim();
   if (!key || !val) { alert("记忆名和内容都要填"); return; }
   const r = await fetch("/api/memory", {
     method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value: val }),
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value: val,scope:$("#memScope").value,conversationId:$("#memScope").value==='conversation'?state.activeId:undefined,mode:$("#memMode").value,sourceId:$('#memSource').value||undefined }),
   });
   const j = await r.json().catch(() => null);
   if (j && j.ok) { $("#memKey").value = ""; $("#memVal").value = ""; loadMemory(); }

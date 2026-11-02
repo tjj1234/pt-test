@@ -1,8 +1,8 @@
-✔ durable attachment snapshots bind tenant-local regular file bytes and fail closed (262.685042ms)
-✔ confirmed CSV selection is canonical and bound to captured attachment bytes (60.973542ms)
-✔ conversation model preference persists, isolates users, and snapshots atomically (3963.548417ms)
-✔ adapter preserves safe runner control errors and observes uncorrelated errors (552.796417ms)
-✔ metadata RPC is isolated, bounded, cancellable and never enters paid heartbeat targets (683.454625ms)
+✔ durable attachment snapshots bind tenant-local regular file bytes and fail closed (195.574833ms)
+✔ confirmed CSV selection is canonical and bound to captured attachment bytes (32.189917ms)
+✔ conversation model preference persists, isolates users, and snapshots atomically (11854.239833ms)
+✔ adapter preserves safe runner control errors and observes uncorrelated errors (472.249667ms)
+✔ metadata RPC is isolated, bounded, cancellable and never enters paid heartbeat targets (717.796625ms)
   ✅ task commands carry the negotiated RPC protocol version
   ✅ request callbacks retain matching sessionId/requestId and return on matching frame
   ✅ duplicate/cross-session request is ignored while original request is pending
@@ -16,16 +16,16 @@
   ✅ invalid protocol manifest blocks silent reuse
 
 结果：11 通过 / 0 失败
-✔ tests/regression/dsh-parent-rpc-test.mjs (12175.660833ms)
-✔ same-session A to B records provider-reported identity only where DSH replay contains it (660.853875ms)
-✔ native DSH web_search honors explicit Run admission and warm policy revocation (477.047667ms)
-✔ native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch (460.884208ms)
-✔ durable reasoning selection remains bound across preference edits and canonical replay (2.767625ms)
-✔ storage defaults to the same complete migration source as product auth (1.274333ms)
-✔ migration 020 preserves old totals and classifies prior rows without recomputing (3930.780541ms)
-[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-tNHFNY/master.key
+✔ tests/regression/dsh-parent-rpc-test.mjs (12376.727083ms)
+✔ same-session A to B records provider-reported identity only where DSH replay contains it (480.986917ms)
+✔ native DSH web_search honors explicit Run admission and warm policy revocation (572.022709ms)
+✔ native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch (424.602416ms)
+✔ durable reasoning selection remains bound across preference edits and canonical replay (3.696083ms)
+✔ storage defaults to the same complete migration source as product auth (1.527291ms)
+✔ migration 020 preserves old totals and classifies prior rows without recomputing (11507.890375ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-pVKzSN/master.key
 B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
-✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (1169.979583ms)
+✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (4864.916083ms)
 ℹ tests 13
 ℹ suites 0
 ℹ pass 13
@@ -33,4 +33,4 @@ B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 12224.331833
+ℹ duration_ms 16772.146083

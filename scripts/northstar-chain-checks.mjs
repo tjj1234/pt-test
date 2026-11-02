@@ -28,12 +28,16 @@ if(option('--verify-report')){
    {id:'probe',args:['tests/probes/source-retrieval-candidate-probe.mjs']},
    {id:'http-sdk',args:['--test','tests/regression/source-http-sdk-integration-test.mjs'],browser:args.includes('--browser'),browserEnvironment:'NORTHSTAR_SOURCE_BROWSER'},
   ]},
-  memory:candidate('shell/memory/provenance-candidate.cjs','memory-provenance-candidate'),
+  memory:{sources:['shell/memory/provenance-store.cjs','shell/attachments/source-store.cjs','shell/server.cjs','shell/conversations.cjs','shell/public/app.js','shell/public/index.html','shell/public/styles.css','shell/db-migrations/026_memory_provenance.sql','shell/tasks/memory-run-invalidation.cjs','tests/regression/source-http-sdk-integration-test.mjs','tests/probes/memory-browser-driver-20261102.js'],checks:[
+   {id:'unit-review',args:['--test','tests/regression/memory-provenance-store-test.mjs','tests/regression/memory-change-cancels-active-runs-test.mjs','tests/regression/conversation-model-preference-test.mjs','tests/regression/storage-upgrade-test.mjs']},
+   {id:'legacy-http',args:['--test','tests/regression/memory-session-invalidation-http-test.mjs','tests/regression/memory-change-cancel-http-test.mjs','tests/regression/memory-untrusted-upload-boundary-http-test.mjs']},
+   {id:'http-sdk',args:['tests/probes/memory-native-chain-20261102.mjs'],browser:args.includes('--browser'),browserEnvironment:'NORTHSTAR_MEMORY_BROWSER'},
+  ]},
   av:{sources:[],checks:[{id:'audit',args:['tests/probes/av-native-capability-audit-20261101.mjs']}]},
   skill:{sources:[],checks:[{id:'audit',args:['tests/probes/skill-loader-native-audit-20261101.mjs']}]},
  };
  const plan=plans[chain];if(!plan)throw Error('Use --chain reasoning|context|xlsx|retrieval|memory|av|skill [--browser] [--out report.json]');
- const sourcePaths=[...new Set(['scripts/northstar-chain-checks.mjs','shell/package-lock.json',...plan.sources,...plan.checks.flatMap(check=>check.args.filter(arg=>arg.endsWith('.mjs')))])].sort();
+ const sourcePaths=[...new Set(['scripts/northstar-chain-checks.mjs','shell/package-lock.json','shell/db-migrations/025_document_sources.sql','shell/db-migrations/026_memory_provenance.sql','shell/attachments/source-store.cjs','shell/memory/provenance-store.cjs',...plan.sources,...plan.checks.flatMap(check=>check.args.filter(arg=>arg.endsWith('.mjs')))])].sort();
  const sources=Object.fromEntries(sourcePaths.map(file=>[file,digest(file)]));
  const out=path.resolve(option('--out')||path.join(root,'docs/refactor/evidence',chain+'-chain-checks-20261102.json'));
  const base=out.replace(/\.json$/,'');fs.mkdirSync(path.dirname(out),{recursive:true});

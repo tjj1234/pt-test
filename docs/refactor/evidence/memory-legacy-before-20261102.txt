@@ -1,0 +1,39 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-memory-cancel-4Qb1t9/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✖ memory POST and DELETE cancel active Runs, retain queued Runs, and fail closed when cancellation is unconfirmed (4880.953625ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-memory-invalidate-AGGBdD/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ memory edits request reset only that user’s DSH sessions (4786.68875ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-memory-untrusted-BVoxZO/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ uploaded prompt-injection text stays untrusted and cannot mutate saved memory (4909.756042ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 2
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4975.511792
+
+✖ failing tests:
+
+test at tests/regression/memory-change-cancel-http-test.mjs:17:1
+✖ memory POST and DELETE cancel active Runs, retain queued Runs, and fail closed when cancellation is unconfirmed (4880.953625ms)
+  AssertionError [ERR_ASSERTION]: DELETE fails closed when cancellation is unconfirmed
+
+  404 !== 503
+
+      at eq (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/memory-change-cancel-http-test.mjs:21:68)
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/memory-change-cancel-http-test.mjs:120:5)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 404,
+    expected: 503,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

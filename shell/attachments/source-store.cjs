@@ -62,7 +62,7 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
    let row=(await tx.query('SELECT * FROM document_sources WHERE source_id=$1 AND user_id=$2 AND tenant_id=$3 FOR UPDATE',[id,identity.userId,identity.tenantId])).rows[0];
    if(!row)throw fail('SOURCE_NOT_FOUND',404);if(row.deleted_at&&row.cleanup_complete)return {row,done:true};
    if(!row.deleted_at)row=(await tx.query('UPDATE document_sources SET deleted_at=now(),source_version=source_version+1 WHERE source_id=$1 RETURNING *',[id])).rows[0];
-   const conversations=(await tx.query("UPDATE conversations SET source_revocation_pending=TRUE,source_context_start=jsonb_array_length(messages) WHERE user_id=$1 AND (strpos(messages::text,$2)>0 OR id IN (SELECT conversation_id FROM agent_runs WHERE user_id=$1 AND tenant_id=$3 AND strpos(request::text,$2)>0 AND state IN ('queued','running','waiting_external','awaiting_confirmation','cancelling'))) RETURNING id",[identity.userId,row.source_ref,identity.tenantId])).rows;
+   const conversations=(await tx.query("UPDATE conversations SET source_revocation_pending=TRUE,source_context_start=jsonb_array_length(messages) WHERE user_id=$1 AND (strpos(messages::text,$2)>0 OR EXISTS(SELECT 1 FROM memory_records m JOIN document_sources s ON s.source_id=m.source_id WHERE m.user_id=$1 AND m.tenant_id=$3 AND s.source_ref=$2) OR id IN (SELECT conversation_id FROM agent_runs WHERE user_id=$1 AND tenant_id=$3 AND strpos(request::text,$2)>0 AND state IN ('queued','running','waiting_external','awaiting_confirmation','cancelling'))) RETURNING id",[identity.userId,row.source_ref,identity.tenantId])).rows;
    return {row,conversations};
   });
   if(pending.done)return {deleted:true,alreadyDeleted:true};

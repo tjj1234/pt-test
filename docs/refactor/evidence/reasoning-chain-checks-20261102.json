@@ -4,25 +4,29 @@
   "status": "MECHANICAL_PASS",
   "acceptanceDecision": "MAIN_AGENT_REQUIRED",
   "scope": "local-controlled-fixtures; no paid provider or target deployment",
-  "baseCommit": "de7a895d441a90a757ee263689717ac3e88d29cd",
-  "generatedAt": "2026-11-02T04:19:22.716Z",
+  "baseCommit": "cc08ea23bc01f96051943ec3056e6fcdaac90e81",
+  "generatedAt": "2026-11-02T07:15:45.251Z",
   "sources": {
-    "scripts/northstar-chain-checks.mjs": "7a4862f38f43d7c0de1758be46fb418e8e94722d4f4907829d3103e1cd48365d",
-    "shell/conversations.cjs": "884bc7e29e4483bc00a00d5cd57983d9ad2600b74d5f4b0cb7948fa01a6c5e08",
+    "scripts/northstar-chain-checks.mjs": "223521ade193798512c653e1f6731f4ef5cc9bc65ea2d8c1030e1b5c80af1bcb",
+    "shell/attachments/source-store.cjs": "d2775a9041fe43007d48315021cad27a8dcbdf98bdb63e6c8310256e57a3b08a",
+    "shell/conversations.cjs": "a1086a4f49d5c5afca41cb00c9757c14b7a458a429bd6ac8dfeef539f367c464",
     "shell/db-migrations/024_conversation_reasoning_preference.sql": "ab387295709691ce299ab0c6344e147a7fa6e4771a43b32e8d10787dcba3e37b",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/memory/provenance-store.cjs": "a1516d84911adfb4ba7ba45e15cd14d1c6faf43e5a82f642fa54f2fbf97876c3",
     "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
     "shell/persistent-runner.mjs": "6bf339cb524202649ea1200307a00d23b618942741d39b0f4ccddcdffd06ec1d",
-    "shell/public/app.js": "33d29e3aadf0814ce674c4182b3cd6c5554810966419b8612f75c8edc898660b",
-    "shell/public/index.html": "d28c3307ad60744962d273d38a88235a3517c393d7a1ccb29d1e72ef227bc863",
-    "shell/public/styles.css": "7b3537aeba294feba1271b0a8847a2c879ddd95af0160ea06ffb0ceb37e151a5",
+    "shell/public/app.js": "f3c2ba1ec309a4d2b13d7433b642b0f1adcb0831bf39405705c2f87195957082",
+    "shell/public/index.html": "8ee24308b56a44dfdd4441d1ce51e0cdc003536350028180b31b52774542f9a3",
+    "shell/public/styles.css": "4337a898555c425e25b16f4c92a31af2c6074e315485d62e0991dc823af5eb8a",
     "shell/runtime/dsh-adapter.cjs": "47708d63581319e0277e140b17616224887901773735dc938457a925605a7492",
     "shell/runtime/dsh-release-manifest.json": "7d9ea82adaed2a2ae74e6f3bca56dd9d87da857a9ee8f42c7fe1a2f6a7696f5a",
-    "shell/server.cjs": "1394456b515c2d04b026b7a9815b4d39f2f07a28242fcf8e905688254988290d",
+    "shell/server.cjs": "2317872058ef3d4d170fdd6ba87611f18e483879385e1412ce0cf4f53ad63177",
     "shell/tasks/chat-request.cjs": "1db3d1399dadbb7a640b7cb8845691ba8318825b1209d2b525f73867b4a52f1d",
     "shell/tenant.cjs": "5889af172b4d42fa7a43f768dee813c7e918a8a7ee9e21a796af4fd9010f6196",
     "tests/probes/reasoning-browser-driver-20261102.js": "a9dd39fbf0dd93b5c021c0fbd70ebd38867c6abcc905ac0dc15a253b0c080526",
     "tests/regression/chat-request-attachments-test.mjs": "56163785f8af6d0ff7c189a3408d3c36be2c209bf6466963956c007c273f2e04",
-    "tests/regression/conversation-model-preference-test.mjs": "33134504a0a0c49615d3f3369c1ff9dfd6fa14da65d6d1baa112d899753c78f4",
+    "tests/regression/conversation-model-preference-test.mjs": "747ac44942c5b06f0be4e64546d3e85776862428a2c9216c7e827e5c1bff94b2",
     "tests/regression/dsh-adapter-error-frame-test.mjs": "3f3b99daa00945a4d58165b575fc3724ea7bfb263dea3994462560bc69ad941f",
     "tests/regression/dsh-model-info-rpc-test.mjs": "d69b15be0923768e7d79056064498bdc640931ef431aa7b5f93c2994ce7242f0",
     "tests/regression/dsh-parent-rpc-test.mjs": "c406132707d2650aceff5da566e56e3cff688ca91b4e8b654564ec88c9fc377d",
@@ -31,7 +35,7 @@
     "tests/regression/reasoning-http-sdk-integration-test.mjs": "aca5ab404059ed6998fc3488f29a1c0dde9a1a188b1c395defb5bcbfff82a9f7",
     "tests/regression/reasoning-native-runner-test.mjs": "b747398e558e50a2dfff0aac3a819de113448af715be54d35f97104ccfdc7f0e",
     "tests/regression/reasoning-run-snapshot-test.mjs": "f95162f6373a09ec38a43435b948db989908ba55d47df1d0223217fc8cff8587",
-    "tests/regression/storage-upgrade-test.mjs": "6ec9c18684ad35e644f9ac4f6adbc4299f57de18c8f28413d8ce4ae000b64809",
+    "tests/regression/storage-upgrade-test.mjs": "ea1b80157842af2e66b57930d016a4736e4b9bbb5821f336f55f22aa0ecfe112",
     "tests/regression/ui-model-switch-test.mjs": "1bd6a447420840ddeeac7bedc516f14b3aebbbb8b598a8829cdf7b3c0c6504f0"
   },
   "sourceDrift": [],
@@ -46,24 +50,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 6137,
+      "durationMs": 6208,
       "log": "docs/refactor/evidence/reasoning-chain-checks-20261102-ui.txt",
       "logSha256": "aada2a45eafc5239b019310b20a50948e8986eff142260f205eec348bd4b7e9f"
-    },
-    {
-      "id": "http-sdk",
-      "command": [
-        "node",
-        "--test",
-        "tests/regression/reasoning-http-sdk-integration-test.mjs"
-      ],
-      "browser": true,
-      "exitCode": 0,
-      "signal": null,
-      "timedOut": false,
-      "durationMs": 4564,
-      "log": "docs/refactor/evidence/reasoning-chain-checks-20261102-http-sdk.txt",
-      "logSha256": "148f14b17db5858d680d3148518f53a9d569521c7debe0f339f221352875b67b"
     },
     {
       "id": "boundaries",
@@ -85,9 +74,24 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 12310,
+      "durationMs": 16880,
       "log": "docs/refactor/evidence/reasoning-chain-checks-20261102-boundaries.txt",
-      "logSha256": "3a70704e6e48fb3b65cf85444e8111c2f33b1f2942a27c8639fc3628d45acf3f"
+      "logSha256": "01013db2d8b76e93bd5636087f1a780268fd8bd79fbb9ac84c6f16a1d91051c0"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/reasoning-http-sdk-integration-test.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 16177,
+      "log": "docs/refactor/evidence/reasoning-chain-checks-20261102-http-sdk.txt",
+      "logSha256": "43dc935312015bd2a1610baf4e61111b7c314ceedee0032875b33cb89ae27f58"
     }
   ]
 }

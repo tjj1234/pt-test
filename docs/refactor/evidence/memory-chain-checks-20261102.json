@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "chain": "memory",
+  "status": "MECHANICAL_PASS",
+  "acceptanceDecision": "MAIN_AGENT_REQUIRED",
+  "scope": "local-controlled-fixtures; no paid provider or target deployment",
+  "baseCommit": "cc08ea23bc01f96051943ec3056e6fcdaac90e81",
+  "generatedAt": "2026-11-02T07:15:44.338Z",
+  "sources": {
+    "scripts/northstar-chain-checks.mjs": "223521ade193798512c653e1f6731f4ef5cc9bc65ea2d8c1030e1b5c80af1bcb",
+    "shell/attachments/source-store.cjs": "d2775a9041fe43007d48315021cad27a8dcbdf98bdb63e6c8310256e57a3b08a",
+    "shell/conversations.cjs": "a1086a4f49d5c5afca41cb00c9757c14b7a458a429bd6ac8dfeef539f367c464",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/memory/provenance-store.cjs": "a1516d84911adfb4ba7ba45e15cd14d1c6faf43e5a82f642fa54f2fbf97876c3",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+    "shell/public/app.js": "f3c2ba1ec309a4d2b13d7433b642b0f1adcb0831bf39405705c2f87195957082",
+    "shell/public/index.html": "8ee24308b56a44dfdd4441d1ce51e0cdc003536350028180b31b52774542f9a3",
+    "shell/public/styles.css": "4337a898555c425e25b16f4c92a31af2c6074e315485d62e0991dc823af5eb8a",
+    "shell/server.cjs": "2317872058ef3d4d170fdd6ba87611f18e483879385e1412ce0cf4f53ad63177",
+    "shell/tasks/memory-run-invalidation.cjs": "c0bc989088fdc31a5cd65f043c35eb242b7f581c7383735dfe23b75ea5d33750",
+    "tests/probes/memory-browser-driver-20261102.js": "eb9de23d4d6ef40e142deee7bcf49f8265e6f15e5a8fe1498fc630b003173d95",
+    "tests/probes/memory-native-chain-20261102.mjs": "eea8a7bab4bcb25adaa99a4700df470e5414913a5a5d2a3c27f00830837020ad",
+    "tests/regression/conversation-model-preference-test.mjs": "747ac44942c5b06f0be4e64546d3e85776862428a2c9216c7e827e5c1bff94b2",
+    "tests/regression/memory-change-cancel-http-test.mjs": "6247c38d4fecada776bc7852d48c090a355427d08feb3cfde648de8132f5bf7f",
+    "tests/regression/memory-change-cancels-active-runs-test.mjs": "96c04fa62f00343e50985b95b1a2d44af3c421d39dd71c7794d06e168408a824",
+    "tests/regression/memory-provenance-store-test.mjs": "3c158a91c46253a6eb0387b26b76ff7149a5b1429adba85b73abd2aa9e614d1f",
+    "tests/regression/memory-session-invalidation-http-test.mjs": "697b86294865c1da21abb9e084c26ab4d1ff188105f3b1e1766d30cfc205909d",
+    "tests/regression/memory-untrusted-upload-boundary-http-test.mjs": "ab1d0012efba30bd2e301a4fb07882af72ba3e664f9cd207499af9c2f2517aeb",
+    "tests/regression/source-http-sdk-integration-test.mjs": "162430221f921febd29101deaeb44d44f318dbefe3722d27070d2bbd6ec1df20",
+    "tests/regression/storage-upgrade-test.mjs": "ea1b80157842af2e66b57930d016a4736e4b9bbb5821f336f55f22aa0ecfe112"
+  },
+  "sourceDrift": [],
+  "checks": [
+    {
+      "id": "legacy-http",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/memory-session-invalidation-http-test.mjs",
+        "tests/regression/memory-change-cancel-http-test.mjs",
+        "tests/regression/memory-untrusted-upload-boundary-http-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 14777,
+      "log": "docs/refactor/evidence/memory-chain-checks-20261102-legacy-http.txt",
+      "logSha256": "b9d019fea437c25ace7e0d1d8e78ada880119f7e3fc5e38aeebb37cd1e067c35"
+    },
+    {
+      "id": "unit-review",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/memory-provenance-store-test.mjs",
+        "tests/regression/memory-change-cancels-active-runs-test.mjs",
+        "tests/regression/conversation-model-preference-test.mjs",
+        "tests/regression/storage-upgrade-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 18063,
+      "log": "docs/refactor/evidence/memory-chain-checks-20261102-unit-review.txt",
+      "logSha256": "b86cc52b18f16d565067dcaff427180464418f03893dc88caa53f3a244f31823"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "tests/probes/memory-native-chain-20261102.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 9297,
+      "log": "docs/refactor/evidence/memory-chain-checks-20261102-http-sdk.txt",
+      "logSha256": "1d5db6c8796b7a27270016df5a69b31a8ec484e1a12a9038095584f85ca270b6"
+    }
+  ]
+}

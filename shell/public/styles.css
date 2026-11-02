@@ -1219,3 +1219,6 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 #sourcePanel[hidden]{display:none} #sourceList>div{display:flex;justify-content:space-between;gap:8px;margin:4px 0} #sourceList input{margin-right:5px}
 #sourceResults>div {padding:8px;border-top:1px solid var(--line)} #sourceResults p{white-space:pre-wrap;overflow-wrap:anywhere} #sourceCitationChips button{margin:3px;font-size:11px}
 #sourceBtn{border:0;background:transparent;color:inherit;cursor:pointer;font-size:12px}
+
+.mem-add{flex-wrap:wrap}.mem-add input{min-width:200px}.mem-add select{max-width:240px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+.mem-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(200px,3fr) auto;align-items:start}.mem-meta{grid-column:1/-1;font-size:12px;color:var(--sub)}.mem-meta button{margin-left:8px}
