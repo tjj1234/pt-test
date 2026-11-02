@@ -1,10 +1,10 @@
 # 2026-11-02产品链验收现场
-结论：推理、CSV分析Excel结果、资料检索删除与记忆来源范围四条本地产品链已验收；Context R4主审阻断。六包交卷不等于六条产品链交付，未宣布完整重构完成。最终接入决定由主Agent负责；机械脚本可并行，不拆分整体判断。
+结论：推理、Context原生压缩恢复、CSV分析Excel结果、资料检索删除与记忆来源范围五条本地产品链已验收。六包交卷不等于六条产品链交付，未宣布完整重构完成。最终接入决定由主Agent负责；机械脚本可并行，不拆分整体判断。
 
 | 顺序 | 产品链/交卷 | 当前主审与接入状态 | 证据/提交 |
 |---|---|---|---|
 | 1 | 推理选择 | LOCAL_CHAIN_CLOSED；真实Chromium→偏好→持久Run→原生SDK→可见结果→刷新；无真实付费provider | 6c5a4cc；[本地验收](evidence/REASONING-PRODUCT-LOCAL-ACCEPTANCE-20261102.md) |
-| 2 | Context R4 | BLOCKED_FOR_INTEGRATION；主审8项已修复，新增2项反例通过；组合预算、凭证桥、自动/手动真实压缩及冷恢复未证明；未接Runner | [原主审](evidence/GEMINI-CONTEXT-R4-MAIN-REVIEW-20261102.md)、[修复与阻塞](evidence/CONTEXT-REPAIR-20261102.md)、context-chain-checks-20261102.json |
+| 2 | Context R4 | LOCAL_CHAIN_CLOSED；真实自动压力/浏览器手动压缩、独立组合预算与usage、原生检查点全进程重启恢复、取消及撤销失效 | [原主审](evidence/GEMINI-CONTEXT-R4-MAIN-REVIEW-20261102.md)、[本地验收](evidence/CONTEXT-PRODUCT-LOCAL-ACCEPTANCE-20261102.md)、context-chain-checks-20261102.json |
 | 3 | CSV分析Excel结果 | LOCAL_CHAIN_CLOSED；主审修复后接原生工具、宿主worker、owned下载、历史与真实浏览器；任意结构化文档工具仍未关闭 | [本地验收](evidence/XLSX-RESULT-PRODUCT-LOCAL-ACCEPTANCE-20261102.md)、xlsx-chain-checks-20261102.json；0638d8f |
 | 4 | 跨资料检索 | LOCAL_CHAIN_CLOSED；浏览器检索引用、持久Run、删除取消在途Run及温/冷上下文失效；不包含PDF/OCR | [本地验收](evidence/SOURCE-PRODUCT-LOCAL-ACCEPTANCE-20261102.md)、retrieval-chain-checks-20261102.json |
 | 5 | 记忆来源/范围 | LOCAL_CHAIN_CLOSED；登录确认、用户/对话范围、来源失效、在途取消、温/冷上下文撤销及失败重启恢复 | [本地验收](evidence/MEMORY-PRODUCT-LOCAL-ACCEPTANCE-20261102.md)、memory-chain-checks-20261102.json |

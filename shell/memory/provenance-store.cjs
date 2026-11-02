@@ -16,7 +16,7 @@ function createMemoryProvenanceStore({db,onInvalidate}){
     await tx.query('UPDATE conversations SET memory_revocation_pending=TRUE WHERE user_id=$1',[identity.userId]);return result;
    });
    let invalidation;try{invalidation=await onInvalidate(identity);}catch{throw fail('MEMORY_CONTEXT_INVALIDATION_FAILED',503);}
-   await db.query('UPDATE conversations SET source_context_start=jsonb_array_length(messages),memory_revocation_pending=FALSE WHERE user_id=$1',[identity.userId]);
+   await db.query('UPDATE conversations SET source_context_start=jsonb_array_length(messages),native_session_id=NULL,native_session_key_sha256=NULL,memory_revocation_pending=FALSE WHERE user_id=$1',[identity.userId]);
    return {...result,...invalidation};
   }finally{locks.delete(key);}
  }

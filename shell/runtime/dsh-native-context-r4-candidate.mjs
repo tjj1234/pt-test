@@ -202,7 +202,7 @@ export function installNativeContextGateR4(ctx, options) {
     validate();
     let admission,recordIntent;
     if(purpose==='chat'){
-      ticketManager.consumeTicket(streamOptions.admissionTicket,{sessionId,runId:active.runId,provider:streamOptions.provider,model:streamOptions.model});
+      ticketManager.consumeTicket((options.getChatTicket?options.getChatTicket(streamOptions,active):streamOptions.admissionTicket),{sessionId,runId:active.runId,provider:streamOptions.provider,model:streamOptions.model});
     }else{
       recordIntent=options.recordModelIntent||active.recordModelIntent;
       if(typeof recordIntent!=='function')throw gateError('MISSING_INTENT_RECORDER','Durable intent recorder required');
@@ -228,6 +228,7 @@ export function installNativeContextGateR4(ctx, options) {
         try{await active.recordEvent?.({type:purpose==='chat'?'chat_admission_consumed':'model_request_admitted',...binding,purpose,provider:streamOptions.provider,model:streamOptions.model,timestamp:Date.now()});}
         catch{throw gateError('INTENT_AUDIT_FAILED','Model audit recording failed');}
         validate();
+        if(purpose!=='chat'){try{options.onAuxiliaryDispatch?.(binding);}catch{throw gateError('INTENT_AUDIT_FAILED','Auxiliary dispatch audit failed');}}
         const raw=await next();validate();
         for await(const chunk of raw){validate();yield chunk;}
       }catch(error){failure=error;throw error;}finally{settle(failure);}

@@ -12,7 +12,8 @@ function createModelIntentHandler({ priceStore, selectedModel, emit }) {
     if (typeof requestId !== 'string' || !/^[a-f0-9-]{36}$/i.test(requestId)) throw fail('MODEL_INTENT_INVALID');
     const signature = fingerprint(args);
     if (!args || typeof args !== 'object' || Array.isArray(args) ||
-        Object.keys(args).some(key => !['model', 'provider', 'turn', 'step', 'maxTokens'].includes(key)) ||
+        Object.keys(args).some(key => !['model', 'provider', 'turn', 'step', 'maxTokens', 'purpose'].includes(key)) ||
+        (args.purpose!==undefined&&args.purpose!=='compaction') ||
         args.model !== selectedModel || typeof args.provider !== 'string' || !args.provider || args.provider.length > 256 ||
         !Number.isSafeInteger(args.turn) || args.turn < 0 || !Number.isSafeInteger(args.step) || args.step < 0 ||
         !(args.maxTokens === null || (Number.isSafeInteger(args.maxTokens) && args.maxTokens > 0))) throw fail('MODEL_INTENT_INVALID');
@@ -29,7 +30,7 @@ function createModelIntentHandler({ priceStore, selectedModel, emit }) {
       // Persist the exact capture and rates before allowing the SDK request to proceed.
       await emit('state', { action: 'model_request_intent', attemptId: requestId,
         requestedAt: price.requestedAt, selectedModel, provider: args.provider,
-        turn: args.turn, step: args.step, parameters: { maxOutputTokens: args.maxTokens },
+        turn: args.turn, step: args.step, ...(args.purpose?{purpose:args.purpose}:{}), parameters: { maxOutputTokens: args.maxTokens },
         parametersCoverage: 'partial', submission: 'intent_only',
         price: { catalogId: price.catalogId, sourceSha256: price.sourceSha256, snapshot: price.snapshot,
           coverage: price.coverage, reasonCode: price.reasonCode },

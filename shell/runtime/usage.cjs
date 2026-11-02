@@ -25,6 +25,10 @@ function collectResponseUsage(events, firstSeq = 0) {
     seen.set(event.seq, signature);
     if (event.type === "turn/start") { started = true; continue; }
     if (!started) continue;
+    if(event.type==='compaction/summary'&&event.data?.llmStreamCall===true){
+      responses.push({responseSeq:event.seq,usage:normalizeUsage(event.data.usage)});
+      continue;
+    }
     if (event.type === "assistant/chunk" && event.data?.chunk?.type === "usage") {
       const turn = event.data?.turn;
       const step = event.data?.step;

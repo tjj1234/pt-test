@@ -64,6 +64,7 @@ async function fixture(t, policy, {controlled = false} = {}) {
     ['shell/persistent-runner.mjs', 'persistent-runner.mjs'], ['shell/tasks/budget.cjs', 'budget.cjs'],
     ['shell/runtime/usage.cjs', 'usage.cjs'], ['business/media/presets.cjs', 'presets.cjs'],
     ['shell/runtime/native-image-message.mjs', 'native-image-message.mjs'],
+    ['shell/runtime/dsh-native-context-r4-candidate.mjs', 'dsh-native-context-r4-candidate.mjs'],
     ['business/attribution/ga-connector/executor.js', 'ga-query-executor.cjs'],
   ]) fs.copyFileSync(path.join(root, source), path.join(profile, destination));
   fs.writeFileSync(path.join(profile, 'run-budget.json'), JSON.stringify(policy));

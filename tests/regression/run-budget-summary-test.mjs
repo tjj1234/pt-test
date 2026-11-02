@@ -13,6 +13,7 @@ for (const [from, to] of [
   ["shell/tasks/budget.cjs", "budget.cjs"],
   ["shell/runtime/usage.cjs", "usage.cjs"],
   ["shell/runtime/native-image-message.mjs", "native-image-message.mjs"],
+  ["shell/runtime/dsh-native-context-r4-candidate.mjs", "dsh-native-context-r4-candidate.mjs"],
   ["docs/dsh-profile-snapshot/run-persistent/presets.cjs", "presets.cjs"],
 ]) fs.copyFileSync(path.join(root, from), path.join(profileDir, to));
 fs.symlinkSync(path.join(root, "shell/node_modules"), path.join(profileDir, "node_modules"), "dir");

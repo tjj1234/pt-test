@@ -4,20 +4,25 @@
   "status": "MECHANICAL_PASS",
   "acceptanceDecision": "MAIN_AGENT_REQUIRED",
   "scope": "local-controlled-fixtures; no paid provider or target deployment",
-  "baseCommit": "cc08ea23bc01f96051943ec3056e6fcdaac90e81",
-  "generatedAt": "2026-11-02T07:15:44.338Z",
+  "baseCommit": "b337b36833886c6a114def14844a99fa1b5dc244",
+  "generatedAt": "2026-11-02T08:03:21.355Z",
   "sources": {
-    "scripts/northstar-chain-checks.mjs": "223521ade193798512c653e1f6731f4ef5cc9bc65ea2d8c1030e1b5c80af1bcb",
-    "shell/attachments/source-store.cjs": "d2775a9041fe43007d48315021cad27a8dcbdf98bdb63e6c8310256e57a3b08a",
+    "scripts/northstar-chain-checks.mjs": "37f97b406124b3dd370e14157ec2d40bfb5a8c81ca7d8552d1c39f999c117659",
+    "shell/attachments/source-store.cjs": "03dcf706ea1d6ccfc9ac95359c3ec568e21e77917867f31023032b39a0d28686",
     "shell/conversations.cjs": "a1086a4f49d5c5afca41cb00c9757c14b7a458a429bd6ac8dfeef539f367c464",
     "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
     "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
-    "shell/memory/provenance-store.cjs": "a1516d84911adfb4ba7ba45e15cd14d1c6faf43e5a82f642fa54f2fbf97876c3",
+    "shell/db-migrations/027_native_context_session.sql": "92ad6cdab29af8b41754dd02916ad1c2376a59d405aa34a0974aa1efc6bb88cb",
+    "shell/memory/provenance-store.cjs": "c5ed87bddefcf11c238f8fc2e6ba453f9bdb4ab7e5b5c7c7c86d5a5180f45134",
     "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
-    "shell/public/app.js": "f3c2ba1ec309a4d2b13d7433b642b0f1adcb0831bf39405705c2f87195957082",
+    "shell/public/app.js": "aa5d5a6ed0580e5f886df0f9142f78dff1c631eb9f73b8d3acfe650b097f4936",
     "shell/public/index.html": "8ee24308b56a44dfdd4441d1ce51e0cdc003536350028180b31b52774542f9a3",
     "shell/public/styles.css": "4337a898555c425e25b16f4c92a31af2c6074e315485d62e0991dc823af5eb8a",
-    "shell/server.cjs": "2317872058ef3d4d170fdd6ba87611f18e483879385e1412ce0cf4f53ad63177",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "546a1409bb6dfb574ecb9c0a71482a52714e58ed40d3909b1f2f74dd0b75a701",
+    "shell/runtime/run-budget-csv.json": "9f5419dfad11192227620e080cbafc20bc7075294ff00d9b19f85b78bd6c6db9",
+    "shell/runtime/run-budget-media.json": "29771b1acb1eac781d551745e063a86172abcca4d758f72cff50793be60b4287",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/server.cjs": "c5580cd9ce2dc3dbaa3b8ba078c5b46cebd37a280ab158291270950fd51a97f9",
     "shell/tasks/memory-run-invalidation.cjs": "c0bc989088fdc31a5cd65f043c35eb242b7f581c7383735dfe23b75ea5d33750",
     "tests/probes/memory-browser-driver-20261102.js": "eb9de23d4d6ef40e142deee7bcf49f8265e6f15e5a8fe1498fc630b003173d95",
     "tests/probes/memory-native-chain-20261102.mjs": "eea8a7bab4bcb25adaa99a4700df470e5414913a5a5d2a3c27f00830837020ad",
@@ -28,7 +33,7 @@
     "tests/regression/memory-session-invalidation-http-test.mjs": "697b86294865c1da21abb9e084c26ab4d1ff188105f3b1e1766d30cfc205909d",
     "tests/regression/memory-untrusted-upload-boundary-http-test.mjs": "ab1d0012efba30bd2e301a4fb07882af72ba3e664f9cd207499af9c2f2517aeb",
     "tests/regression/source-http-sdk-integration-test.mjs": "162430221f921febd29101deaeb44d44f318dbefe3722d27070d2bbd6ec1df20",
-    "tests/regression/storage-upgrade-test.mjs": "ea1b80157842af2e66b57930d016a4736e4b9bbb5821f336f55f22aa0ecfe112"
+    "tests/regression/storage-upgrade-test.mjs": "e743fdc992cf91666e38bdeb4b3cdaa5903c0298af90611a09239be116b24cc2"
   },
   "sourceDrift": [],
   "checks": [
@@ -45,9 +50,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 14777,
+      "durationMs": 13284,
       "log": "docs/refactor/evidence/memory-chain-checks-20261102-legacy-http.txt",
-      "logSha256": "b9d019fea437c25ace7e0d1d8e78ada880119f7e3fc5e38aeebb37cd1e067c35"
+      "logSha256": "881b91f984b2607af693028b9fad1242872082688f249f01e4ab4c6e7cf33df5"
     },
     {
       "id": "unit-review",
@@ -63,9 +68,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 18063,
+      "durationMs": 14025,
       "log": "docs/refactor/evidence/memory-chain-checks-20261102-unit-review.txt",
-      "logSha256": "b86cc52b18f16d565067dcaff427180464418f03893dc88caa53f3a244f31823"
+      "logSha256": "9e3a5210a131fbf31bce7625df045aca5120ec0f9be43ea77a089a5e4516f3e6"
     },
     {
       "id": "http-sdk",
@@ -77,9 +82,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 9297,
+      "durationMs": 5588,
       "log": "docs/refactor/evidence/memory-chain-checks-20261102-http-sdk.txt",
-      "logSha256": "1d5db6c8796b7a27270016df5a69b31a8ec484e1a12a9038095584f85ca270b6"
+      "logSha256": "8968fe50e647c3a714539765cdc4a6678c076d1d0a226d7a4ef030e969a527d2"
     }
   ]
 }

@@ -124,7 +124,7 @@ return value;};`);
     const events = (await json('/api/runs/' + runId + '/events')).events;
     const budget = events.find(e => e.type === 'usage' && e.payload?.kind === 'run_budget');
     assert.ok(budget, JSON.stringify(events));
-    assert.equal(budget.payload.limits.maxModelCalls, 2);
+    assert.equal(budget.payload.limits.maxModelCalls, 3);
     assert.equal(budget.payload.limits.maxToolCalls, 1);
     assert.equal(budget.payload.snapshot.modelCalls, 2); assert.equal(budget.payload.snapshot.toolCalls, 1);
     assert.equal(events.filter(e => e.payload?.action === 'model_request_intent').length, 2);

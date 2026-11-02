@@ -175,6 +175,7 @@ const PROFILE_SOURCE_FILES = Object.freeze({
   "ga-query-executor.cjs": (runner) => path.resolve(path.dirname(runner), "..", "business", "attribution", "ga-connector", "executor.js"),
   "budget.cjs": (runner) => path.resolve(path.dirname(runner), "tasks", "budget.cjs"),
   "usage.cjs": (runner) => path.resolve(path.dirname(runner), "runtime", "usage.cjs"),
+  "dsh-native-context-r4-candidate.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "dsh-native-context-r4-candidate.mjs"),
   "native-image-message.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "native-image-message.mjs"),
   "run-budget.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget.json"),
   "run-budget-csv.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-csv.json"),
@@ -183,7 +184,12 @@ const PROFILE_SOURCE_FILES = Object.freeze({
 const PROFILE_PATCH = [
   "- id: hmr",
   "  disabled: true",
-  ...["session-title-llm", "user-questions", "compaction-basic", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "tool-skill", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
+  ...["session-title-llm", "user-questions", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "tool-skill", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
+  "",
+  "- id: compaction-basic",
+  "  config:",
+  "    maxTokens: 128",
+  "    compactionRetries: 0",
   "",
   "- insert:",
   "    - id: northstar-patch-watch-compat",
@@ -337,6 +343,8 @@ function createDshRuntime(opts = {}) {
   const warmSessions = new Map();        // sessionKey -> { tenantId, sessionId }
 
   function writeJson(proc, obj) {
+    if(obj.type==='task'&&(obj.resume===true||obj.compact===true)&&!proc.capabilities?.includes('native-context-v1')){failRunnerProcess(proc,'DSH_CONTEXT_UNSUPPORTED','DSH runner does not support native context restoration or maintenance');return;}
+
     if (obj.type === "task" && obj.reasoningEffort !== undefined && !proc.capabilities?.includes("reasoning-selection-v1")) {
       failRunnerProcess(proc,"DSH_REASONING_UNSUPPORTED","DSH runner does not support explicit reasoning selection"); return;
     }
@@ -869,7 +877,8 @@ function createDshRuntime(opts = {}) {
       // 冷/热判断：新鲜进程 = 无存活 session，视为冷启动（补历史 + 用全新 sessionId）
       const warmRec = sessionKey ? warmSessions.get(sessionKey) : null;
       const warm = !fresh && warmRec && warmRec.tenantId === tenantId;
-      const sessionId = warm ? warmRec.sessionId : ((sessionKey || "adhoc") + "-" + crypto.randomBytes(6).toString("hex"));
+      const resume=!warm&&spec.nativeSession?.keySha256===sha256(String(spec.apiKey||''))&&typeof spec.nativeSession?.sessionId==='string'&&spec.nativeSession.sessionId.startsWith(sessionKey+'-')&&/^[A-Za-z0-9_-]{1,160}$/.test(spec.nativeSession.sessionId);
+      const sessionId = warm ? warmRec.sessionId : resume?spec.nativeSession.sessionId: ((sessionKey || "adhoc") + "-" + crypto.randomBytes(6).toString("hex"));
 
       // M4：系统提示四段式组装（基础/约束/上下文/能力 + 记忆/图片/历史/问题）。
       // 历史仅冷启动注入（热会话由 DSH session 持有轨迹）。
@@ -883,7 +892,7 @@ function createDshRuntime(opts = {}) {
         docNote: spec.docNote,
         mediaNote: spec.mediaNote,
         gaNote: spec.gaNote,
-        history: !warm ? spec.history : undefined,
+        history: !warm&&!resume ? spec.history : undefined,
         question: spec.question,
       });
 
@@ -947,12 +956,14 @@ function createDshRuntime(opts = {}) {
             stopReason,
             steps: waiter.steps || [],
             fresh: !warm,
+            nativeSessionId:frame.context?.kind==='dsh-native-context-v1'?sessionId:null,
+            context:frame.context?.kind==='dsh-native-context-v1'&&Number.isSafeInteger(frame.context.compactions)&&frame.context.compactions>=0&&frame.context.compactions<=3?{kind:'dsh-native-context-v1',compactions:frame.context.compactions,manual:frame.context.manual===true,resumed:frame.context.resumed===true}:null,
             workspace, tenantId, userId: spec.userId, keySha256: sha256(String(spec.apiKey || "")),
           });
         },
       };
       proc.waiters.set(sessionId, waiter);
-      const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, task: fullTask, model: spec.model, ...(spec.reasoningEffort === undefined ? {} : {reasoningEffort:spec.reasoningEffort}), tenantId,
+      const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, ...(spec.runId?{runId:spec.runId}:{}), ...(resume?{resume:true}:{}), ...(spec.compact?{compact:true}:{}), task: fullTask, model: spec.model, ...(spec.reasoningEffort === undefined ? {} : {reasoningEffort:spec.reasoningEffort}), tenantId,
         ...((spec.inputImages !== undefined || (!warm && spec.historyInputImages?.length))
           ? {inputImages:[...(!warm?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
         ...(spec.recordModelIntents === true ? { recordModelIntents: true } : {}),

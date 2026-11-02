@@ -1,8 +1,9 @@
 {
   "maxDurationMs": 180000,
-  "maxModelCalls": 1,
+  "maxModelCalls": 3,
   "maxToolCalls": 0,
   "maxToolCallsPerKey": 0,
-  "maxRetries": 0,
-  "maxOutputTokens": 128
+  "maxRetries": 1,
+  "maxOutputTokens": 128,
+  "contextModelCalls": 1
 }

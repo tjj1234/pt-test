@@ -7,8 +7,9 @@ const LIMIT_KEYS = Object.freeze([
   "maxToolCallsPerKey",
   "maxRetries",
   "maxOutputTokens",
+  "contextModelCalls",
 ]);
-const ZERO_ALLOWED = new Set(["maxToolCalls", "maxToolCallsPerKey", "maxRetries"]);
+const ZERO_ALLOWED = new Set(["maxToolCalls", "maxToolCallsPerKey", "maxRetries", "contextModelCalls"]);
 const STATUS_VALUES = Object.freeze({
   costStatus: new Set(["unlimited", "unknown", "known"]),
   policyStatus: new Set(["configured", "unconfigured"]),
