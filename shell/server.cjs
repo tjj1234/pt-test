@@ -1037,9 +1037,17 @@ async function handleChat(req, res, me, body, taskRun = null) {
     reserveControlledAttempt: (identity, entry) => controlledMediaGrants.reserveAttempt(identity, entry),
     ...(managedMediaExecutor ? {executeMedia:managedMediaExecutor} : {}),
   });
+  const hostArtifacts = new Map();
   const csvRunHandler = taskRun ? createCsvRunHandler({
     uploadsRoot: path.join(RUNTIME, "_uploads"), identity: { userId: uid, tenantId: me.tenant.id },
-    workspaceRoot: path.join(RUNTIME, "workspaces"), runId: taskRun.runId, emit: taskRun.emit,
+    workspaceRoot: path.join(RUNTIME, "workspaces"), runId: taskRun.runId,
+    emit: async (type,payload) => {
+      await taskRun.emit(type,payload);
+      if (type === 'artifact') {
+        const artifact = artifactsMod.normalizeArtifact(payload?.artifact);
+        if (artifact) hostArtifacts.set(artifact.rel,artifact);
+      }
+    },
     documentRefs: lastUser?.documents || [], confirmedSelections: lastUser?.csvSelections || [],
     attachmentEvidence: taskRun.attachmentEvidence || [],
   }) : null;
@@ -1281,9 +1289,10 @@ async function handleChat(req, res, me, body, taskRun = null) {
   }
   const media = Array.isArray(r.media) ? r.media : null;
   const report = r.report && typeof r.report === "object" ? r.report : null;
-  const artifacts = Array.isArray(r.artifacts)
-    ? r.artifacts.map((artifact) => artifactsMod.normalizeArtifact(artifact)).filter(Boolean)
-    : [];
+  const artifacts = [...new Map([
+    ...(Array.isArray(r.artifacts) ? r.artifacts.map(artifact => artifactsMod.normalizeArtifact(artifact)).filter(Boolean).map(artifact=>[artifact.rel,artifact]) : []),
+    ...hostArtifacts.entries(),
+  ]).values()];
   const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps,
     modelSelection: {requestedModelId, resolvedModelId:selectedModel, reasoningEffort:reasoningEffort ?? null},
     ...(taskRun?.runId ? { runId: taskRun.runId } : {}), ...(media ? { media } : {}), ...(report ? { report } : {}), ...(artifacts.length ? { artifacts } : {}) }]);
@@ -2338,8 +2347,8 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   };
-  if (artifactsMod.artifactKind(artRel) === "csv") {
-    artHeaders["Content-Disposition"] = "attachment; filename=\"result.csv\"";
+  if (["csv","xlsx"].includes(artifactsMod.artifactKind(artRel))) {
+    artHeaders["Content-Disposition"] = "attachment; filename=\"result."+artifactsMod.artifactKind(artRel)+"\"";
   }
   // HTML 是 Agent 生成的内容，里面可能有脚本；同源 iframe 里它能读父页面的 storage / cookie。
   // 这里先把脚本能力掐掉（前端 iframe 还会再套一层 sandbox，双保险）。

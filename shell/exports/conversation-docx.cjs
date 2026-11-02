@@ -39,16 +39,16 @@ function conversationDocument(conversation) {
   if (paragraphs.length !== count) throw fail('DOCUMENT_EXPORT_INPUT_LIMIT');
   return {title, sections: [{paragraphs}]};
 }
-function exportConversationDocx({conversation, signal, timeoutMs = 10000} = {}) {
+function exportDocumentInWorker({document, format = 'docx', signal, timeoutMs = 10000} = {}) {
   if (signal?.aborted) return Promise.reject(fail('DOCUMENT_EXPORT_CANCELLED'));
   if (active >= 2) return Promise.reject(fail('DOCUMENT_EXPORT_BUSY'));
-  let document;
-  try { document = conversationDocument(conversation); } catch (error) { return Promise.reject(error); }
+  if (!['docx','xlsx'].includes(format)) return Promise.reject(fail('DOCUMENT_EXPORT_FORMAT_INVALID'));
+  try { if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024) return Promise.reject(fail('DOCUMENT_EXPORT_INPUT_LIMIT')); } catch { return Promise.reject(fail('DOCUMENT_EXPORT_INPUT_LIMIT')); }
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15000) return Promise.reject(fail('DOCUMENT_EXPORT_LIMIT_INVALID'));
   const sourceSha256 = createHash('sha256').update(JSON.stringify(document)).digest('hex');
   return new Promise((resolve, reject) => {
     let worker; active++;
-    try { worker = new Worker(path.join(__dirname, 'document-export-worker.cjs'), {workerData: document, resourceLimits: {maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16, stackSizeMb: 4}}); }
+    try { worker = new Worker(path.join(__dirname, 'document-export-worker.cjs'), {workerData: {document,format}, resourceLimits: {maxOldGenerationSizeMb: 128, maxYoungGenerationSizeMb: 16, stackSizeMb: 4}}); }
     catch { active--; reject(fail('DOCUMENT_EXPORT_FAILED')); return; }
     let response, failure;
     const stop = code => { if (!failure) { failure = fail(code); void worker.terminate(); } };
@@ -62,9 +62,17 @@ function exportConversationDocx({conversation, signal, timeoutMs = 10000} = {}) 
       if (failure) return reject(failure);
       if (code !== 0 || !response?.ok || !(response.bytes instanceof Uint8Array) || response.bytes.length > 5 * 1024 * 1024) return reject(fail('DOCUMENT_EXPORT_FAILED'));
       const bytes = Buffer.from(response.bytes);
-      resolve({bytes, sourceSha256, sha256: createHash('sha256').update(bytes).digest('hex'), mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+      resolve({bytes, sourceSha256, sha256: createHash('sha256').update(bytes).digest('hex'), mime: format==='xlsx'?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
     });
     if (signal?.aborted) cancel();
   });
 }
-module.exports = {exportConversationDocx, conversationDocument};
+function exportConversationDocx(options = {}) {
+  try {return exportDocumentInWorker({...options,format:'docx',document:conversationDocument(options.conversation)});}
+  catch(error){return Promise.reject(error);}
+}
+function exportCsvWorkbook({csv,signal,timeoutMs} = {}) {
+  if (typeof csv !== 'string' || csv.length>2*1024*1024 || Buffer.byteLength(csv)>2*1024*1024) return Promise.reject(fail('DOCUMENT_EXPORT_INPUT_LIMIT'));
+  return exportDocumentInWorker({document:{csv},format:'xlsx',signal,timeoutMs});
+}
+module.exports = {exportConversationDocx, conversationDocument, exportCsvWorkbook};

@@ -22,7 +22,7 @@ const fs = require("fs");
 const path = require("path");
 
 /** 可预览的扩展名。刻意不含图片/音视频 —— 那些气泡里已经能直接展示了，不抢预览面板。 */
-const ARTIFACT_EXTS = [".pdf", ".html", ".htm", ".md", ".markdown", ".csv"];
+const ARTIFACT_EXTS = [".pdf", ".html", ".htm", ".md", ".markdown", ".csv", ".xlsx"];
 
 /** 扫描时整个跳过的目录：依赖目录 / 配置目录 / 上传目录，量大且不可能有人工产出。 */
 const SKIP_DIRS = new Set([
@@ -39,6 +39,7 @@ function artifactKind(nameOrExt) {
   if (ext === ".html" || ext === ".htm") return "html";
   if (ext === ".md" || ext === ".markdown") return "md";
   if (ext === ".csv") return "csv";
+  if (ext === ".xlsx") return "xlsx";
   return null;
 }
 
@@ -79,6 +80,7 @@ function normalizeArtifact(a) {
   if (!kind) return null;
   return {
     name: a.name || base,
+    ...(/^[a-f0-9]{64}$/.test(a.sha256 || "") ? {sha256:a.sha256} : {}),
     rel,
     kind,
     url: artifactUrlFor(rel),
@@ -166,6 +168,7 @@ function artifactContentType(rel) {
   if (k === "html") return "text/html; charset=utf-8";
   if (k === "md") return "text/markdown; charset=utf-8";
   if (k === "csv") return "text/csv; charset=utf-8";
+  if (k === "xlsx") return "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
   return "application/octet-stream";
 }
 

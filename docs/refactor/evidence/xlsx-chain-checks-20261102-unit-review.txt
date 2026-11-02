@@ -1,0 +1,196 @@
+产出文件（artifact）回归：
+
+[1] artifactKind / isArtifactName
+  ok   pdf
+  ok   html
+  ok   htm
+  ok   md
+  ok   markdown
+  ok   csv
+  ok   大写扩展名也认
+  ok   纯扩展名入参（.md）
+  ok   不支持的类型 -> null
+  ok   图片/音视频不算产出（气泡里已能展示）
+  ok   空值 -> null
+  ok   isArtifactName 与 kind 一致
+
+[2] isSafeRel：/api/artifact 的第一道门
+  ok   普通相对路径放行
+  ok   子目录放行
+  ok   ../ 上跳拦截
+  ok   内嵌 .. 拦截
+  ok   绝对路径拦截
+  ok   反斜杠绝对路径拦截
+  ok   Windows 盘符拦截
+  ok   C:/ 形式也拦
+  ok   空串/超长拦截
+  ok   单字符 . 拦截
+
+[3] artifactUrlFor / normalizeArtifact
+  ok   URL 是同源 /api/artifact
+  ok   子目录斜杠被编码
+  ok   归一化补 kind
+  ok   归一化补 name
+  ok   归一化补 url
+  ok   反斜杠路径统一成 /
+  ok   不安全路径 -> null
+  ok   不可预览类型 -> null
+  ok   缺 rel -> null
+
+[4] sortArtifacts：最新产出排最前
+  ok   按 mtime 倒序
+
+[5] scanArtifacts：真实临时目录
+  ok   扫到 3 个产出
+  ok   含 report.pdf
+  ok   含子目录 out/page.html
+  ok   含 notes.md
+  ok   跳过 .txt
+  ok   跳过 node_modules
+  ok   跳过隐藏目录
+  ok   带 kind 与 url
+  ok   sinceMs 过滤掉旧文件
+  ok   maxDepth 生效（深层文件不收）
+  ok   maxFiles 生效
+
+[6] collectArtifacts 兜底 / Content-Type
+  ok   目录不存在 -> []
+  ok   空入参 -> []
+  ok   pdf -> application/pdf
+  ok   html -> text/html
+  ok   md -> text/markdown
+
+[7] toolWroteFile / pathFromToolArgs
+  ok   write_file 认
+  ok   Write 认
+  ok   fs_write 认
+  ok   create_file 认
+  ok   read_file 不认
+  ok   media_route 不认
+  ok   空值不认
+  ok   对象 args 取 path
+  ok   对象 args 取 file_path
+  ok   对象 args 取 filePath
+  ok   字符串 args（stringify 过）
+  ok   截断的字符串 args 靠正则兜底
+  ok   无路径 -> null
+
+[8] artifactRelFromToolPath / artifactFromToolStep
+  ok   相对路径原样
+  ok   ./ 前缀去掉
+  ok   workspace 内绝对路径 -> 相对
+  ok   workspace 外绝对路径 -> 退化为文件名
+  ok   穿越路径退化为文件名
+  ok   不可预览 -> null
+  ok   write_file + pdf -> 产出
+  ok   产出带同源 url
+  ok   Write + html -> 产出
+  ok   失败的写文件不算产出
+  ok   非写工具不算产出
+  ok   不可预览类型不算产出
+  ok   缺 args -> null
+  ok   null step -> null
+  ok   无 workspace 也不炸
+
+产出文件（artifact）回归：76 通过 / 76 项
+✔ tests/regression/artifacts-test.mjs (49.055167ms)
+✔ conversation Word export round-trips Chinese/literals and does not embed attachment contents (113.322833ms)
+✔ invalid XML, oversized conversations, cancelled and expired exports fail with safe errors (31.941875ms)
+✔ CSV analysis workbook uses bounded worker, preserves literal data and cancels safely (70.589417ms)
+✔ F2 Run CSV artifact is atomically published under tenant and run ownership (11.757ms)
+✔ F2 parent Run accepts only current captured CSV and explicit selector (17.056083ms)
+✔ Portable XLSX - Valid multi-sheet generation and round-trip readback via existing office parser (13.143ms)
+✔ Portable XLSX - Reject-before-Scan: arrays, bounds, sheet names, and control characters (0.422ms)
+✔ Portable XLSX - Formula injection defense and no guessing string numbers (1.45425ms)
+✔ Portable XLSX - Custom limits and resource ceiling boundaries (0.259042ms)
+✔ XLSX rejects invalid resource limits and XML-invalid sheet names (0.662583ms)
+✔ XLSX enforces aggregate text budget before reading following cells (0.132ms)
+✔ XLSX cannot load a same-name dependency from hostile cwd or NODE_PATH (31.967375ms)
+产出预览面板回归：
+
+[1] escapeHtml / safeHref
+  ok   转义 <script>
+  ok   转义引号
+  ok   转义 &
+  ok   null -> 空串
+  ok   http 链接放行
+  ok   mailto 放行
+  ok   相对路径放行
+  ok   javascript: 拦截
+  ok   data: 拦截
+  ok   vbscript: 拦截
+  ok   空串 -> null
+
+[2] minimalMarkdown 语法
+  ok   h1
+  ok   h3
+  ok   段落
+  ok   无序列表
+  ok   有序列表
+  ok   代码块
+  ok   行内代码
+  ok   粗体
+  ok   斜体
+  ok   引用
+  ok   分隔线
+  ok   表格
+  ok   链接（安全协议）
+  ok   链接带 noopener
+  ok   空输入 -> 空串
+  ok   CRLF 也吃得下
+
+[3] 安全边界：裸 HTML 与危险链接
+  ok   裸 script 被转义成文本
+  ok   img onerror 被转义
+  ok   javascript: 链接被丢弃（只留文字）
+  ok   代码块里的 HTML 也被转义
+  ok   代码块里的 * 不被当强调
+
+[4] pushArtifact / mergeArtifacts / artifactIcon
+  ok   pdf 图标
+  ok   html 图标与 pdf 不同
+  ok   md 图标
+  ok   推入 1 个
+  ok   索引归零
+  ok   新的排最前
+  ok   同 rel 覆盖而非新增
+  ok   脏数据被忽略
+  ok   merge 并入新项
+  ok   merge 去重
+  ok   merge 非数组不炸
+  ok   忽略历史URL/类型伪造并重建同源产物链接
+  ok   拒绝越界路径、URL形路径及不支持扩展名
+
+[5] renderChat：恢复历史产物并清除上一会话状态
+  ok   历史 assistant 产物恢复到面板
+  ok   重新打开历史对话时展示面板
+  ok   恢复后的预览URL仍为本地API
+  ok   切换到无产物会话清空旧状态、隐藏面板并移除旧iframe
+
+[6] renderArtifactPane：iframe / md
+  ok   面板打开（hidden=false）
+  ok   标题显示文件名
+  ok   pdf 用 iframe
+  ok   pdf iframe 指向产物 URL
+  ok   pdf 不给脚本能力
+  ok   html 也用 iframe
+  ok   html 完全禁脚本（空 sandbox）
+  ok   md 先占位不阻塞
+  ok   md 拉的是产物 URL
+  ok   md 渲染成 HTML
+  ok   md 不走 iframe
+  ok   CSV 使用同源下载链接
+  ok   CSV 不在 iframe 中预览
+  ok   关闭后面板隐藏
+  ok   关闭后清空列表
+
+产出预览面板回归：64 通过 / 64 项
+✔ tests/regression/ui-artifact-preview-test.mjs (6054.2095ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6063.56325

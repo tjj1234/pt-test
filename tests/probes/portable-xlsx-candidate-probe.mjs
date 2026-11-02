@@ -36,11 +36,13 @@ console.log("=== Portable XLSX 生成候选探针开始 ===");
 console.log("\n[1/4] 验证临时独立布局与合法依赖隔离加载能力...");
 {
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "portable-xlsx-probe-"));
-  const tempCandidatePath = path.join(tempDir, "portable-xlsx-candidate.cjs");
+  const tempCandidatePath = path.join(tempDir, "shell", "exports", "portable-xlsx-candidate.cjs");
   const sourceCode = fs.readFileSync(
     new URL("../../shell/exports/portable-xlsx-candidate.cjs", import.meta.url),
     "utf8"
   );
+  fs.mkdirSync(path.dirname(tempCandidatePath), {recursive:true});
+  fs.symlinkSync(path.resolve('shell/node_modules'),path.join(tempDir,'shell','node_modules'),'dir');
   fs.writeFileSync(tempCandidatePath, sourceCode, "utf8");
 
   // 在 tempDir 下放置同名伪造 fflate.js，证明 require 绝不从当前工作目录加载不可信依赖

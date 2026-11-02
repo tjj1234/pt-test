@@ -14,6 +14,7 @@ function csvAnalyzeToolDefinition() {
         sourceSha256: { type: 'string' },
         operation: { type: 'string', enum: ['sum', 'count', 'min', 'max'] },
         column: { type: 'integer' },
+        outputFormat: { type:'string', enum:['csv','xlsx'] },
         startRow: { type: 'integer' },
       },
       additionalProperties: false,

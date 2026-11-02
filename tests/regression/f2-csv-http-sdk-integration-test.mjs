@@ -5,13 +5,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn,execFileSync } from 'node:child_process';
 import { createServer } from 'node:net';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 const require = createRequire(import.meta.url);
 const { createStorage } = require('../../shell/storage/index.cjs');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const outputFormat=process.env.NORTHSTAR_CSV_OUTPUT_FORMAT==='xlsx'?'xlsx':'csv';
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const sdkHarness = String.raw`
 import { createRequire } from 'node:module';
@@ -47,7 +48,7 @@ const { apply } = await import(pathToFileURL(path.join(path.join(process.env.DSH
 apply(ctx);
 `;
 
-test('offline HTTP CSV Run traverses tenant/adapter/SDK, downloads and reopens its artifact', { timeout: 45000 }, async () => {
+test('offline HTTP '+outputFormat+' Run traverses tenant/adapter/SDK, downloads and reopens its artifact', { timeout: 90000 }, async () => {
   assert.equal(Object.keys(process.env).some(k => k.startsWith('PT_PG_') && process.env[k]), false);
   const temp = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'f2-http-sdk-'));
   const runtime = path.join(temp, 'runtime'), dbDir = path.join(temp, 'db'), keyFile = path.join(temp, 'key');
@@ -109,7 +110,7 @@ return value;};`);
     const selection = { sourceRef: uploaded.url, sourceSha256: sha(bytes), headerRow: 1, startRow: 2, column: 1 };
     const preview = await json('/api/csv/selection-preview', { method: 'POST', body: { sourceRef: selection.sourceRef, headerRow: 1, startRow: 2, column: 1 } });
     assert.equal(preview.preview.type, 'decimal'); assert.equal(preview.preview.sourceSha256, sha(bytes));
-    fs.writeFileSync(selectorFile, JSON.stringify({ sourceRef: uploaded.url, sourceSha256: sha(bytes), operation: 'sum', column: 1, startRow: 2 }));
+    fs.writeFileSync(selectorFile, JSON.stringify({ sourceRef: uploaded.url, sourceSha256: sha(bytes), operation: 'sum', column: 1, startRow: 2, outputFormat }));
     const profiles = path.join(runtime, 'dsh-home/profiles');
     fs.mkdirSync(profiles, { recursive: true });
     fs.symlinkSync(path.join(root, 'shell/node_modules'), path.join(profiles, 'node_modules'), 'dir');
@@ -129,27 +130,45 @@ return value;};`);
     assert.equal(events.filter(e => e.payload?.action === 'model_request_intent').length, 2);
     const artifactEvent = events.find(e => e.type === 'artifact'); assert.ok(artifactEvent);
     const artifact = artifactEvent.payload.artifact;
-    assert.ok(artifact.rel.startsWith('csv-results/' + runId + '/'));
+    assert.ok(artifact.rel.startsWith((outputFormat==='xlsx'?'spreadsheet-results/':'csv-results/') + runId + '/'));
     const url = '/api/artifact?p=' + encodeURIComponent(artifact.rel);
     const download = await req(url); assert.equal(download.status, 200);
     assert.match(download.headers.get('content-disposition'), /attachment/);
-    assert.match(download.headers.get('content-type'), /^text\/csv/);
-    const csv = await download.text();
-    const rows = require('../../shell/attachments/csv-parser.cjs').parseCsv(csv).rows;
-    assert.deepEqual(rows[1].map(cell => cell.value), ['summary', sha(bytes), 'sum', '1', '2', '4', '', '', '3']);
-    assert.equal(sha(csv), artifact.sha256);
+    const downloaded=Buffer.from(await download.arrayBuffer());
+    if(outputFormat==='csv'){
+      assert.match(download.headers.get('content-type'), /^text\/csv/);
+      const rows=require('../../shell/attachments/csv-parser.cjs').parseCsv(downloaded.toString('utf8')).rows;
+      assert.deepEqual(rows[1].map(cell=>cell.value),['summary',sha(bytes),'sum','1','2','4','','','3']);
+    }else{
+      assert.match(download.headers.get('content-type'),/spreadsheetml.sheet/);
+      const parsed=await require('../../shell/attachments/office-document-parser.cjs').parseOfficeDocument({bytes:downloaded,format:'xlsx'});
+      assert.deepEqual(['A','B','C','D','E','F','G','H','I'].map(column=>parsed.blocks.find(block=>block.locator.cell===column+'2')?.text??''),['summary',sha(bytes),'sum','1','2','4','','','3']);
+      assert.ok(parsed.blocks.every(block=>block.locator.formula===false));
+    }
+    assert.equal(sha(downloaded),artifact.sha256);
     assert.equal((await req(url, { user: null })).status, 401);
     assert.equal((await req(url, { user: 1 })).status, 404);
     const history = (await json('/api/conversations/' + conversationId)).conversation.messages;
     const assistant = history.find(m => m.role === 'assistant');
     assert.equal(assistant.runId, runId);
     assert.ok(assistant.artifacts.some(a => a.rel === artifact.rel));
+    assert.equal(assistant.artifacts.find(a=>a.rel===artifact.rel).sha256,artifact.sha256);
     assert.deepEqual(history[0].csvSelections, [selection]);
     const historyDownload = await req(assistant.artifacts.find(a => a.rel === artifact.rel).url);
     assert.equal(historyDownload.status, 200);
-    assert.equal(await historyDownload.text(), csv);
+    assert.deepEqual(Buffer.from(await historyDownload.arrayBuffer()),downloaded);
     const reopened = (await json('/api/runs/' + runId + '/events')).events;
     assert.ok(reopened.some(e => e.type === 'artifact' && e.payload.artifact.rel === artifact.rel));
+    if(outputFormat==='xlsx'&&process.env.NORTHSTAR_XLSX_BROWSER==='1'){
+      const session='x'+crypto.randomBytes(4).toString('hex');
+      const cli=(...args)=>execFileSync('playwright-cli',['-s='+session,...args],{cwd:root,env:{...process.env,TMPDIR:'/private/tmp'},encoding:'utf8',timeout:45000,maxBuffer:2*1024*1024});
+      const driver=fs.readFileSync(path.join(root,'tests/probes/xlsx-browser-driver-20261102.js'),'utf8').trim();
+      fs.mkdirSync(path.join(root,'.playwright-cli'),{recursive:true});const script=path.join(root,'.playwright-cli',session+'-driver.js');
+      fs.writeFileSync(script,'async page => ('+driver+')(page,'+JSON.stringify({baseURL:origin,cookie:cookies[0].slice(11),screenshot:path.join(root,'docs/refactor/evidence/xlsx-browser-20261102.png')})+')');
+      try{cli('open');const result=cli('run-code','--filename='+script);assert.match(result,/XLSX_BROWSER_CHAIN_PASS/,result);}
+      finally{try{cli('close');}catch{}fs.rmSync(script,{force:true});}
+    }
+
   } finally {
     if (child && child.exitCode === null) { const exited = new Promise(resolve => child.once('exit', resolve)); child.kill('SIGTERM'); await exited; }
     if (fs.existsSync(pidFile)) { try { process.kill(Number(fs.readFileSync(pidFile, 'utf8')), 'SIGKILL'); } catch (error) { if (error.code !== 'ESRCH') throw error; } }

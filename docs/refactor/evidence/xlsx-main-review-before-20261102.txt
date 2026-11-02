@@ -1,0 +1,70 @@
+✖ XLSX rejects invalid resource limits and XML-invalid sheet names (7.696208ms)
+✖ XLSX enforces aggregate text budget before reading following cells (2.293542ms)
+✖ XLSX cannot load a same-name dependency from hostile cwd or NODE_PATH (22.23725ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 0
+ℹ fail 3
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 64.600792
+
+✖ failing tests:
+
+test at tests/regression/portable-xlsx-main-review-test.mjs:10:1
+✖ XLSX rejects invalid resource limits and XML-invalid sheet names (7.696208ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/portable-xlsx-main-review-test.mjs:11:78)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/regression/portable-xlsx-main-review-test.mjs:14:1
+✖ XLSX enforces aggregate text budget before reading following cells (2.293542ms)
+  AssertionError [ERR_ASSERTION]: Missing expected exception.
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/portable-xlsx-main-review-test.mjs:16:9)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'throws',
+    diff: 'simple'
+  }
+
+test at tests/regression/portable-xlsx-main-review-test.mjs:18:1
+✖ XLSX cannot load a same-name dependency from hostile cwd or NODE_PATH (22.23725ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'UNVERIFIED_DEPENDENCY_ACCEPTED'
+  - 'DEPENDENCY_MISSING'
+
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/portable-xlsx-main-review-test.mjs:27:39)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'UNVERIFIED_DEPENDENCY_ACCEPTED',
+    expected: 'DEPENDENCY_MISSING',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

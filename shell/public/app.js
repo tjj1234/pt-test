@@ -580,7 +580,7 @@ function minimalMarkdown(src) {
 function artifactIcon(kind) {
   if (kind === "pdf") return "\uD83D\uDCD5";
   if (kind === "html") return "\uD83C\uDF10";
-  if (kind === "csv") return "\uD83D\uDCCA";
+  if (kind === "csv" || kind === "xlsx") return "\uD83D\uDCCA";
   return "\uD83D\uDCDD";   // md
 }
 
@@ -597,7 +597,7 @@ function pushArtifact(a) {
   if (parts.some((part) => !part || part === "." || part === "..")) return;
   const base = parts[parts.length - 1];
   const ext = base.slice(base.lastIndexOf(".")).toLowerCase();
-  const kind = ext === ".pdf" ? "pdf" : (ext === ".html" || ext === ".htm") ? "html" : (ext === ".md" || ext === ".markdown") ? "md" : ext === ".csv" ? "csv" : null;
+  const kind = ext === ".pdf" ? "pdf" : (ext === ".html" || ext === ".htm") ? "html" : (ext === ".md" || ext === ".markdown") ? "md" : ext === ".csv" ? "csv" : ext === ".xlsx" ? "xlsx" : null;
   if (!kind) return;
   const normalized = { rel, kind, name: String(a.name || base).slice(0, 255), url: "/api/artifact?p=" + encodeURIComponent(rel), size: Number.isFinite(a.size) ? a.size : 0, mtime: Number.isFinite(a.mtime) ? a.mtime : 0 };
   const i = artItems.findIndex((x) => x.rel === rel);
@@ -641,11 +641,11 @@ function renderArtifactPane() {
 
   if (!body) return;
   body.replaceChildren();
-  if (a.kind === "csv") {
+  if (a.kind === "csv" || a.kind === "xlsx") {
     const link = document.createElement("a");
     link.href = a.url;
-    link.textContent = "下载 CSV 文件";
-    link.setAttribute("download", "result.csv");
+    link.textContent = a.kind === "xlsx" ? "下载 Excel 文件" : "下载 CSV 文件";
+    link.setAttribute("download", a.kind === "xlsx" ? "result.xlsx" : "result.csv");
     body.appendChild(link);
     return;
   }

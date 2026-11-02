@@ -1130,3 +1130,7 @@ r18草案SHAadce48980852b8b27b51158b99da9d3f66a772c043e390cad2434611053672eb保�
 ### 2026-11-02：Context R4主审阻断，检测网保留反例
 首条本地产品链提交6c5a4cc已完成，未push新集成分支、未修改远程保险分支。Context R4原单元与localhost探针独立复跑通过，但新增context-admission-main-review-20261102.mjs的8项主审反例全部失败：缺准入证据/缺完整绑定/Infinity TTL、异步换Run、实际输出上限、审计原文泄漏、观测异常settle、未消费return。原auto:false+dummyAgent空历史/compact仍不证明真实Agent自动与维护Run手动压缩。结论BLOCKED_FOR_INTEGRATION，原件保留，未接Runner。主审报告GEMINI-CONTEXT-R4-MAIN-REVIEW-20261102.md，复跑与源码绑定在context-chain-checks-20261102.json，不能把原包通过写成已验收。
 XLSX原单元/反读探针机械复跑通过，但仍需主审依赖解析/资源边界及产品接线，不算closed。新增CHAIN-ACCEPTANCE-20261102.md统一列各链证据、提交及未关闭范围。继续下一条可闭合产品链，不等待所有候选主审完成；Context修复保持明确独立阻断，不伪装全量交付。
+
+### 2026-11-02：第二条本地产品链关闭——CSV分析Excel结果
+Context阻断证据提交f186f34后继续独立XLSX链，不等待其他包。主审新增3项反例复现cwd依赖回退、非法limits/非法XML sheet名及无聚合文本限制；修正原候选（原件在保险dae46d5）并保留失败日志，合法隔离探针显式提供shell锁定依赖。原生csv_analyze新增可选outputFormat(csv/xlsx，默认csv)，宿主复用Word有界worker与安全发布/owned读取，Excel结果进入事件与历史产物面板，未增加模型/工具预算或依赖。联合回归发现原CSV及新XLSX事件SHA在扫描入历史时丢失，已合并持久宿主artifact元数据并保留SHA。
+最终xlsx --browser机械命令3项均exit0，25文件开始/结束SHA无漂移：unit-review14/14（其中产物UI独立脚本64/64另列）、合法格式probe、HTTP原CSV/XLSX/Office-Word3/3；XLSX summary A2:I2精确值反读、无公式、SHA/匿名/跨用户/历史重开均通过，真实浏览器下载/刷新截图已目视核对。共享源码另跑reasoning --browser也全通过，26文件绑定验证通过。主Agent批准LOCAL_CHAIN_CLOSED，仅CSV分析Excel结果，不等于任意文档工具或全量交付。完整报告XLSX-RESULT-PRODUCT-LOCAL-ACCEPTANCE-20261102.md；当前准备独立功能提交，最终hash以Git为准，无付费provider或部署。Gemini批次汇总的原有未提交改动继续保留，不混入本链代码提交。

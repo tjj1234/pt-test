@@ -4,20 +4,20 @@
   "status": "MECHANICAL_PASS",
   "acceptanceDecision": "MAIN_AGENT_REQUIRED",
   "scope": "local-controlled-fixtures; no paid provider or target deployment",
-  "baseCommit": "dae46d5d9606cf8a625d6d2eae6963a23348244b",
-  "generatedAt": "2026-11-02T02:36:23.186Z",
+  "baseCommit": "f186f340bed0ecb9acae4edd505cd01f6b4000b8",
+  "generatedAt": "2026-11-02T03:04:43.922Z",
   "sources": {
-    "scripts/northstar-chain-checks.mjs": "0fa465ff6155ce15eac69e6ef3bd8de9079ffc43d1e0d2a9edc4bfe37264379f",
+    "scripts/northstar-chain-checks.mjs": "cce8d030768d6edfa1e448439f5697542bf97d04eb27ad51c6c107478edd13b7",
     "shell/conversations.cjs": "f6adf2011541acbc186e0c92c47693cc16326f7de39b6446bb544e5eee533677",
     "shell/db-migrations/024_conversation_reasoning_preference.sql": "ab387295709691ce299ab0c6344e147a7fa6e4771a43b32e8d10787dcba3e37b",
     "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
-    "shell/persistent-runner.mjs": "855dc3c8a1dfb18ed01ce392dcc231283c9086efdf362fc240fdf8413835a254",
-    "shell/public/app.js": "b7aaa16c1413b08febfb5831fbe138770ac017e9fd62fe062b3f318dce200293",
+    "shell/persistent-runner.mjs": "6bf339cb524202649ea1200307a00d23b618942741d39b0f4ccddcdffd06ec1d",
+    "shell/public/app.js": "2c5d182ac7a7db28020eb5557cf71cab2aa9b3282eba93a73e4e6b11ea7a579d",
     "shell/public/index.html": "df64a5bd471ff4e8e9c77743e0fed8d027eaa9cbf285406319526b73b88f3a2e",
     "shell/public/styles.css": "bb9de58b4a33a4fa91bde02a91e7c7168522e5bc3e686a8827df22d8351a3deb",
     "shell/runtime/dsh-adapter.cjs": "47708d63581319e0277e140b17616224887901773735dc938457a925605a7492",
     "shell/runtime/dsh-release-manifest.json": "7d9ea82adaed2a2ae74e6f3bca56dd9d87da857a9ee8f42c7fe1a2f6a7696f5a",
-    "shell/server.cjs": "4d84ed31ae9d7425740d7eb80c500caa157cd7ef3423dbf113d9fdb3ad337588",
+    "shell/server.cjs": "31a4ac90776185b436323ea169f5b145acc8febe9f971fad2b56ec2c7901a117",
     "shell/tasks/chat-request.cjs": "c6667b768e6f5c8835234c0f37a0be14653705a9b086d162b07e206ea3107d20",
     "shell/tenant.cjs": "5889af172b4d42fa7a43f768dee813c7e918a8a7ee9e21a796af4fd9010f6196",
     "tests/probes/reasoning-browser-driver-20261102.js": "a9dd39fbf0dd93b5c021c0fbd70ebd38867c6abcc905ac0dc15a253b0c080526",
@@ -46,7 +46,7 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 6069,
+      "durationMs": 6068,
       "log": "docs/refactor/evidence/reasoning-chain-checks-20261102-ui.txt",
       "logSha256": "aada2a45eafc5239b019310b20a50948e8986eff142260f205eec348bd4b7e9f"
     },
@@ -61,9 +61,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 4790,
+      "durationMs": 4726,
       "log": "docs/refactor/evidence/reasoning-chain-checks-20261102-http-sdk.txt",
-      "logSha256": "2399b81ba815598602f0a6f3b2e1643c1fdfb3b92be76fe40186be6fd9fa81bd"
+      "logSha256": "c3c99bef37e583db7c1ef7959c9f617523677facadb968aae0a96e5c02cb0d90"
     },
     {
       "id": "boundaries",
@@ -85,9 +85,9 @@
       "exitCode": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 11982,
+      "durationMs": 11988,
       "log": "docs/refactor/evidence/reasoning-chain-checks-20261102-boundaries.txt",
-      "logSha256": "91aa06e294921a6a84b9308a661abac93c909cc4c99360c2699bef83ee841bd1"
+      "logSha256": "766552c7abda375d8683c779126460e132f9773f76eb154d21af7b3f5e05b864"
     }
   ]
 }

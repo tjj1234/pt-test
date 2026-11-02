@@ -681,6 +681,7 @@ function apply(ctx) {
                   operation: { type: "string", enum: ["sum", "count", "min", "max"], required: true },
                   column: { type: "number", required: true },
                   startRow: { type: "number", required: true },
+                  outputFormat: {type:"string",enum:["csv","xlsx"],description:"结果文件格式；默认csv，需要Excel结果时选择xlsx。"},
                 },
                 output: {
                   schema: { type: "object", properties: {

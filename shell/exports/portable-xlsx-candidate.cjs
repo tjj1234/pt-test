@@ -36,15 +36,8 @@ let _fflate = null;
 function getFflate() {
   if (_fflate) return _fflate;
   try {
-    const candidatePaths = [
-      __dirname,
-      path.resolve(__dirname, '..'),
-      path.resolve(__dirname, '../../shell'),
-      path.resolve(process.cwd(), 'shell'),
-      path.resolve(process.cwd(), 'shell/node_modules'),
-    ];
-    const p = require.resolve('fflate', { paths: candidatePaths });
-    _fflate = require(p);
+    // Only the shipped shell installation is a dependency authority.
+    _fflate = require(path.join(__dirname, '..', 'node_modules', 'fflate'));
     return _fflate;
   } catch (err) {
     const error = new Error('Locked dependency fflate cannot be resolved from shell directory');
@@ -61,6 +54,7 @@ const PORTABLE_XLSX_LIMITS = Object.freeze({
   maxCols: 100,
   maxCells: 50000,
   maxStringLength: 32767,
+  maxTextBytes: 4 * 1024 * 1024,
   maxBytes: 10 * 1024 * 1024, // 10 MB
 });
 
@@ -70,6 +64,7 @@ const HARD_CEILINGS = Object.freeze({
   maxCols: 1024,
   maxCells: 50000,
   maxStringLength: 32767,
+  maxTextBytes: 4 * 1024 * 1024,
   maxBytes: 50 * 1024 * 1024, // 50 MB
 });
 
@@ -132,6 +127,15 @@ function escapeXml(str) {
 // 非法 XML 控制字符校验正则 (保留 \t=0x09, \n=0x0A, \r=0x0D)
 const INVALID_XML_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/;
 
+function invalidXmlText(value) {
+  if (INVALID_XML_CHARS.test(value)) return true;
+  for (const character of value) {
+    const cp=character.codePointAt(0);
+    if ((cp>=0xd800&&cp<=0xdfff)||cp===0xfffe||cp===0xffff) return true;
+  }
+  return false;
+}
+
 // 非法工作表名字符 (Excel 规定不得包含 :\/?*[] 或以单引号开头/结尾)
 const INVALID_SHEET_NAME_CHARS = /[:\\/?*\[\]]/;
 
@@ -143,14 +147,11 @@ const FORMULA_INJECTION_PREFIX = /^[\=\+\-\@\t\r]/;
  */
 function resolveLimits(customLimits) {
   const resolved = { ...PORTABLE_XLSX_LIMITS };
-  if (customLimits && typeof customLimits === 'object' && !Array.isArray(customLimits)) {
+  if (customLimits !== undefined) {
+    if (!customLimits || typeof customLimits !== 'object' || Array.isArray(customLimits)) throw fail('LIMIT_INVALID','Export limits are invalid');
     for (const key of Object.keys(customLimits)) {
-      if (key in PORTABLE_XLSX_LIMITS) {
-        const val = customLimits[key];
-        if (typeof val === 'number' && Number.isSafeInteger(val) && val > 0) {
-          resolved[key] = Math.min(val, HARD_CEILINGS[key]);
-        }
-      }
+      if (!Object.hasOwn(PORTABLE_XLSX_LIMITS,key) || !Number.isSafeInteger(customLimits[key]) || customLimits[key] <= 0 || customLimits[key] > HARD_CEILINGS[key]) throw fail('LIMIT_INVALID','Export limits are invalid');
+      resolved[key] = customLimits[key];
     }
   }
   return resolved;
@@ -184,7 +185,7 @@ function generatePortableXlsx(input, limits) {
   }
 
   const seenSheetNames = new Set();
-  let totalCellCount = 0;
+  let totalCellCount = 0, totalTextBytes = 0;
   const validatedSheets = [];
 
   for (let sIdx = 0; sIdx < rawSheets.length; sIdx++) {
@@ -198,6 +199,7 @@ function generatePortableXlsx(input, limits) {
     if (typeof sheetName !== 'string' || sheetName.length === 0 || sheetName.length > 31) {
       throw fail('INVALID_SHEET_NAME', `Sheet name must be a string between 1 and 31 characters`);
     }
+    if (invalidXmlText(sheetName)) throw fail("INVALID_XML_CHARACTER","Sheet name has invalid XML text");
     if (INVALID_SHEET_NAME_CHARS.test(sheetName) || sheetName.startsWith("'") || sheetName.endsWith("'")) {
       throw fail('INVALID_SHEET_NAME_CHARACTERS', `Sheet name "${sheetName}" contains illegal characters`);
     }
@@ -236,7 +238,7 @@ function generatePortableXlsx(input, limits) {
         const val = row[cIdx];
         const cellCoord = `${colToLetters(cIdx)}${rIdx + 1}`;
 
-        if (val === null || val === undefined) {
+        if (val === null) {
           validatedCells.push({ type: 'empty', coord: cellCoord });
           continue;
         }
@@ -258,9 +260,12 @@ function generatePortableXlsx(input, limits) {
           if (val.length > effectiveLimits.maxStringLength) {
             throw fail('STRING_LENGTH_EXCEEDED', `Cell ${cellCoord} string exceeds limit (${effectiveLimits.maxStringLength})`);
           }
-          if (INVALID_XML_CHARS.test(val)) {
+          if (invalidXmlText(val)) {
             throw fail('INVALID_XML_CHARACTER', `Cell ${cellCoord} contains illegal XML control characters`);
           }
+
+          totalTextBytes += Buffer.byteLength(val,'utf8');
+          if (totalTextBytes > effectiveLimits.maxTextBytes) throw fail('TEXT_LIMIT_EXCEEDED','Workbook text exceeds limit');
 
           // 公式注入防范：针对以 = + - @ \t \r 开头的字符串添加前导单引号
           let safeStr = val;

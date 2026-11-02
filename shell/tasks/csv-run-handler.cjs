@@ -4,20 +4,21 @@ const { loadCsvRunSource } = require('../attachments/csv-run-source.cjs');
 const { adaptCsvAnalysis } = require('./csv-analysis-adapter.cjs');
 const { analyzeCsvColumn } = require('../attachments/csv-analysis.cjs');
 const { renderCsvAnalysisResultCandidate } = require('../exports/csv-analysis-result-candidate.cjs');
-const { writeCsvRunArtifact } = require('../runtime/csv-run-artifact.cjs');
+const { writeCsvRunArtifact,writeXlsxRunArtifact } = require('../runtime/csv-run-artifact.cjs');
 const { selectCsvColumn } = require('../attachments/csv-column-selection-candidate.cjs');
 
 const fail = (code) => Object.assign(new Error('CSV analysis request could not be verified'), { code });
-const FIELDS = new Set(['sourceRef', 'sourceSha256', 'operation', 'column', 'startRow']);
+const FIELDS = new Set(['sourceRef', 'sourceSha256', 'operation', 'column', 'startRow', 'outputFormat']);
 
 /** The parent Run owns both the attachment snapshot and the current user turn. */
 function createCsvRunHandler({ uploadsRoot, workspaceRoot, identity, runId, documentRefs, confirmedSelections, attachmentEvidence, emit } = {}) {
   const currentRefs = new Set(Array.isArray(documentRefs) ? documentRefs : []);
   if (!currentRefs.size) return Object.freeze({ handle: async () => { throw fail('CSV_DOCUMENT_REQUIRED'); } });
   return Object.freeze({
-    async handle({ args } = {}) {
+    async handle({ args, signal } = {}) {
       if (!args || typeof args !== 'object' || Array.isArray(args) ||
           Object.keys(args).some((key) => !FIELDS.has(key)) ||
+          (args.outputFormat !== undefined && !['csv','xlsx'].includes(args.outputFormat)) ||
           typeof args.sourceRef !== 'string' || !currentRefs.has(args.sourceRef)) {
         throw fail('CSV_SOURCE_NOT_CURRENT');
       }
@@ -40,7 +41,12 @@ function createCsvRunHandler({ uploadsRoot, workspaceRoot, identity, runId, docu
       } });
       const exact = analyzeCsvColumn(source, analysis.selection);
       const csv = renderCsvAnalysisResultCandidate({ source, analysis: exact });
-      const artifact = writeCsvRunArtifact({ workspaceRoot, tenantId: identity.tenantId, runId, csv });
+      let artifact;
+      if (args.outputFormat === 'xlsx') {
+        const result=await require('../exports/conversation-docx.cjs').exportCsvWorkbook({csv,signal});
+        if(signal?.aborted)throw fail('DOCUMENT_EXPORT_CANCELLED');
+        artifact=writeXlsxRunArtifact({workspaceRoot,tenantId:identity.tenantId,runId,bytes:result.bytes});
+      } else artifact = writeCsvRunArtifact({ workspaceRoot, tenantId: identity.tenantId, runId, csv });
       if (typeof emit === 'function') await emit('artifact', { artifact });
       // Keep the model response bounded; the immutable source is rechecked for
       // full provenance when a durable result artifact is generated.
