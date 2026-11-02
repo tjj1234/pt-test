@@ -2,9 +2,11 @@
 set -eu
 mkdir -p /work/exact/tests
 tar -xzf /input/candidate.tar.gz -C /work/exact
-cp -R /input/regression /work/exact/tests/regression
-cp -R /input/probes /work/exact/tests/probes
-cp -a /dependencies/node_modules /work/exact/shell/node_modules
+for suite in regression probes helpers; do
+ mkdir -p /work/exact/tests/$suite
+ cp -R /input/$suite/. /work/exact/tests/$suite/
+done
+if [ ! -d /work/exact/shell/node_modules ]; then cp -a /dependencies/node_modules /work/exact/shell/node_modules; fi
 cd /work/exact
 node shell/northstar-dependency-closure.cjs --check shell/dependency-closure-manifest.json
 node --test tests/regression/reasoning-http-sdk-integration-test.mjs tests/regression/source-http-sdk-integration-test.mjs tests/regression/xlsx-http-sdk-integration-test.mjs tests/regression/f2-csv-http-sdk-integration-test.mjs tests/regression/office-http-sdk-integration-test.mjs tests/regression/memory-provenance-store-test.mjs tests/regression/native-tool-run-gate-sdk-test.mjs tests/regression/context-http-sdk-integration-test.mjs

@@ -1,0 +1,111 @@
+{
+  "result": "PASS",
+  "target": {
+    "platform": "linux",
+    "arch": "x64",
+    "gate": "enforced"
+  },
+  "packageCount": 495,
+  "fileCount": 31007,
+  "arborist": "8.0.5",
+  "packageLockSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+  "generatedWithNode": "v22.23.4",
+  "checkedWithNode": "v22.23.4"
+}
+TAP version 13
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-djJ8F7/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: native Context automatic and manual compaction persist and resume across Shell restart
+ok 1 - native Context automatic and manual compaction persist and resume across Shell restart
+  ---
+  duration_ms: 19244.602633
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/f2-http-sdk-npYJZZ/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: offline HTTP csv Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+ok 2 - offline HTTP csv Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+  ---
+  duration_ms: 13752.15613
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/memory-provenance-MI0EAA/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: memory host confirmation scope source lifecycle and failed cleanup survive database reopen
+ok 3 - memory host confirmation scope source lifecycle and failed cleanup survive database reopen
+  ---
+  duration_ms: 8682.283711
+  type: 'test'
+  ...
+# Subtest: native DSH web_search honors explicit Run admission and warm policy revocation
+ok 4 - native DSH web_search honors explicit Run admission and warm policy revocation
+  ---
+  duration_ms: 1252.098751
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/office-http-sdk-AKLE7g/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: same-version Office upload reaches native DSH, completes its Run, exports Word and reopens history
+not ok 5 - same-version Office upload reaches native DSH, completes its Run, exports Word and reopens history
+  ---
+  duration_ms: 11787.34213
+  type: 'test'
+  location: '/work/exact/tests/regression/office-http-sdk-integration-test.mjs:4:1'
+  failureType: 'testCodeFailure'
+  error: |-
+    Cannot find module '../helpers/office-structured-fixtures.cjs'
+    Require stack:
+    - /work/exact/tests/regression/office-http-sdk-integration-test.mjs
+  code: 'MODULE_NOT_FOUND'
+  stack: |-
+    Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)
+    defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)
+    resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)
+    Function._load (node:internal/modules/cjs/loader:1216:25)
+    wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    Module.require (node:internal/modules/cjs/loader:1527:12)
+    require (node:internal/modules/helpers:147:16)
+    TestContext.<anonymous> (file:///work/exact/tests/regression/office-http-sdk-integration-test.mjs:43:36)
+    process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    async Test.run (node:internal/test_runner/test:1054:7)
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-qEcnaM/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: reasoning metadata and preference reach durable Runs, native requests and reopened history
+ok 6 - reasoning metadata and preference reach durable Runs, native requests and reopened history
+  ---
+  duration_ms: 14566.687547
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/source-http-sdk-tvGcEy/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: source search citations and revocation traverse durable Runs, native SDK and cold history
+ok 7 - source search citations and revocation traverse durable Runs, native SDK and cold history
+  ---
+  duration_ms: 14896.499756
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/f2-http-sdk-fDSiqi/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: offline HTTP xlsx Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+ok 8 - offline HTTP xlsx Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+  ---
+  duration_ms: 13959.692631
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 7
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 19726.90755
