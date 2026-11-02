@@ -7,7 +7,7 @@
  *        非字符串 / 空 / 太短(<4) / 太长(>256) / 明显非法字符（空格、换行、非 ASCII）
  *   ② 「有效性校验」（live 探活）：对 PowerTokens 做一次最小代价鉴权探测
  *         GET {PT_KEY_VERIFY_BASEURL}/models ，带 Authorization: Bearer <key>
- *         2xx → 有效；401/403 → 无效；404 → 端点/地址不对；429/5xx/网络/超时
+ *         2xx → 有效；401 → Key无效；402 → 余额不足；403 → 拒绝访问（旧版原因待核对）；404 → 端点/地址不对；429/5xx/网络/超时
  *         → 暂时无法完成校验。以上非 2xx 一律拒绝落库并给中文原因（fail-closed）。
  *   ③ 校验通过才用 keys.cjs 的 encryptApiKey（AES-256-GCM 主密钥）落库。
  *
@@ -100,7 +100,9 @@ function liveVerifyPtKey(plaintext, opts = {}) {
         res.resume();
         const st = res.statusCode || 0;
         if (st >= 200 && st < 300) return done({ ok: true, status: st, code: "OK" });
-        if (st === 401 || st === 403) return done({ ok: false, status: st, code: "AUTH_REJECTED", reason: "PT 拒绝了这个 key（鉴权失败）" });
+        if (st === 401) return done({ ok: false, status: st, code: "AUTH_REJECTED", reason: "API Key 无效或已过期，请检查配置" });
+        if (st === 402) return done({ ok: false, status: st, code: "QUOTA_INSUFFICIENT", reason: "账户余额不足；该响应不能认定 Key 无效" });
+        if (st === 403) return done({ ok: false, status: st, code: "UPSTREAM_FORBIDDEN", reason: "PT 拒绝访问，请检查模型状态或权限；旧版 403 的具体原因仍需核对" });
         if (st === 404) return done({ ok: false, status: st, code: "ENDPOINT_NOT_FOUND", reason: "PT 校验端点不存在（baseURL 可能不对）" });
         if (st === 429) return done({ ok: false, status: st, code: "RATE_LIMITED", reason: "PT 校验被限流，请稍后重试" });
         return done({ ok: false, status: st, code: "PT_ERROR", reason: "PT 校验端点返回异常状态 " + st + "，暂时无法确认 key 是否有效" });

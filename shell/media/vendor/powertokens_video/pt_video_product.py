@@ -441,13 +441,17 @@ def is_agreement_error(e):
 def classify_error(e):
     """Map ApiError to a stable product error code; never echo raw upstream body.
     Returns (code: str, user_hint: str).
-    403 is NOT asserted to mean key_invalid — it carries three semantics.
+    401 and 402 are authoritative; legacy 403 remains ambiguous until PT confirms rollout.
     """
     if not isinstance(e, ApiError):
         return ("UPSTREAM_UNKNOWN", "上游返回异常，请稍后核对")
     msg = (e.message or "").lower()
     status = e.status
 
+    if status == 401:
+        return ("KEY_INVALID", "API Key 无效或已过期，请检查配置")
+    if status == 402:
+        return ("QUOTA_INSUFFICIENT", "账户余额不足，请充值后重试")
     if is_agreement_error(e):
         return ("SEEDANCE_AGREEMENT_REQUIRED", "需先签署 Asset Library User Agreement，详见 seedance enable 引导")
     if "asset library" in msg or "media rejected" in msg or "content rejected" in msg or "format rejected" in msg or "design rejected" in msg:
@@ -891,7 +895,7 @@ def poll_task(key, task_id, interval=POLL_INTERVAL, timeout=POLL_TIMEOUT,
             consec_429 = 0
             backoff_429 = interval
         except ApiError as e:
-            if e.status in (401, 403, 404):
+            if e.status in (401, 402, 403, 404):
                 raise e
 
             if e.status == 429:

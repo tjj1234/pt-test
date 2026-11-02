@@ -8,7 +8,10 @@
   "r3PatchSha256": "3a133d9d73948c8913526d6a3fdb53e2b84b4b3290e83bad10df5cf198bde2bd",
   "mainOverlay": "docs/refactor/candidates/ptvideo-r3-main-overlay-20261028.patch",
   "mainOverlaySha256": "6f0691dc0362731f206e59eab2dbc5b86f1140b2d73c0e6a95f9fb1f7a017afe",
-  "engineSha256": "08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351",
+  "engineSha256": "da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d",
   "licenseSha256": "40fee169a984cc6ffb627661d42f373d9bf200aad4a5f640e20049bef74c51c1",
-  "status": "reviewed-engine-and-host-adapter-wired; controlled-entry-default-off; no-provider-acceptance"
+  "status": "reviewed-engine-and-host-adapter-wired; controlled-entry-default-off; no-provider-acceptance",
+  "ptContractOverlay": "docs/refactor/candidates/pt-contract-compat-20261102.patch",
+  "ptContractOverlaySha256": "17c168a636b6b493dd68d88bb742323b4c4c628079f6f1b02bcc5f47145c0c47",
+  "ptContractStatus": "A04 rollout unconfirmed; additive 401/402 support and legacy 403 compatibility; A11 wire seconds string verified offline"
 }

@@ -14,6 +14,7 @@ test('vendored engine stays bound to reviewed upstream and main overlay', () => 
   assert.equal(sha(path.join(engine, 'LICENSE')), metadata.licenseSha256);
   assert.equal(sha(metadata.r3Patch), metadata.r3PatchSha256);
   assert.equal(sha(metadata.mainOverlay), metadata.mainOverlaySha256);
+  assert.equal(sha(metadata.ptContractOverlay), metadata.ptContractOverlaySha256);
 });
 test('reviewed engine passes original 67 cases and 15 main-review counterexamples offline', { timeout: 20_000 }, () => {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'northstar-engine-offline-'));
