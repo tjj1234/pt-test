@@ -1134,3 +1134,7 @@ XLSX原单元/反读探针机械复跑通过，但仍需主审依赖解析/资�
 ### 2026-11-02：第二条本地产品链关闭——CSV分析Excel结果
 Context阻断证据提交f186f34后继续独立XLSX链，不等待其他包。主审新增3项反例复现cwd依赖回退、非法limits/非法XML sheet名及无聚合文本限制；修正原候选（原件在保险dae46d5）并保留失败日志，合法隔离探针显式提供shell锁定依赖。原生csv_analyze新增可选outputFormat(csv/xlsx，默认csv)，宿主复用Word有界worker与安全发布/owned读取，Excel结果进入事件与历史产物面板，未增加模型/工具预算或依赖。联合回归发现原CSV及新XLSX事件SHA在扫描入历史时丢失，已合并持久宿主artifact元数据并保留SHA。
 最终xlsx --browser机械命令3项均exit0，25文件开始/结束SHA无漂移：unit-review14/14（其中产物UI独立脚本64/64另列）、合法格式probe、HTTP原CSV/XLSX/Office-Word3/3；XLSX summary A2:I2精确值反读、无公式、SHA/匿名/跨用户/历史重开均通过，真实浏览器下载/刷新截图已目视核对。共享源码另跑reasoning --browser也全通过，26文件绑定验证通过。主Agent批准LOCAL_CHAIN_CLOSED，仅CSV分析Excel结果，不等于任意文档工具或全量交付。完整报告XLSX-RESULT-PRODUCT-LOCAL-ACCEPTANCE-20261102.md；当前准备独立功能提交，最终hash以Git为准，无付费provider或部署。Gemini批次汇总的原有未提交改动继续保留，不混入本链代码提交。
+
+### 2026-11-02：串行闭合与远程保存检查点
+本轮功能提交6c5a4cc（推理本地链）、0638d8f（CSV分析Excel本地链）；中间f186f34单独记录Context R4阻断，不算功能闭合。两条链在当前共享源码的绑定报告均验证通过；未跑最终全量发布验收、未部署、无真实付费provider。用户/Gemini批次交付汇总新增32行原样保留，另作进度文档提交，不混进两个功能提交。
+按用户此前明确指定tjj1234/pt-test保存工作与当前逐条提交要求，将集成分支feature/northstar-integration-20261102推送同名远程分支；此条在push前记录，成功须以push回执与ls-remote同hash为准。不触碰main或backup/northstar-wip-20261102-safety。下一待闭合为跨资料检索/删除失效；Context仍8项主审失败及真实压缩入口未证明，记忆/Skill/音视频与全量剩余范围不降级为完成。当前没有本助手子Agent；机械测试已结束，浏览器夹具已关闭自身临时会话。
