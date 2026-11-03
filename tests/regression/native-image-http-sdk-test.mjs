@@ -17,7 +17,8 @@ test('HTTP verified upload reaches native DSH images, survives cold replay, and 
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {pathToFileURL} from 'node:url';
 const require=createRequire(${JSON.stringify(path.join(root,'shell/package.json'))});const load=n=>import(pathToFileURL(require.resolve(n)));
 const [{Context},{default:Agents},{default:Sessions},{default:Llm,LlmAdapter},{default:Prompt},{default:Tools},{default:Loop},{default:Attachments}]=await Promise.all(['@deepseek-ai/cordis','@deepseek-ai/dsh-agent','@deepseek-ai/dsh-session','@deepseek-ai/dsh-llm','@deepseek-ai/dsh-system-prompt','@deepseek-ai/dsh-tools','@deepseek-ai/dsh-agent-loop','@deepseek-ai/dsh-attachment-local'].map(load));
-const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[Prompt,{}],[Tools,{}],[Loop,{agents:[]}],[Attachments,{dshHome:process.env.DSH_HOME}]])await ctx.plugin(plugin,...(config===undefined?[]:[config]));
+const {default:Persistence}=await load('@deepseek-ai/dsh-session-persistence-jsonl');
+const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[Persistence,{root:path.join(process.env.DSH_HOME,'sessions')}],[Prompt,{}],[Tools,{}],[Loop,{agents:[]}],[Attachments,{dshHome:process.env.DSH_HOME}]])await ctx.plugin(plugin,...(config===undefined?[]:[config]));
 ctx.provide('loader',{await:async()=>{}});ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-vision'})});ctx.provide('appExit',code=>process.exit(code));
 class Adapter extends LlmAdapter{
  async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:['text','image']};}
@@ -34,8 +35,8 @@ value.writeScopedCache(scopeId,{scopeId,models:[m],lastSuccessfulAt:at,lastCompl
 return {models:[m],scopeId,availability:{status:'available',modelIds:[m.id]},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts)};return value;};`);
   const profiles=path.join(runtime,'dsh-home/profiles');fs.mkdirSync(profiles,{recursive:true});fs.symlinkSync(path.join(root,'shell/node_modules'),path.join(profiles,'node_modules'),'dir');
-  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0'},stdio:['ignore','pipe','pipe']});
-  child.stdout.on('data',b=>logs+=b);child.stderr.on('data',b=>logs+=b);
+  const start=()=>{child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0'},stdio:['ignore','pipe','pipe']});
+  child.stdout.on('data',b=>logs+=b);child.stderr.on('data',b=>logs+=b);};start();
   const req=(url,{user=0,method='GET',body}={})=>fetch('http://127.0.0.1:'+port+url,{method,headers:{Cookie:cookies[user],...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
   const json=async(url,opts)=>{const r=await req(url,opts);assert.equal(r.status,200,await r.clone().text());return r.json();};
   let ready=false;for(let i=0;i<150;i++){if(child.exitCode!==null)throw Error(logs);try{if((await req('/api/auth/me')).status===200){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,40));}assert.ok(ready,logs);
@@ -51,7 +52,7 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
    if(round++===0){
     const events=await json('/api/runs/'+r.headers.get('x-agent-run-id')+'/events');
     assert.ok(events.events.some(e=>e.payload?.action==='image_understanding_runtime_verified'),JSON.stringify(events));
-    await json('/api/models/select',{method:'POST',body:{conversationId,model:'AUTO'}});
+    const ended=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGTERM');await ended;if(fs.existsSync(pid)){try{process.kill(Number(fs.readFileSync(pid,'utf8')),'SIGTERM');}catch{}}start();let readyAgain=false;for(let n=0;n<150;n++){try{if((await req('/api/auth/me')).status===200){readyAgain=true;break;}}catch{}await new Promise(resolve=>setTimeout(resolve,40));}assert.ok(readyAgain,logs);
    }
   }
   const calls=()=>fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse);assert.equal(calls().length,3);assert.ok(calls().every(c=>c.images===1));

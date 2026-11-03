@@ -971,8 +971,8 @@ function createDshRuntime(opts = {}) {
       };
       proc.waiters.set(sessionId, waiter);
       const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, ...(spec.pinnedSkills?{pinnedSkills:spec.pinnedSkills}:{}), ...(spec.runId?{runId:spec.runId}:{}), ...(resume?{resume:true}:{}), ...(spec.compact?{compact:true}:{}), task: fullTask, model: spec.model, ...(spec.reasoningEffort === undefined ? {} : {reasoningEffort:spec.reasoningEffort}), tenantId,
-        ...((spec.inputImages !== undefined || (!warm && spec.historyInputImages?.length))
-          ? {inputImages:[...(!warm?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
+        ...((spec.inputImages !== undefined || (!warm && !resume && spec.historyInputImages?.length))
+          ? {inputImages:[...(!warm&&!resume?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
         ...(spec.recordModelIntents === true ? { recordModelIntents: true } : {}),
         ...(["csv","skill","skill-csv"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) { waiter.taskDispatched = true; writeJson(proc, taskFrame); }

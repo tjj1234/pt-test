@@ -910,7 +910,8 @@ function apply(ctx) {
           };
           let handle;try{handle=cmd.resume===true?await agents.resume({...creationOptions,resumeSessionId:creationOptions.sessionId}):await agents.create(creationOptions);}catch(error){if(cmd.resume===true)throw budgetAdmissionError('NATIVE_SESSION_UNAVAILABLE');throw error;}const {agent}=handle;
           await agent.whenIdle();
-          rec = { agent, modelSelection: selection };
+          rec = { agent, modelSelection: selection, hasNativeImages: cmd.resume===true && agent.session.deriveMessages().some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image')) };
+          turn.requiresImage = Boolean(turn.requiresImage || rec.hasNativeImages);
           agentMap.set(sid, rec);
           sessionKey.set(agent.session, sid);
           turn.agent = agent;
