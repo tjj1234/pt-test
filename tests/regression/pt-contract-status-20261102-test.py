@@ -14,12 +14,12 @@ class Contracts(unittest.TestCase):
     self.assertEqual(body['prompt'],'fixture');self.assertFalse(any(item.get('type')=='text' for item in body['media']));self.assertEqual(body['seconds'],str(duration));self.assertIsInstance(body['seconds'],str)
  def test_status_has_priority_over_conflicting_body(self):
   for engine in self.engines():
-   for status,code in ((401,'KEY_INVALID'),(402,'QUOTA_INSUFFICIENT')):
+   for status,code in ((401,'KEY_INVALID'),(402,'QUOTA_INSUFFICIENT'),(403,'UPSTREAM_FORBIDDEN')):
     for message in ('','balance insufficient invalid token','asset library agreement required'):
      self.assertEqual(engine.classify_error(engine.ApiError(status,message))[0],code)
- def test_legacy_403_retains_body_specific_and_ambiguous_fallback(self):
+ def test_live_403_never_misclassifies_body_as_key_or_balance(self):
   for engine in self.engines():
-   for message,code in (('','UPSTREAM_FORBIDDEN'),('insufficient balance','QUOTA_INSUFFICIENT'),('invalid token','KEY_INVALID'),('no permission','MODEL_NOT_PERMITTED')):
+   for message,code in (('','UPSTREAM_FORBIDDEN'),('insufficient balance','UPSTREAM_FORBIDDEN'),('invalid token','UPSTREAM_FORBIDDEN'),('no permission','UPSTREAM_FORBIDDEN')):
     self.assertEqual(engine.classify_error(engine.ApiError(403,message))[0],code)
  def test_poll_denial_never_retries_or_resubmits(self):
   for engine in self.engines():

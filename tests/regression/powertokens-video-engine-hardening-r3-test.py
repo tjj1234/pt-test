@@ -496,17 +496,17 @@ class TestErrorClassificationR2(unittest.TestCase):
         self.assertEqual(code, "MEDIA_REJECTED")
 
     def test_clear_agreement_required_classified_correctly(self):
-        err = self._err(403, "asset library user agreement required, please sign the agreement")
+        err = self._err(400, "asset library user agreement required, please sign the agreement")
         code, hint = self.m.classify_error(err)
         self.assertEqual(code, "SEEDANCE_AGREEMENT_REQUIRED")
 
     def test_quota_insufficient(self):
-        code, _ = self.m.classify_error(self._err(403, "token quota is not enough: need quota: $0.20"))
+        code, _ = self.m.classify_error(self._err(402, "token quota is not enough: need quota: $0.20"))
         self.assertEqual(code, "QUOTA_INSUFFICIENT")
 
     def test_model_not_permitted(self):
         code, _ = self.m.classify_error(self._err(403, "not permitted to use this model"))
-        self.assertEqual(code, "MODEL_NOT_PERMITTED")
+        self.assertEqual(code, "UPSTREAM_FORBIDDEN")
 
     def test_key_invalid(self):
         code, _ = self.m.classify_error(self._err(401, "token_invalid: the provided token is expired"))

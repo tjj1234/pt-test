@@ -142,7 +142,7 @@ function sleep(ms) {
 
 function upstreamHttpError(status, operation) {
   const codes = {401:"KEY_INVALID",402:"QUOTA_INSUFFICIENT",403:"UPSTREAM_FORBIDDEN"};
-  const hints = {401:"API Key 无效或已过期",402:"账户余额不足",403:"上游拒绝访问，请核对权限与模型状态"};
+  const hints = {401:"API Key 无效或已过期",402:"账户余额不足",403:"模型已下架或当前 Key 无此模型权限"};
   const error = new Error(`PowerTokens ${operation} HTTP ${status}: ${hints[status] || "上游请求失败"}`);
   error.code = codes[status] || "UPSTREAM_HTTP_ERROR";
   error.upstreamStatus = status;

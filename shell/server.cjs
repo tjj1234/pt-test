@@ -30,7 +30,7 @@ const modelCatalog = require("./model-catalog.cjs");
 const {readHostMediaReviews,createReviewedMediaCatalogGetter}=require("./models/reviewed-media-catalog-view.cjs");
 const reviewedMediaCatalog = process.env.PT_MEDIA_REVIEW_FILE
   ? createReviewedMediaCatalogGetter({getCatalog:modelCatalog.getCatalog,readReviews:()=>readHostMediaReviews(process.env.PT_MEDIA_REVIEW_FILE)})
-  : modelCatalog.getCatalog;
+  : process.env.PT_MEDIA_GENERATION === "standard3" ? async options => require("./models/standard-media-catalog.cjs").standardMediaCatalog(await modelCatalog.getCatalog(options)) : modelCatalog.getCatalog;
 const { routeTextTask, routeChatTask } = require("./models/task-router.cjs");
 const {nativeImageCandidates}=require('./models/native-image-qualification.cjs');
 const {reviewedImageOverrides}=require('./models/reviewed-image-facts.cjs');
@@ -1036,10 +1036,16 @@ async function handleChat(req, res, me, body, taskRun = null) {
   }
   let managedMediaExecutor;
   if (controlledMediaGrant) {
-    if (!managedMediaFetch) throw Object.assign(new Error("Managed media storage is not configured"),{code:"MEDIA_PUBLISH_CONFIGURATION_INVALID"});
-    const publish=createManagedResultPublisher({workspaceRoot:path.join(RUNTIME,"workspaces"),allowedHosts:managedMediaHosts,fetchImpl:managedMediaFetch,writeArtifact:writeManagedMediaArtifact,
+    if (!managedMediaFetch && process.env.PT_MEDIA_GENERATION!=="standard3") throw Object.assign(new Error("Managed media storage is not configured"),{code:"MEDIA_PUBLISH_CONFIGURATION_INVALID"});
+    const publisherOptions={workspaceRoot:path.join(RUNTIME,"workspaces"),allowedHosts:managedMediaHosts,fetchImpl:managedMediaFetch,writeArtifact:writeManagedMediaArtifact,
       onPublished:media=>taskRun.emit("state",{action:"managed_media_published",media:{type:media.kind,url:media.url},asset:media.managed}),
-    });
+    };
+    const publish=process.env.PT_MEDIA_GENERATION==="standard3" && !managedMediaHosts.length
+      ? async (result,context)=>{
+          let hostname;try{hostname=new URL(result.url).hostname;}catch{throw Object.assign(new Error("Invalid standard media result"),{code:"MEDIA_PUBLISH_ARGUMENT_INVALID"});}
+          return createManagedResultPublisher({...publisherOptions,allowedHosts:[hostname],fetchImpl:createPinnedAssetFetch({allowedHosts:[hostname]})})(result,context);
+        }
+      : createManagedResultPublisher(publisherOptions);
     managedMediaExecutor=createManagedMediaExecutor({executeMedia:callMediaRoute,inputImageUrl:dataUrl,
       publishResult:(result,info)=>publish(result,{identity:mediaRunIdentity,runId:taskRun.runId,signal:info.signal}),
     });
@@ -1982,7 +1988,7 @@ async function handle(req, res) {
     };
     const SKILL_DESCRIPTIONS = {
       "attribution.query": "查询广告归因漏斗与素材投放表现，回答转化、渠道、素材效果等问题。",
-      "media.route": "根据文字描述或参考图生成图片/视频，支持文生图、图生图、文生视频、图生视频。",
+      "media.route": process.env.PT_MEDIA_GENERATION === "standard3" ? "根据文字描述或参考图生成图片，或根据文字生成视频；本期支持文生图、图生图、文生视频。" : "根据文字描述或参考图生成图片/视频，支持文生图、图生图、文生视频、图生视频。",
       "ga.query": "授权你自己的 Google Analytics 账户后，可以直接在对话里问真实网站数据。",
       "tracking_quality_audit": "只读审计当前工作区的真实事件适配统计，按 Token 业务模板返回埋点质量评分、问题列表与整改建议。",
     };
@@ -2857,7 +2863,7 @@ async function main() {
   managedMediaReader=createManagedMediaReader({workspaceRoot:path.join(RUNTIME,"workspaces"),getRun:(identity,runId)=>taskStore.getRun(identity,runId)});
   managedMediaHosts=String(process.env.PT_MEDIA_ASSET_HOSTS||"").split(",").map(host=>host.trim().toLowerCase()).filter(Boolean);
   if(managedMediaHosts.length)managedMediaFetch=createPinnedAssetFetch({allowedHosts:managedMediaHosts});
-  if(process.env.PT_MEDIA_GENERATION!=="off"&&process.env.PT_CONTROLLED_MEDIA_AUTHORIZATION === "1"&&!managedMediaFetch)throw Object.assign(new Error("Managed media asset hosts are required"),{code:"MEDIA_PUBLISH_CONFIGURATION_INVALID"});
+  if(process.env.PT_MEDIA_GENERATION!=="off"&&process.env.PT_CONTROLLED_MEDIA_AUTHORIZATION === "1"&&!managedMediaFetch&&process.env.PT_MEDIA_GENERATION!=="standard3")throw Object.assign(new Error("Managed media asset hosts are required"),{code:"MEDIA_PUBLISH_CONFIGURATION_INVALID"});
   taskScheduler = createSessionScheduler({
     perUserLimit: Number(process.env.PT_RUNS_PER_USER || 4),
     globalLimit: Number(process.env.PT_RUNS_GLOBAL || 16),

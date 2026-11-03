@@ -1,0 +1,40 @@
+--- a/shell/media/vendor/powertokens_video/pt_video.py
++++ b/shell/media/vendor/powertokens_video/pt_video.py
+@@ -441,7 +441,7 @@
+ def classify_error(e):
+     """Map ApiError to a stable product error code; never echo raw upstream body.
+     Returns (code: str, user_hint: str).
+-    401 and 402 are authoritative; legacy 403 remains ambiguous until PT confirms rollout.
++    PT confirmed production status split: 401 key, 402 balance, 403 model permission.
+     """
+     if not isinstance(e, ApiError):
+         return ("UPSTREAM_UNKNOWN", "上游返回异常，请稍后核对")
+@@ -452,6 +452,8 @@
+         return ("KEY_INVALID", "API Key 无效或已过期，请检查配置")
+     if status == 402:
+         return ("QUOTA_INSUFFICIENT", "账户余额不足，请充值后重试")
++    if status == 403:
++        return ("UPSTREAM_FORBIDDEN", "模型已下架或当前 Key 无此模型权限，请检查 PT 后台")
+     if is_agreement_error(e):
+         return ("SEEDANCE_AGREEMENT_REQUIRED", "需先签署 Asset Library User Agreement，详见 seedance enable 引导")
+     if "asset library" in msg or "media rejected" in msg or "content rejected" in msg or "format rejected" in msg or "design rejected" in msg:
+--- a/shell/media/vendor/powertokens_video/pt_video_product.py
++++ b/shell/media/vendor/powertokens_video/pt_video_product.py
+@@ -441,7 +441,7 @@
+ def classify_error(e):
+     """Map ApiError to a stable product error code; never echo raw upstream body.
+     Returns (code: str, user_hint: str).
+-    401 and 402 are authoritative; legacy 403 remains ambiguous until PT confirms rollout.
++    PT confirmed production status split: 401 key, 402 balance, 403 model permission.
+     """
+     if not isinstance(e, ApiError):
+         return ("UPSTREAM_UNKNOWN", "上游返回异常，请稍后核对")
+@@ -452,6 +452,8 @@
+         return ("KEY_INVALID", "API Key 无效或已过期，请检查配置")
+     if status == 402:
+         return ("QUOTA_INSUFFICIENT", "账户余额不足，请充值后重试")
++    if status == 403:
++        return ("UPSTREAM_FORBIDDEN", "模型已下架或当前 Key 无此模型权限，请检查 PT 后台")
+     if is_agreement_error(e):
+         return ("SEEDANCE_AGREEMENT_REQUIRED", "需先签署 Asset Library User Agreement，详见 seedance enable 引导")
+     if "asset library" in msg or "media rejected" in msg or "content rejected" in msg or "format rejected" in msg or "design rejected" in msg:
