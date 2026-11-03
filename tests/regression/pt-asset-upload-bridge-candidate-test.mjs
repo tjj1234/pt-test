@@ -35,18 +35,18 @@ function setupPatchedEngine(t) {
   fs.copyFileSync(VENDOR_ENGINE, engineFile);
 
   const baselineSha = crypto.createHash('sha256').update(fs.readFileSync(engineFile)).digest('hex');
-  assert.equal(baselineSha, '08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351');
+  assert.equal(baselineSha, 'da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d');
 
   // Apply Patch 1
   const { execFileSync } = require('node:child_process');
   execFileSync('patch', ['-p1', '-i', PATCH_1], { cwd: dir, stdio: 'pipe' });
   const p1Sha = crypto.createHash('sha256').update(fs.readFileSync(engineFile)).digest('hex');
-  assert.equal(p1Sha, '3bad125b0267c1bc47c58ca8b8dc0e77700910d35fc2111f5bb0653176adebcb');
+  assert.equal(p1Sha, 'dd9a4b6a57fde2578dd07b41c96c5745af42978b3092b201cd75b75594d1dd8a');
 
   // Apply Patch 2
   execFileSync('patch', ['-p1', '-i', PATCH_2], { cwd: dir, stdio: 'pipe' });
   const p2Sha = crypto.createHash('sha256').update(fs.readFileSync(engineFile)).digest('hex');
-  assert.equal(p2Sha, '286c9710a3b8944bb64d673be0f94a3e2c479bbd9c8564da7f539f319c184b15');
+  assert.equal(p2Sha, '79f3af2c15eaa97eae2bda621dbd5a6772b837c821d97bd611ad042253764529');
 
   return engineFile;
 }

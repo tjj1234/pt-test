@@ -96,3 +96,6 @@ conv/hello.txt
 # Northstar TLS material: keep private keys out of Git and release archives.
 /adorado.top.key
 /adorado.top.pem
+
+# Disposable Linux dependency/install trees; only frozen archives and reports are versioned.
+/release-artifacts/.validation-*/

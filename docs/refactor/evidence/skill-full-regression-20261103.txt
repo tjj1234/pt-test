@@ -1,0 +1,419 @@
+run-regression (default)：发现 260 个回归套件
+
+✓ active-config-inspect-test.mjs (44ms)
+✓ analytics-scoped-token-test.mjs (26ms)
+✓ artifact-openat-test.mjs (34ms)
+✓ artifacts-boundary-test.mjs (23ms)
+✓ artifacts-test.mjs (25ms)
+✓ auth-flow-fixes-test.mjs (45ms)
+✓ c2-dsh-env-isolation-test.mjs (21ms)
+✓ chat-model-snapshot-test.mjs (1136ms)
+✓ chat-rate-limit-by-account-test.mjs (1574ms)
+✓ chat-request-attachments-test.mjs (36ms)
+✓ chat-transport-retry-budget-test.mjs (6290ms)
+✓ chat-usage-failure-accounting-test.mjs (1897ms)
+✓ context-http-sdk-integration-test.mjs (3531ms)
+✓ controlled-media-parameters-test.mjs (36ms)
+✓ conversation-docx-export-test.mjs (146ms)
+✓ conversation-model-preference-http-test.mjs (3913ms)
+✓ conversation-model-preference-test.mjs (890ms)
+✓ csv-analysis-test.mjs (34ms)
+✓ csv-column-profile-test.mjs (26ms)
+✓ csv-document-http-test.mjs (1982ms)
+✓ csv-export-test.mjs (25ms)
+✓ csv-parser-test.mjs (25ms)
+✓ csv-source-test.mjs (27ms)
+✓ csv-xlsx-export-test.mjs (69ms)
+✗ current-northstar-draft-artifact-test.mjs (358ms)  [exit-1]
+✓ db-failclosed-test.mjs (676ms)
+✓ docexport-candidate-test.mjs (96ms)
+✓ docexport-input-guard-candidate-test.mjs (28ms)
+✓ docx-evidence-index-candidate-test.mjs (25ms)
+✓ docx-evidence-index-main-review-test.mjs (24ms)
+✓ dsh-adapter-error-frame-test.mjs (3372ms)
+✓ dsh-bootstrap-policy-test.mjs (74ms)
+✓ dsh-cli-profile-ready-test.mjs (3282ms)
+✓ dsh-configured-catalog-test.mjs (61ms)
+✓ dsh-installation-test.mjs (54ms)
+✓ dsh-model-info-rpc-test.mjs (3604ms)
+✓ dsh-native-context-gate-candidate-test.mjs (54ms)
+✓ dsh-native-context-r2-test.mjs (32ms)
+✓ dsh-native-context-r3-test.mjs (30ms)
+✓ dsh-native-context-r4-test.mjs (153ms)
+✓ dsh-native-reasoning-r2-test.mjs (40ms)
+✓ dsh-native-reasoning-r3-test.mjs (33ms)
+✓ dsh-native-reasoning-selection-candidate-test.mjs (29ms)
+✓ dsh-parent-rpc-test.mjs (11953ms)
+✓ dsh-runtime-release-test.mjs (55ms)
+✓ external-operations-store-test.mjs (1172ms)
+✓ external-operations-worker-test.mjs (2379ms)
+✓ f1-auto-runtime-verification-test.mjs (31ms)
+✓ f1-budget-policy-change-test.mjs (183ms)
+✓ f1-candidate34-draft-artifact-test.mjs (447ms)
+✓ f1-catalog-cache-r5-artifact-test.mjs (334ms)
+✓ f1-catalog-cache-shape-probe-test.mjs (123ms)
+✓ f1-controlled-media-admission-test.mjs (26ms)
+✓ f1-dsh-model-switch-identity-test.mjs (3289ms)
+✓ f1-host-media-review-view-test.mjs (57ms)
+✓ f1-managed-media-http-sdk-test.mjs (3962ms)
+✓ f1-media-asset-ingest-candidate-test.mjs (137ms)
+✓ f1-media-base-url-test.mjs (31ms)
+✓ f1-media-catalog-scope-test.mjs (28ms)
+✓ f1-media-default-catalog-scope-test.mjs (38ms)
+✓ f1-media-gateway-consistency-test.mjs (147ms)
+✓ f1-media-input-asset-run-test.mjs (28ms)
+✓ f1-media-result-acceptance-test.mjs (23ms)
+✓ f1-media-runner-host-test.mjs (3354ms)
+✓ f1-model-identity-evidence-test.mjs (24ms)
+✓ f1-model-media-matrix-test.mjs (27ms)
+✓ f1-model-media-task-http-test.mjs (1528ms)
+✓ f1-native-model-switch-intent-test.mjs (3943ms)
+✓ f1-pt-media-csp-http-test.mjs (1034ms)
+✓ f1-ptvideo-result-guard-candidate-test.mjs (31ms)
+✓ f1-r2-cache-schema-backport-test.mjs (275ms)
+✓ f1-reviewed-media-apply-test.mjs (29ms)
+✓ f1-reviewed-media-qualification-test.mjs (29ms)
+✓ f1-ui-media-history-test.mjs (6045ms)
+✓ f1-ui-media-http-history-test.mjs (1423ms)
+✓ f1-ui-run-review-link-test.mjs (6109ms)
+✓ f2-csv-analysis-adapter-test.mjs (51ms)
+✓ f2-csv-analysis-result-candidate-test.mjs (31ms)
+✓ f2-csv-column-selection-candidate-test.mjs (28ms)
+✓ f2-csv-host-rpc-test.mjs (27ms)
+✓ f2-csv-http-sdk-integration-test.mjs (1725ms)
+✓ f2-csv-real-sdk-runner-test.mjs (130ms)
+✓ f2-csv-run-artifact-test.mjs (35ms)
+✓ f2-csv-run-handler-test.mjs (46ms)
+✓ f2-csv-run-source-test.mjs (28ms)
+✓ f3-bound-text-estimate-test.mjs (27ms)
+✓ f3-price-catalog-store-test.mjs (1188ms)
+✓ f3-price-snapshot-selection-candidate-test.mjs (28ms)
+✓ f3-pt-consume-record-candidate-test.mjs (28ms)
+✓ f3-pt-consume-record-main-review-test.mjs (85ms)
+✓ f3-pt-consume-record-r2-candidate-test.mjs (28ms)
+✓ f3-text-cost-estimate-test.mjs (24ms)
+✓ google-auth-review-test.mjs (3543ms)
+✓ google-auth-routes-review-test.mjs (4331ms)
+✓ google-auth-routes-test.mjs (29ms)
+✓ google-auth-test.mjs (7704ms)
+✓ google-binding-review-test.mjs (1710ms)
+✓ google-login-integration-review-test.mjs (7609ms)
+✓ google-login-server-test.mjs (1320ms)
+✓ google-session-upgrade-test.mjs (657ms)
+✓ host-tool-handler-test.mjs (56ms)
+✓ lease-recovery-sweep-test.mjs (24ms)
+✓ m1-tool-wiring-test.mjs (903ms)
+✓ m3-workspace-enabled-status-test.mjs (35ms)
+✓ managed-media-read-test.mjs (65ms)
+✓ managed-media-writer-candidate-test.mjs (142ms)
+✓ managed-media-writer-main-review-test.mjs (53ms)
+✓ managed-result-publisher-test.mjs (38ms)
+✓ media-authorization-test.mjs (1195ms)
+✓ media-external-usage-http-test.mjs (1271ms)
+✓ media-grant-store-candidate-test.mjs (1085ms)
+✓ media-reservation-http-test.mjs (2340ms)
+✓ media-reservation-reconciliation-candidate-test.mjs (32ms)
+✓ media-reservation-release-candidate-test.mjs (1094ms)
+✓ media-reservation-view-candidate-test.mjs (31ms)
+✓ media-result-url-boundary-test.mjs (25ms)
+✓ media-route-admission-run-test.mjs (28ms)
+✓ media-route-admission-test.mjs (28ms)
+✓ media-route-test.mjs (36ms)
+✓ media-run-lifecycle-test.mjs (969ms)
+✓ media-subprocess-submission-boundary-test.mjs (29ms)
+✓ memory-change-cancel-http-test.mjs (1378ms)
+✓ memory-change-cancels-active-runs-test.mjs (967ms)
+✓ memory-context-budget-test.mjs (658ms)
+✓ memory-provenance-candidate-test.mjs (32ms)
+✓ memory-provenance-store-test.mjs (1035ms)
+✓ memory-session-invalidation-http-test.mjs (1367ms)
+✓ memory-untrusted-upload-boundary-http-test.mjs (1402ms)
+✓ memory-zero-budget-test.mjs (24ms)
+✓ model-capabilities-review-test.mjs (28ms)
+✓ model-capabilities-test.mjs (38ms)
+✓ model-catalog-diagnostics-test.mjs (29ms)
+✓ model-catalog-failure-stage-test.mjs (44ms)
+✓ model-catalog-lifecycle-test.mjs (111ms)
+✓ model-catalog-test.mjs (34ms)
+✓ native-image-auto-verification-test.mjs (31ms)
+✓ native-image-http-sdk-test.mjs (1961ms)
+✓ native-image-message-test.mjs (91ms)
+✓ native-image-routing-test.mjs (28ms)
+✓ native-tool-run-gate-sdk-test.mjs (193ms)
+✓ northstar-backup-fs-test.mjs (35ms)
+✓ northstar-data-backup-test.mjs (11691ms)
+✓ northstar-dsh-manifest-test.mjs (66ms)
+✓ northstar-preflight-test.mjs (84ms)
+✓ office-document-parser-test.mjs (189ms)
+✓ office-http-sdk-integration-test.mjs (1835ms)
+✓ office-structured-input-test.mjs (149ms)
+✓ persistent-runner-control-errors-test.mjs (173ms)
+✓ persistent-runner-parallel-test.mjs (255ms)
+✓ persistent-runner-real-sdk-rpc-probe.mjs (186ms)
+✓ phase1-contract-review-test.mjs (42ms)
+✓ phase1-contract-test.mjs (29ms)
+✓ pinned-asset-fetch-test.mjs (48ms)
+✓ portable-xlsx-candidate-test.mjs (41ms)
+✓ portable-xlsx-main-review-test.mjs (47ms)
+✓ profile-dependencies-test.mjs (28ms)
+✓ profile-lifecycle-test.mjs (56ms)
+✓ profile-maintenance-cli-test.mjs (123ms)
+✓ profile-paths-test.mjs (29ms)
+✓ profile-startup-failure-test.mjs (56ms)
+✗ pt-asset-upload-bridge-candidate-test.mjs (475ms)  [exit-1]
+✗ pt-asset-upload-bridge-r2-candidate-test.mjs (844ms)  [exit-1]
+✓ pt-contract-key-status-test.mjs (219ms)
+✓ ptvideo-bridge-test.mjs (1974ms)
+✓ ptvideo-main-engine-test.mjs (717ms)
+✓ published-skill-provider-test.mjs (58ms)
+✓ queued-run-conversation-serialization-test.mjs (2428ms)
+✓ queued-run-recovery-test.mjs (2344ms)
+✓ reasoning-http-sdk-integration-test.mjs (2127ms)
+✓ reasoning-native-runner-test.mjs (141ms)
+✓ reasoning-run-snapshot-test.mjs (31ms)
+✓ regression-plan-test.mjs (21ms)
+✓ regression-test.mjs (53ms)
+✓ release-archive-preflight-main-review-test.mjs (215ms)
+✓ response-usage-test.mjs (25ms)
+✓ run-budget-event-test.mjs (23ms)
+✓ run-budget-summary-test.mjs (45ms)
+✓ runtime-contract-test.mjs (67ms)
+✓ seam-smoke.mjs (1016ms)
+✓ seam-test.mjs (42ms)
+✓ session-runs-test.mjs (27ms)
+✓ session-scheduler-review-test.mjs (26ms)
+✓ session-scheduler-test.mjs (28ms)
+✓ settings-maintenance-cli-test.mjs (203ms)
+✓ settings-upgrade-cli-test.mjs (491ms)
+✓ settings-upgrade-test.mjs (95ms)
+✓ settings-version-test.mjs (42ms)
+✓ skill-http-sdk-integration-test.mjs (2337ms)
+✓ skill-publication-store-test.mjs (1029ms)
+✓ skill-release-snapshot-test.mjs (27ms)
+✓ skill-run-snapshot-test.mjs (26ms)
+✓ source-http-sdk-integration-test.mjs (2046ms)
+✓ source-retrieval-candidate-test.mjs (28ms)
+✓ source-retrieval-main-review-test.mjs (26ms)
+✓ source-store-revocation-test.mjs (1021ms)
+✓ storage-google-policy-review-test.mjs (1090ms)
+✓ storage-init-cleanup-test.mjs (48ms)
+✓ storage-review-test.mjs (721ms)
+✓ storage-upgrade-test.mjs (1755ms)
+✓ t03-cancelling-crash-recovery-test.mjs (976ms)
+✓ t03-chat-http-same-key-disconnect-replay-test.mjs (9377ms)
+✓ t03-child-manual-check-stop-http-test.mjs (1398ms)
+✓ t03-child-manual-check-ui-test.mjs (30ms)
+✓ t03-external-manual-check-process-restart-test.mjs (1211ms)
+✓ t03-lease-recovery-sweep-test.mjs (3771ms)
+✓ t03-lost-ack-completed-replay-test.mjs (973ms)
+✓ t03-media-timeout-no-resubmit-test.mjs (5036ms)
+✓ t03-ui-preheader-ack-loss-real-chat-retry-test.mjs (7400ms)
+✓ t04-adapter-abort-drain-test.mjs (7086ms)
+✓ t04-cancel-releases-conversation-lease-sibling-pglite-test.mjs (1379ms)
+✓ t04-conversation-lease-pglite-fencing-test.mjs (1008ms)
+✓ t10-artifact-history-persistence-test.mjs (1516ms)
+✓ t10-artifact-openat-leaf-race-test.mjs (34ms)
+✓ t10-artifact-openat-nonregular-test.mjs (48ms)
+✓ t10-artifact-tenant-symlink-audit-test.mjs (1354ms)
+✓ t11-run-budget-event-persistence-test.mjs (1675ms)
+✗ t13-t14-profile-fail-closed-test.mjs (57ms)  [exit-1]
+✓ t16-candidate17-ustar-release-test.mjs (54ms)
+✓ t16-candidate18-ustar-release-test.mjs (54ms)
+✓ t16-candidate19-ustar-release-test.mjs (149ms)
+✓ t16-candidate28-ustar-release-test.mjs (58ms)
+✓ t16-candidate30-ustar-release-test.mjs (318ms)
+✓ t16-candidate31-ustar-release-test.mjs (203ms)
+✓ t16-candidate32-ustar-release-test.mjs (63ms)
+✓ t17-candidate-lockfile-provenance-test.mjs (66ms)
+✓ t17-profile-dependency-config-test.mjs (223ms)
+✓ task-budget-provider-test.mjs (32ms)
+✓ task-execution-test.mjs (2115ms)
+✓ task-heartbeat-boundary-review-test.mjs (6807ms)
+✓ task-router-budget-test.mjs (49ms)
+✓ task-sse-observer-review-test.mjs (1047ms)
+✓ task-store-review-test.mjs (6138ms)
+✓ task-store-test.mjs (1156ms)
+✓ tenant-mock-smoke.mjs (44ms)
+✓ tool-calls-usage-evidence-test.mjs (1610ms)
+✓ tool-registry-test.mjs (46ms)
+✓ tool-schema-review-test.mjs (107ms)
+✓ tool-schema-validator-test.mjs (147ms)
+✓ ui-archive-readonly-test.mjs (155ms)
+✓ ui-artifact-preview-test.mjs (6040ms)
+✓ ui-chat-bugfixes-test.mjs (6094ms)
+✓ ui-chat-connecting-label-test.mjs (6042ms)
+✓ ui-chat-doc-upload-frontend-test.mjs (3187ms)
+✓ ui-chat-elapsed-format-test.mjs (45ms)
+✓ ui-chat-media-route-step-test.mjs (26ms)
+✓ ui-chat-media-upload-test.mjs (8430ms)
+✓ ui-conversation-isolation-test.mjs (6463ms)
+✓ ui-flows-enable-real-status-test.mjs (6061ms)
+✓ ui-media-authorization-test.mjs (6073ms)
+✓ ui-media-reservation-reconciliation-test.mjs (6101ms)
+✓ ui-model-switch-test.mjs (6087ms)
+✓ ui-route-memory-test.mjs (252ms)
+✗ ui-run-resume-review-test.mjs (60ms)  [exit-1]
+✓ ui-settings-auth-accounts-test.mjs (195ms)
+✓ ui-tracking-quality-report-test.mjs (51ms)
+✓ ui-usage-token-summary-test.mjs (6045ms)
+✓ usage-dsh-sdk-shape-test.mjs (1135ms)
+✓ workspace-idempotent-test.mjs (24ms)
+✓ workspace-test.mjs (19ms)
+✓ xlsx-http-sdk-integration-test.mjs (1880ms)
+
+—— current-northstar-draft-artifact-test.mjs 输出末尾 ——
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 335.367542
+✖ failing tests:
+test at tests/regression/current-northstar-draft-artifact-test.mjs:7:1
+✖ active draft binds current sources and independently audits exact archive bytes (332.893083ms)
+  AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
+    File "/Users/mmdn/Downloads/pt项目/scripts/package-northstar-candidate34-r21-draft.py", line 25, in <module>
+      if __name__=='__main__':builder.main()
+                              ~~~~~~~~~~~~^^
+    File "/Users/mmdn/Downloads/pt项目/scripts/package-northstar-candidate34-draft.py", line 110, in main
+      if any(not p.is_file() or p.read_bytes()!=v for p,v in outputs.items()):raise ValueError('DRAFT_OR_SOURCE_CHANGED')
+                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ValueError: DRAFT_OR_SOURCE_CHANGED
+
+
+  1 !== 0
+
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/current-northstar-draft-artifact-test.mjs:12:96)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+—— pt-asset-upload-bridge-candidate-test.mjs 输出末尾 ——
+    code: 'ERR_ASSERTION',
+    actual: 'da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d',
+    expected: '08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+test at tests/regression/pt-asset-upload-bridge-candidate-test.mjs:266:1
+✖ 6. refusal at onAssetId retains both taskId and assetId without second POST (0.469583ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d'
+  - '08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351'
+
+      at setupPatchedEngine (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/pt-asset-upload-bridge-candidate-test.mjs:38:10)
+      at setupIntegrationBridge (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/pt-asset-upload-bridge-candidate-test.mjs:100:22)
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/pt-asset-upload-bridge-candidate-test.mjs:267:13)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d',
+    expected: '08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+—— pt-asset-upload-bridge-r2-candidate-test.mjs 输出末尾 ——
+    actual: 'da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d',
+    expected: '08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+test at tests/regression/pt-asset-upload-bridge-r2-candidate-test.mjs:420:1
+✖ 13. refusal at onTaskId retains taskId without GET (1.586458ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
+  + actual - expected
+
+  + 'da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d'
+  - '08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351'
+
+      at setupPatchedEngine (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/pt-asset-upload-bridge-r2-candidate-test.mjs:42:10)
+      at setupIntegrationBridge (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/pt-asset-upload-bridge-r2-candidate-test.mjs:105:22)
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/pt-asset-upload-bridge-r2-candidate-test.mjs:421:13)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: 'da3f863404e9bf877e315bf9ac0180c05b6d0365f5c1dcc7e268d15b2cd4476d',
+    expected: '08268f5f4e1da2782e3729498567054562d73b0c24ecab0970f861adc90f8351',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+—— t13-t14-profile-fail-closed-test.mjs 输出末尾 ——
+✖ run-persistent profile fails closed for skills and web until approved loader/network wiring exists (16.997ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 19.832542
+✖ failing tests:
+test at tests/regression/t13-t14-profile-fail-closed-test.mjs:13:1
+✖ run-persistent profile fails closed for skills and web until approved loader/network wiring exists (16.997ms)
+  AssertionError [ERR_ASSERTION]: tool-skill must stay explicitly disabled
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/t13-t14-profile-fail-closed-test.mjs:27:12)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: '- id: hmr\n  disabled: true\n\n- id: session-title-llm\n  disabled: true\n\n- id: user-questions\n  disabled: true\n\n- id: command-compact\n...',
+    expected: /- id: tool-skill\n  disabled: true/,
+    operator: 'match',
+    diff: 'simple'
+  }
+
+—— ui-run-resume-review-test.mjs 输出末尾 ——
+✔ terminal conversation detail network retries before forgetting durable run (0.38075ms)
+✔ terminal conversation detail 503 retries before forgetting durable run (0.341834ms)
+✔ an in-flight remembered run owns its conversation and blocks a second create POST (0.339583ms)
+✔ durable cursor consumes each delta once while replaying an unconsumed done after detail failure (0.456334ms)
+✔ production list refresh network after done cannot replay consumed deltas or rerender terminal detail (0.391333ms)
+✔ production list refresh 503 after done cannot replay consumed deltas or rerender terminal detail (0.318541ms)
+✖ A to B to A navigation ignores the first A response after the newer A history has rendered (0.417917ms)
+✔ terminal detail 401/403/404 clears remembered run without retrying or rendering unauthorized history (1.176208ms)
+✔ an older open-history response cannot overwrite the same conversation terminal replay result (0.545167ms)
+✔ an older open-history response cannot overwrite the same conversation terminal original SSE result (0.440459ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 24
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18.739959
+✖ failing tests:
+test at tests/regression/ui-run-resume-review-test.mjs:281:1
+✖ A to B to A navigation ignores the first A response after the newer A history has rendered (0.417917ms)
+  ReferenceError: renderSelectedSkill is not defined
+      at Object.openConversation (evalmachine.<anonymous>:5:98)
+      at TestContext.<anonymous> (file:///Users/mmdn/Downloads/pt%E9%A1%B9%E7%9B%AE/tests/regression/ui-run-resume-review-test.mjs:291:19)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:787:18)
+      at Test.postRun (node:internal/test_runner/test:1247:19)
+      at Test.run (node:internal/test_runner/test:1175:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+run-regression：共 260 个套件，通过 255，失败 5

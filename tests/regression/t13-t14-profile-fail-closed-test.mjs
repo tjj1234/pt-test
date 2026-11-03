@@ -10,7 +10,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..")
 const require = createRequire(path.join(root, "shell/package.json"));
 const { makeProfile } = require(path.join(root, "shell/runtime/dsh-adapter.cjs"));
 
-test("run-persistent profile fails closed for skills and web until approved loader/network wiring exists", (t) => {
+test("run-persistent profile admits only published pinned skills and keeps ambient filesystem and web disabled", (t) => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), "northstar-t13-t14-profile-"));
   t.after(() => fs.rmSync(tempRoot, { recursive: true, force: true }));
 
@@ -23,9 +23,11 @@ test("run-persistent profile fails closed for skills and web until approved load
   const manifest = JSON.parse(fs.readFileSync(path.join(profileDir, "northstar-profile-manifest.json"), "utf8"));
   const lock = JSON.parse(fs.readFileSync(path.join(root, "shell/package-lock.json"), "utf8"));
 
-  for (const toolId of ["tool-skill", "tool-web"]) {
+  for (const toolId of ["skill-filesystem", "tool-web"]) {
     assert.match(patch, new RegExp(`- id: ${toolId}\\n  disabled: true`), `${toolId} must stay explicitly disabled`);
   }
+  assert.doesNotMatch(patch, /- id: tool-skill\n  disabled: true/);
+  for(const name of ["published-skill-provider.mjs","skill-release-snapshot.cjs","run-budget-skill.json"])assert.equal(Object.hasOwn(manifest.files,name),true);
   assert.deepEqual(profilePackage.dsh.profile.bundles, ["@deepseek-ai/dsh-base"]);
   assert.deepEqual(Object.keys(profilePackage.dependencies), ["@deepseek-ai/dsh-base"]);
   assert.equal(lock.packages["node_modules/@deepseek-ai/dsh-base"].version, "0.1.1-rc.2");

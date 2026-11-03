@@ -14,7 +14,7 @@ export function installPublishedSkillProvider(ctx,{getActiveTurn,readRelease}){
   if(!result){
    const dir=fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(),'northstar-skill-pin-')));fs.chmodSync(dir,0o700);
    try{for(const file of data.files){const target=path.join(dir,file.path);fs.mkdirSync(path.dirname(target),{recursive:true,mode:0o700});fs.writeFileSync(target,file.content,{flag:'wx',mode:0o400});}
-   const controller=new AbortController();result={dir,controller,provider:new FileSystemSkillProvider(ctx,{signal:controller.signal,invalidate:()=>{}},{includeDefaultRoots:false,customSkillDirs:[dir],watch:false,providerName:'northstar-published'})};active.skillEntries.set(id,result);}catch(error){fs.rmSync(dir,{recursive:true,force:true});throw error;}
+   const controller=new AbortController();result={dir,controller,provider:new FileSystemSkillProvider(ctx,{signal:controller.signal,invalidate:()=>{}},{includeDefaultRoots:false,customSkillDirs:[],bundledSkillDir:dir,watch:false,providerName:'northstar-published'})};active.skillEntries.set(id,result);}catch(error){fs.rmSync(dir,{recursive:true,force:true});throw error;}
   }
   const current=[];for(const file of data.files){const target=path.join(result.dir,file.path),stat=fs.lstatSync(target);if(stat.isSymbolicLink()||!stat.isFile()||fs.realpathSync(target)!==target)throw fail();current.push({path:file.path,content:fs.readFileSync(target)});}
   if(createSkillReleaseSnapshot({skillId:pin.skillId,version:pin.version,files:current}).contentHash!==pin.contentHash)throw fail();

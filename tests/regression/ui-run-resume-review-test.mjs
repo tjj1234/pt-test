@@ -20,7 +20,7 @@ function harness(handler, seededStorage = new Map(), { failStorageWrites = false
     sessionStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => { if (failStorageWrites) throw new Error('sessionStorage unavailable'); storage.set(key, String(value)); } },
     window: { crypto: { randomUUID: () => 'unique-request' } }, crypto: { randomUUID: () => 'unique-request' }, location: { search: '' },
     TextDecoder, URLSearchParams, Date, console, modelSelect: null,
-    clearSourceCitations() {},
+    clearSourceCitations() {}, renderSelectedSkill() {},
     currentModelChat: () => true, thinking: element, formatElapsed: () => '',
     setInterval: () => 1, clearInterval() {}, setTimeout: fn => { queueMicrotask(fn); },
     streamInto: (element, text) => rendered.push({ kind: 'stream', text }),

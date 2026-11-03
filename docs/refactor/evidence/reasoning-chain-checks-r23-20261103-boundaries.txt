@@ -1,0 +1,36 @@
+✔ durable attachment snapshots bind tenant-local regular file bytes and fail closed (50.638625ms)
+✔ confirmed CSV selection is canonical and bound to captured attachment bytes (85.957709ms)
+✔ conversation model preference persists, isolates users, and snapshots atomically (3960.384334ms)
+✔ adapter preserves safe runner control errors and observes uncorrelated errors (393.93075ms)
+✔ metadata RPC is isolated, bounded, cancellable and never enters paid heartbeat targets (718.064916ms)
+  ✅ task commands carry the negotiated RPC protocol version
+  ✅ request callbacks retain matching sessionId/requestId and return on matching frame
+  ✅ duplicate/cross-session request is ignored while original request is pending
+  ✅ failed callback is reduced to safe error fields
+  ✅ abort signals pending handler and suppresses its late response
+  ✅ timeout aborts pending handler and suppresses its late response
+  ✅ media_route forwards original args through the fixed media.route host handler
+  ✅ incompatible ready frame fails visibly before task/tool side effects
+  ✅ a runner missing durable model intent capability cannot receive a ledger-required task
+  ✅ profile manifest records protocol and module hashes without paths or credentials
+  ✅ invalid protocol manifest blocks silent reuse
+
+结果：11 通过 / 0 失败
+✔ tests/regression/dsh-parent-rpc-test.mjs (12087.5005ms)
+✔ same-session A to B records provider-reported identity only where DSH replay contains it (500.477417ms)
+✔ native DSH web_search honors explicit Run admission and warm policy revocation (404.640417ms)
+✔ native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch (334.93525ms)
+✔ durable reasoning selection remains bound across preference edits and canonical replay (4.401125ms)
+✔ storage defaults to the same complete migration source as product auth (0.674459ms)
+✔ migration 020 preserves old totals and classifies prior rows without recomputing (4035.241375ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-aH6DQR/master.key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (1607.137625ms)
+ℹ tests 13
+ℹ suites 0
+ℹ pass 13
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12097.366666

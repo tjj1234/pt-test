@@ -11,7 +11,7 @@ test('published provider uses native registry and filesystem parser with exact R
   for(const [name,bytes] of Object.entries(profileFiles(path.resolve('shell/persistent-runner.mjs'))))if(/\.(mjs|cjs)$/.test(name))fs.writeFileSync(path.join(dir,name),bytes);
   fs.symlinkSync(path.resolve('shell/node_modules'),path.join(dir,'node_modules'),'dir');
   const [{Context},{default:Skills},{installPublishedSkillProvider}]=await Promise.all([import(pathToFileURL(require.resolve('@deepseek-ai/cordis'))),import(pathToFileURL(require.resolve('@deepseek-ai/dsh-skill'))),import(pathToFileURL(path.join(dir,'published-skill-provider.mjs')))]);
-  ctx=new Context();await ctx.plugin(Skills);
+  ctx=new Context();await ctx.plugin(Skills);ctx.provide("fs",{resolve:async()=>{throw Error("MODEL_FILESYSTEM_DENIED");}});
   const files=[{path:'SKILL.md',content:'---\nname: review-fixture\ndescription: Review owned fixture\n---\nPinned version one.'},{path:'references/rules.md',content:'Supporting version one.'}];
   const snapshot=createSkillReleaseSnapshot({skillId:'review-fixture',version:'1',files});
   const pin={releaseId:'11111111-1111-4111-8111-111111111111',skillId:'review-fixture',version:'1',contentHash:snapshot.contentHash};
