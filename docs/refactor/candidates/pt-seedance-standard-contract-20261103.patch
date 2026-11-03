@@ -1,0 +1,36 @@
+diff --git a/shell/media/vendor/powertokens_video/pt_video.py b/shell/media/vendor/powertokens_video/pt_video.py
+index d099aac..71add7b 100644
+--- a/shell/media/vendor/powertokens_video/pt_video.py
++++ b/shell/media/vendor/powertokens_video/pt_video.py
+@@ -766,10 +766,11 @@ def build_video_payload(model, duration, resolution, ratio, prompt=None,
+     Ensures strict string conversion for seconds, size, ratio.
+     """
+     if is_seedance:
+-        text_part = {"type": "text", "text": prompt or ""}
+-        body_media = [text_part] + (list(media) if media else [])
++        # PT standard /v1/videos is not passthrough: prompt is top-level.
++        body_media = list(media) if media else []
+         body = {
+             "model": str(model),
++            "prompt": str(prompt or ""),
+             "media": body_media,
+             "size": str(resolution).upper(),
+             "ratio": str(ratio),
+diff --git a/shell/media/vendor/powertokens_video/pt_video_product.py b/shell/media/vendor/powertokens_video/pt_video_product.py
+index 41901db..4b1684a 100644
+--- a/shell/media/vendor/powertokens_video/pt_video_product.py
++++ b/shell/media/vendor/powertokens_video/pt_video_product.py
+@@ -766,10 +766,11 @@ def build_video_payload(model, duration, resolution, ratio, prompt=None,
+     Ensures strict string conversion for seconds, size, ratio.
+     """
+     if is_seedance:
+-        text_part = {"type": "text", "text": prompt or ""}
+-        body_media = [text_part] + (list(media) if media else [])
++        # PT standard /v1/videos is not passthrough: prompt is top-level.
++        body_media = list(media) if media else []
+         body = {
+             "model": str(model),
++            "prompt": str(prompt or ""),
+             "media": body_media,
+             "size": str(resolution).upper(),
+             "ratio": str(ratio),

@@ -572,7 +572,7 @@ class TestSharedPayloadAndTransportInspection(unittest.TestCase):
         self.assertEqual(body["seed"], 42)
         self.assertEqual(body["prompt"], "cat dances")
 
-    def test_seedance_payload_has_media_text(self):
+    def test_seedance_standard_payload_has_top_level_prompt(self):
         captured_requests = []
 
         def _transport(method, path, key, body=None, timeout=30):
@@ -593,9 +593,10 @@ class TestSharedPayloadAndTransportInspection(unittest.TestCase):
         )
         self.assertTrue(res.ok)
         body = captured_requests[0][2]
-        self.assertNotIn("prompt", body)
-        self.assertEqual(body["media"][0], {"type": "text", "text": "cat walks"})
-        self.assertEqual(body["media"][1], {"type": "first_frame", "url": "asset://asset-12345"})
+        self.assertEqual(body["prompt"], "cat walks")
+        self.assertEqual(body["seconds"], "5")
+        self.assertFalse(any(item.get("type") == "text" for item in body["media"]))
+        self.assertEqual(body["media"][0], {"type": "first_frame", "url": "asset://asset-12345"})
 
     def test_post_network_error_treated_as_submission_unknown(self):
         """Network drop on POST must yield SUBMISSION_OUTCOME_UNKNOWN, 1 POST, no retry."""

@@ -11,7 +11,7 @@ class Contracts(unittest.TestCase):
   for engine in self.engines():
    for duration in (2,5,30):
     body=engine.build_video_payload('seedance-fixture',duration,'720p','16:9',prompt='fixture',is_seedance=True)
-    self.assertEqual(body['seconds'],str(duration));self.assertIsInstance(body['seconds'],str)
+    self.assertEqual(body['prompt'],'fixture');self.assertFalse(any(item.get('type')=='text' for item in body['media']));self.assertEqual(body['seconds'],str(duration));self.assertIsInstance(body['seconds'],str)
  def test_status_has_priority_over_conflicting_body(self):
   for engine in self.engines():
    for status,code in ((401,'KEY_INVALID'),(402,'QUOTA_INSUFFICIENT')):

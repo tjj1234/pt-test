@@ -766,10 +766,11 @@ def build_video_payload(model, duration, resolution, ratio, prompt=None,
     Ensures strict string conversion for seconds, size, ratio.
     """
     if is_seedance:
-        text_part = {"type": "text", "text": prompt or ""}
-        body_media = [text_part] + (list(media) if media else [])
+        # PT standard /v1/videos is not passthrough: prompt is top-level.
+        body_media = list(media) if media else []
         body = {
             "model": str(model),
+            "prompt": str(prompt or ""),
             "media": body_media,
             "size": str(resolution).upper(),
             "ratio": str(ratio),
