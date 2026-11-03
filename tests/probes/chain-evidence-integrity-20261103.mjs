@@ -1,0 +1,4 @@
+import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {spawnSync} from 'node:child_process';
+const source='docs/refactor/evidence/context-chain-checks-r24-final-20261103.json',verify=p=>spawnSync(process.execPath,['scripts/northstar-chain-checks.mjs','--verify-report',p],{encoding:'utf8'});
+assert.equal(verify(source).status,0);const dir=fs.mkdtempSync(path.join(os.tmpdir(),'chain-evidence-'));
+try{const report=JSON.parse(fs.readFileSync(source));report.checks[0].logSha256='0'.repeat(64);const forged=path.join(dir,'forged.json');fs.writeFileSync(forged,JSON.stringify(report));const result=verify(forged);assert.notEqual(result.status,0);assert.match(result.stderr,/source\/log binding drifted/);console.log('LOG_HASH_NEGATIVE_PASS');}finally{fs.rmSync(dir,{recursive:true,force:true});}

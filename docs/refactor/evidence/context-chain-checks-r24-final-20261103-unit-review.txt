@@ -1,0 +1,57 @@
+✔ metadata RPC is isolated, bounded, cancellable and never enters paid heartbeat targets (703.943875ms)
+✔ Context Gate R4 - Review Blockers 1 & 2: Chat bound to authoritative active Run and client runId override rejected (22.210042ms)
+✔ Context Gate R4 - Review Blockers 3, 4 & 5: Required intent recorder, cancellation during await, and cancellation before consume (48.9465ms)
+✔ Context Gate R4 - Secure Ticket Manager: Crypto random IDs, capacity limits, and TTL pruning (122.58575ms)
+✔ Context Gate R4 - Barrier-controlled overlapping concurrent sessions isolation (0.78475ms)
+✔ same persistent session keeps zero-tool Run closed and accepts a later explicitly budgeted media Run (564.762958ms)
+✔ native DSH web_search honors explicit Run admission and warm policy revocation (693.194208ms)
+✔ real DSH SDK and persistent-runner isolate sessions across parent RPC and hot model changes (496.748917ms)
+✔ profile dependency contract pins bundles and retains release provenance (12.453917ms)
+✔ any shell lockfile byte change changes managed release input (0.126541ms)
+✔ missing, ranged, linked, dev-only, optional and unverified bundle entries fail closed (0.422125ms)
+✔ invalid lockfile formats and bundle selectors fail closed (2.0265ms)
+✔ repository shell lockfile declares the production base bundle (6.238667ms)
+✔ npm installation policy bytes bind the release and cannot be omitted (0.133875ms)
+✔ malformed exact versions and corrupt SRI digests fail closed (0.236ms)
+✔ ensure creates verified profile, reuses it and preserves unknown files (23.2705ms)
+✔ rebuild preserves unknown files with self-validating old profile (8.336375ms)
+✔ rebuild refuses damaged or unmanaged profile (12.680083ms)
+✔ existing lock fails closed and is retained (2.15125ms)
+✔ interrupted journal blocks startup; explicit recovery restores backup and preserves current files (7.378541ms)
+✔ recovery rejects traversal journal (10.577625ms)
+✔ publish failure rolls back old profile and retains staged evidence (6.997333ms)
+✔ manifest traversal cannot write outside staging (2.9485ms)
+✔ pre-switch crash permits explicit keep-current and retains staged evidence (13.674958ms)
+✔ writable managed profile entries fail closed (15.288541ms)
+✔ failed rollback retains journal and fails with recovery required (19.706291ms)
+✔ native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch (439.02975ms)
+✔ run budget usage event preserves all configured caps including zero-valued caps (0.726333ms)
+✔ run budget usage event ignores malformed limits and keeps cost status without amounts (0.074917ms)
+✔ run budget usage event keeps missing, negative, fractional, and overflow counters unknown (0.063416ms)
+✔ storage defaults to the same complete migration source as product auth (0.705667ms)
+✔ migration 020 preserves old totals and classifies prior rows without recomputing (8620.1395ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-O9VjZL/master.key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (3881.899458ms)
+✔ DSH SDK-shaped terminal usage preserves omitted-cache, cache, and response boundaries (2.783542ms)
+✔ DSH usage chunks dedupe against committed messages and preserve failed retry attempts (1.029334ms)
+✔ locked pi-ai all-zero placeholder on a successful message is unknown (0.132167ms)
+✔ locked pi-ai all-zero placeholder on a failed usage chunk is unknown (0.080792ms)
+✔ unreferenced DSH usage chunk is an unknown response when usage payload is absent (0.131792ms)
+✔ same-step usage chunk without a message citation cannot be double counted (7.384333ms)
+✔ conflicting cited chunk and message usage cannot establish a trusted total (0.289833ms)
+✔ two messages citing one usage chunk cannot establish two trusted responses (0.233416ms)
+✔ future usage citation cannot establish a trusted total (0.21975ms)
+✔ uncited same-step chunk after a cited chunk cannot be treated as a proven retry (0.13775ms)
+✔ conflicting replay of one event sequence cannot establish trusted usage (0.069833ms)
+✔ usage citation across steps cannot establish trusted usage (1.398584ms)
+✔ cache unknown stays unknown and only a proven total reaches usage persistence (8913.852583ms)
+✔ DSH SDK-shaped assistant/message with missing usage remains unknown (0.280541ms)
+ℹ tests 47
+ℹ suites 0
+ℹ pass 47
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 12865.953917

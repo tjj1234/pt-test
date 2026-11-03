@@ -9,7 +9,7 @@ const digest=file=>crypto.createHash('sha256').update(fs.readFileSync(path.join(
 const args=process.argv.slice(2), option=name=>args.includes(name)?args[args.indexOf(name)+1]:null;
 if(option('--verify-report')){
  const report=JSON.parse(fs.readFileSync(option('--verify-report'),'utf8'));
- if(report.status!=='MECHANICAL_PASS'||!report.checks.length||report.checks.some(check=>check.exitCode!==0)||Object.entries(report.sources).some(([file,sha])=>digest(file)!==sha))throw Error('Chain evidence failed or source binding drifted');
+ if(report.status!=='MECHANICAL_PASS'||!Array.isArray(report.checks)||!report.checks.length||report.checks.some(check=>{if(check.exitCode!==0||check.timedOut||typeof check.log!=='string'||! /^[a-f0-9]{64}$/.test(check.logSha256||''))return true;const full=path.resolve(root,check.log),relative=path.relative(root,full);if(relative.startsWith('..'+path.sep)||path.isAbsolute(relative)||fs.lstatSync(full).isSymbolicLink()||fs.realpathSync(full)!==full)return true;return digest(check.log)!==check.logSha256;})||Object.entries(report.sources).some(([file,sha])=>digest(file)!==sha))throw Error('Chain evidence failed or source/log binding drifted');
  console.log(JSON.stringify({status:'SOURCE_BOUND_EVIDENCE_VERIFIED',chain:report.chain,checks:report.checks.length,files:Object.keys(report.sources).length}));
 }else{
  const chain=option('--chain');
