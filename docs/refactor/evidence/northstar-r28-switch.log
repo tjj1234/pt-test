@@ -1,0 +1,17 @@
+{"status":"TRANSITION_COMPLETE","oldSettingsHash":"3cb40b5978d2eb234a43577196af859315e310c956647d11fdcad52b8206557e","oldProfileManifestHash":"08e5a633b227427522aa802cff5cb8b61a1b859e687eb4358d141dd9c7e135af","newTemplateHash":"5df264dce03602cc49b201f19e80ccf6b72e8d6d67ea29740240a79bd46fdce9","providerCalls":0,"transaction":".northstar-settings-upgrade-878ba53f49e8b52bc910f6f9f67de498","profileBackup":"/var/lib/northstar/runtime/dsh-home/profiles/.run-persistent.northstar-backup-d18eebc74563f7428fe997f93f2b7f7e"}
+curl: (7) Failed to connect to 127.0.0.1 port 8098 after 0 ms: Could not connect to server
+ActiveState=active
+SubState=running
+MainPID=302282
+WorkingDirectory=/opt/northstar/releases/controlled-trial-20261103-candidate-34-r28-draft/shell
+{"ok":true,"status":"ok","version":"1.0.0","pid":302282,"uptimeSec":1,"ts":"2026-11-03T07:10:49.273Z"} migrations 
+------------
+         29
+(1 row)
+
+ runs_retained 
+---------------
+           171
+(1 row)
+
+R28_TARGET_SWITCH_HEALTH_PASS

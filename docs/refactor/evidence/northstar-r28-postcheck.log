@@ -1,0 +1,14 @@
+{"status": "TARGET_SOURCE_BINDING_PASS", "sources": 217}
+ActiveState=active
+SubState=running
+MainPID=302282
+NRestarts=0
+WorkingDirectory=/opt/northstar/releases/controlled-trial-20261103-candidate-34-r28-draft/shell
+{"ok":true,"status":"ok","version":"1.0.0","pid":302282,"uptimeSec":261,"ts":"2026-11-03T07:15:09.884Z"}
+{"ok":true,"configured":true}
+UNAUTHENTICATED /api/models 401
+UNAUTHENTICATED /api/skills 401
+UNAUTHENTICATED /api/memory 401
+UNAUTHENTICATED /api/sources 401
+{"settingsStatus":"current","settingsHash":"5df264dce03602cc49b201f19e80ccf6b72e8d6d67ea29740240a79bd46fdce9","templateHash":"5df264dce03602cc49b201f19e80ccf6b72e8d6d67ea29740240a79bd46fdce9","baselineHash":"8c33f734f8526cddb091b998aa421c76eed761c2fa00d3c82a9c113f8ac09947","mediaMode":"standard3","mediaConsent":"1","profileManifestHash":"f2abe3c5074c6319758cab1ce7ebb4c5f42e630b6a9539d78ac1d8eb6ab5fda1","providerCalls":0}
+R28_TARGET_POSTCHECK_PASS

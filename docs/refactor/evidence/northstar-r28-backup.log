@@ -1,0 +1,16 @@
+{"status":"READY_FOR_REVIEW","oldSettingsHash":"3cb40b5978d2eb234a43577196af859315e310c956647d11fdcad52b8206557e","oldProfileManifestHash":"08e5a633b227427522aa802cff5cb8b61a1b859e687eb4358d141dd9c7e135af","newTemplateHash":"5df264dce03602cc49b201f19e80ccf6b72e8d6d67ea29740240a79bd46fdce9","providerCalls":0}
+REVOKE
+ restored_migrations 
+---------------------
+                  24
+(1 row)
+
+ restored_runs 
+---------------
+           171
+(1 row)
+
+/var/backups/northstar/r28-20261103T070700Z/database.dump: OK
+/var/backups/northstar/r28-20261103T070700Z/runtime-db-secrets-env.tar.gz: OK
+/var/backups/northstar/r28-20261103T070700Z/northstar-shell.service: OK
+R28_BACKUP_RESTORE_PASS backup=/var/backups/northstar/r28-20261103T070700Z verify=northstar_r28_verify_20261103070701
