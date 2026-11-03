@@ -176,15 +176,20 @@ const PROFILE_SOURCE_FILES = Object.freeze({
   "budget.cjs": (runner) => path.resolve(path.dirname(runner), "tasks", "budget.cjs"),
   "usage.cjs": (runner) => path.resolve(path.dirname(runner), "runtime", "usage.cjs"),
   "dsh-native-context-r4-candidate.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "dsh-native-context-r4-candidate.mjs"),
+  "published-skill-provider.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "published-skill-provider.mjs"),
+  "skill-release-snapshot.cjs": (runner) => path.resolve(path.dirname(runner), "skills", "release-snapshot.cjs"),
   "native-image-message.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "native-image-message.mjs"),
   "run-budget.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget.json"),
+  "run-budget-skill.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-skill.json"),
+  "run-budget-skill-csv.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-skill-csv.json"),
+  "run-budget-skill-media.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-skill-media.json"),
   "run-budget-csv.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-csv.json"),
   "run-budget-media.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-media.json"),
 });
 const PROFILE_PATCH = [
   "- id: hmr",
   "  disabled: true",
-  ...["session-title-llm", "user-questions", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "tool-skill", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
+  ...["session-title-llm", "user-questions", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "skill-filesystem", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
   "",
   "- id: compaction-basic",
   "  config:",
@@ -343,6 +348,8 @@ function createDshRuntime(opts = {}) {
   const warmSessions = new Map();        // sessionKey -> { tenantId, sessionId }
 
   function writeJson(proc, obj) {
+    if(obj.type==='task'&&obj.pinnedSkills?.skills?.length&&!proc.capabilities?.includes('skill-pins-v1')){failRunnerProcess(proc,'DSH_SKILL_PINS_UNSUPPORTED','DSH runner does not support pinned published skills');return;}
+
     if(obj.type==='task'&&(obj.resume===true||obj.compact===true)&&!proc.capabilities?.includes('native-context-v1')){failRunnerProcess(proc,'DSH_CONTEXT_UNSUPPORTED','DSH runner does not support native context restoration or maintenance');return;}
 
     if (obj.type === "task" && obj.reasoningEffort !== undefined && !proc.capabilities?.includes("reasoning-selection-v1")) {
@@ -963,11 +970,11 @@ function createDshRuntime(opts = {}) {
         },
       };
       proc.waiters.set(sessionId, waiter);
-      const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, ...(spec.runId?{runId:spec.runId}:{}), ...(resume?{resume:true}:{}), ...(spec.compact?{compact:true}:{}), task: fullTask, model: spec.model, ...(spec.reasoningEffort === undefined ? {} : {reasoningEffort:spec.reasoningEffort}), tenantId,
+      const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, ...(spec.pinnedSkills?{pinnedSkills:spec.pinnedSkills}:{}), ...(spec.runId?{runId:spec.runId}:{}), ...(resume?{resume:true}:{}), ...(spec.compact?{compact:true}:{}), task: fullTask, model: spec.model, ...(spec.reasoningEffort === undefined ? {} : {reasoningEffort:spec.reasoningEffort}), tenantId,
         ...((spec.inputImages !== undefined || (!warm && spec.historyInputImages?.length))
           ? {inputImages:[...(!warm?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
         ...(spec.recordModelIntents === true ? { recordModelIntents: true } : {}),
-        ...(spec.budgetProfile === "csv" || /^media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) { waiter.taskDispatched = true; writeJson(proc, taskFrame); }
       else proc.pendingTasks.set(sessionId, taskFrame);
 
@@ -1033,7 +1040,7 @@ function createDshRuntime(opts = {}) {
       };
       proc.waiters.set(sessionId, waiter);
       const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, task, model: spec.model, tenantId,
-        ...(spec.budgetProfile === "csv" || /^media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) writeJson(proc, taskFrame);
       else proc.pendingTasks.set(sessionId, taskFrame);
       setTimeout(() => {
@@ -1102,6 +1109,7 @@ function createDshRuntime(opts = {}) {
 }
 
 module.exports = {
+  profileFiles,
   toolWroteFile,
   pathFromToolArgs,
   artifactRelFromToolPath,

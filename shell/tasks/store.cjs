@@ -519,7 +519,7 @@ function createTaskStore(db, opts = {}) {
     const candidateScanBudget = Math.min(100, Math.max(limit, limit * 4));
     return db.transaction(async (tx) => {
       const candidates = await tx.query(
-        "SELECT * FROM agent_runs r WHERE r.state='queued' AND r.request->>'kind'='northstar.chat' AND r.request->>'schemaVersion' IN ('1','2','3') AND r.external_operation_key IS NULL AND r.external_task_id IS NULL AND r.reconciliation='not_required' AND (r.lease_owner IS NULL OR r.lease_expires_at IS NULL OR r.lease_expires_at<=clock_timestamp()) AND NOT EXISTS (SELECT 1 FROM run_external_operations eo WHERE eo.run_id=r.run_id) ORDER BY r.created_at,r.run_id LIMIT $1 FOR UPDATE OF r SKIP LOCKED",
+        "SELECT * FROM agent_runs r WHERE r.state='queued' AND r.request->>'kind'='northstar.chat' AND r.request->>'schemaVersion' IN ('1','2','3','4') AND r.external_operation_key IS NULL AND r.external_task_id IS NULL AND r.reconciliation='not_required' AND (r.lease_owner IS NULL OR r.lease_expires_at IS NULL OR r.lease_expires_at<=clock_timestamp()) AND NOT EXISTS (SELECT 1 FROM run_external_operations eo WHERE eo.run_id=r.run_id) ORDER BY r.created_at,r.run_id LIMIT $1 FOR UPDATE OF r SKIP LOCKED",
         [candidateScanBudget],
       );
       const claimed = [];

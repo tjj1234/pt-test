@@ -238,6 +238,7 @@ async function runDshForUser(userId, question, opts = {}) {
     model: opts.model,
     reasoningEffort: opts.reasoningEffort,
     budgetProfile: opts.budgetProfile,
+    pinnedSkills:opts.pinnedSkills,
     runId:opts.runId,
     compact:opts.compact===true,
     nativeSession:opts.nativeSession,

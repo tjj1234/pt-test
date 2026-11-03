@@ -80,6 +80,7 @@ const { csvAnalyzeToolDefinition } = require("./tasks/csv-tool-definition.cjs");
 const { createTaskStore } = require("./tasks/store.cjs");
 const { createLeaseRecoverySweep } = require("./tasks/lease-recovery-sweep.cjs");
 const { createRunExecutionService } = require("./tasks/execution.cjs");
+const {createSkillPublicationStore}=require('./skills/publication-store.cjs');
 const {createMemoryProvenanceStore}=require('./memory/provenance-store.cjs');
 const {createSourceStore}=require("./attachments/source-store.cjs");
 const { cancelActiveRunsForMemoryChange } = require("./tasks/memory-run-invalidation.cjs");
@@ -88,7 +89,7 @@ const { normalizeModelIdentity } = require("./runtime/usage.cjs");
 const { createTextPriceCatalogStore } = require("./usage/price-catalog-store.cjs");
 const { RPC_NAME: MODEL_INTENT_RPC, createModelIntentHandler } = require("./usage/model-intent-handler.cjs");
 const { createQueuedRunDispatcher } = require("./tasks/queued-run-dispatcher.cjs");
-const { normalizeChatRequest, bindChatModelSelection, validateStoredChatRequest, captureDurableChatAttachments, readVerifiedChatAttachmentBytes, verifyDurableChatAttachments } = require("./tasks/chat-request.cjs");
+const { normalizeChatRequest, bindChatModelSelection, bindChatSkillPins, validateStoredChatRequest, captureDurableChatAttachments, readVerifiedChatAttachmentBytes, verifyDurableChatAttachments } = require("./tasks/chat-request.cjs");
 const { createProviderReconciliationWorker } = require("./tasks/provider-reconciliation-worker.cjs");
 const { createExternalOperationsWorker } = require("./tasks/external-operations-worker.cjs");
 const { createPowerTokensQueryAdapters, DEFAULT_PROVIDER_MAPPINGS } = require("./tasks/provider-adapters.cjs");
@@ -368,6 +369,7 @@ let keys = null;                 // key 加密句柄
 let conversations = null;        // 对话窗口化落库句柄
 let sources = null;
 let memoryProvenance = null;
+let publishedSkills = null;
 let memory = null;               // 用户长期记忆 / 所选模型
 let panelShares = null;          // 面板分享落库句柄
 let toolCalls = null;            // 工具调用日志落库句柄（M1）
@@ -675,7 +677,17 @@ async function handleChat(req, res, me, body, taskRun = null) {
 
   if(conv.memory_revocation_pending)return rejectChat(409,{ok:false,code:'MEMORY_CONTEXT_INVALIDATION_FAILED',error:'记忆上下文清理未完成，请重试保存或删除后继续。'});
   if(conv.source_revocation_pending)return rejectChat(409,{ok:false,code:'SOURCE_REVOCATION_PENDING',error:'资料删除正在清理上下文，请完成删除后重试。'});
-  const sourceContextStart=conv.source_context_start || 0;
+  const skillState=(await auth.db.query('SELECT skill_context_hash,skill_revocation_pending FROM conversations WHERE id=$1 AND user_id=$2',[conversationId,uid])).rows[0];
+  if(skillState?.skill_revocation_pending)return rejectChat(409,{ok:false,code:'SKILL_CLEANUP_PENDING',error:'技能停用后的上下文清理尚未完成，请重试停用后继续。'});
+  const pinnedSkills=taskRun?.pinnedSkills||await publishedSkills.pin({userId:uid,tenantId:me.tenant.id},[]);
+  try{for(const pin of pinnedSkills.skills)await publishedSkills.readPinned({userId:uid,tenantId:me.tenant.id},pinnedSkills,pin.releaseId);}catch{return rejectChat(409,{ok:false,code:'SKILL_NOT_AVAILABLE',error:'所选技能版本已禁用或无法验证，请重新选择。'});}
+  let sourceContextStart=conv.source_context_start || 0;
+  if(skillState?.skill_context_hash!==pinnedSkills.pinHash){
+    if(skillState?.skill_context_hash||pinnedSkills.skills.length){
+      const changed=(await auth.db.query('UPDATE conversations SET source_context_start=jsonb_array_length(messages),native_session_id=NULL,native_session_key_sha256=NULL,skill_context_hash=$1 WHERE id=$2 AND user_id=$3 AND source_revocation_pending=FALSE AND memory_revocation_pending=FALSE AND skill_revocation_pending=FALSE RETURNING source_context_start',[pinnedSkills.pinHash,conversationId,uid])).rows[0];
+      if(!changed)return rejectChat(409,{ok:false,code:'SKILL_CLEANUP_PENDING',error:'上下文正在更新，请稍后重试。'});sourceContextStart=changed.source_context_start;tenantMod.closeDshSession(conversationId);
+    }else await auth.db.query('UPDATE conversations SET skill_context_hash=$1 WHERE id=$2 AND user_id=$3',[pinnedSkills.pinHash,conversationId,uid]);
+  }
   let messages = Array.isArray(conv.messages) ? conv.messages : [];
   let question = msgRaw;
 
@@ -784,6 +796,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     }
     if (csvSelections.length) um.csvSelections = csvSelections;
     if(body.sourceCitations?.length)um.sourceCitations=body.sourceCitations;
+    if(pinnedSkills.skills.length)um.skillPins=pinnedSkills.skills;
     if (mediaAttachments.length) um.media = mediaAttachments;
     if (taskType) um.taskType = taskType;
     messages = messages.concat([um]);
@@ -1087,15 +1100,20 @@ async function handleChat(req, res, me, body, taskRun = null) {
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
     reasoningEffort: taskRun?.modelSelection?.reasoningEffort,
-    budgetProfile: controlledMediaGrant ? `media:${controlledMediaGrant.taskType}`
-      : taskRun && Array.isArray(lastUser?.csvSelections) && lastUser.csvSelections.length === 1 ? "csv" : undefined,
+    budgetProfile: controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
+      : taskRun && Array.isArray(lastUser?.csvSelections) && lastUser.csvSelections.length === 1 ? (pinnedSkills.skills.length?"skill-csv":"csv") : pinnedSkills.skills.length?"skill":undefined,
+    pinnedSkills,
     runId:taskRun?.runId,
     compact:question==='/compact',
     nativeSession:!hasBranch&&!regenerate?await (async()=>{const row=(await auth.db.query('SELECT native_session_id,native_session_key_sha256 FROM conversations WHERE id=$1 AND user_id=$2',[conversationId,uid])).rows[0];return row?.native_session_id?{sessionId:row.native_session_id,keySha256:row.native_session_key_sha256}:null;})():null,
     recordModelIntents: Boolean(modelIntentHandler),
     timeoutMs: taskTimeoutMs,
     onToolRequest: request => request.name === MODEL_INTENT_RPC && modelIntentHandler
-      ? modelIntentHandler.handle(request) : hostToolHandler.handle(request),
+      ? modelIntentHandler.handle(request) : request.name==='northstar.skill_snapshot'?publishedSkills.readPinned({userId:uid,tenantId:me.tenant.id},pinnedSkills,request.args?.releaseId):request.name==='northstar.skill_resource'?(async()=>{
+        const args=request.args;if(!args||Object.keys(args).some(key=>!['releaseId','paths'].includes(key))||!Array.isArray(args.paths)||!args.paths.length||args.paths.length>16||new Set(args.paths).size!==args.paths.length)throw Object.assign(Error('Invalid skill resource'),{code:'SKILL_RESOURCE_INVALID'});
+        const release=await publishedSkills.readPinned({userId:uid,tenantId:me.tenant.id},pinnedSkills,args.releaseId);
+        const files=args.paths.map(name=>{const file=release.files.find(file=>file.path===name);if(!file)throw Object.assign(Error('Unknown pinned resource'),{code:'SKILL_RESOURCE_INVALID'});return file;});return {skillId:release.skillId,version:release.version,contentHash:release.contentHash,files};
+      })():hostToolHandler.handle(request),
     onSpawn: (job) => {
       if (taskRun && taskRun.signal) {
         if (taskRun.signal.aborted) { if (typeof job.abort === "function") job.abort(); else job.kill(); }
@@ -1311,11 +1329,12 @@ async function handleChat(req, res, me, body, taskRun = null) {
   ]).values()];
   const saved = messages.concat([{ role: "assistant", text: reply || (r.ok ? "（DSH 没有输出）" : ""), ts: new Date().toISOString(), steps,
     ...(r.context?{context:r.context}:{}),
+    ...(pinnedSkills.skills.length?{skillPins:pinnedSkills.skills}:{}),
     modelSelection: {requestedModelId, resolvedModelId:selectedModel, reasoningEffort:reasoningEffort ?? null},
     ...(taskRun?.runId ? { runId: taskRun.runId } : {}), ...(media ? { media } : {}), ...(report ? { report } : {}), ...(artifacts.length ? { artifacts } : {}) }]);
   await persistConversationMessages(saved);
   if(r.ok&&typeof r.nativeSessionId==='string'&&/^[A-Za-z0-9_-]{1,160}$/.test(r.nativeSessionId)&&/^[a-f0-9]{64}$/.test(r.keySha256||'')){
-    await auth.db.query('UPDATE conversations SET native_session_id=$1,native_session_key_sha256=$2 WHERE id=$3 AND user_id=$4 AND source_context_start=$5 AND source_revocation_pending=FALSE AND memory_revocation_pending=FALSE',[r.nativeSessionId,r.keySha256,conversationId,uid,sourceContextStart]);
+    await auth.db.query('UPDATE conversations SET native_session_id=$1,native_session_key_sha256=$2 WHERE id=$3 AND user_id=$4 AND source_context_start=$5 AND source_revocation_pending=FALSE AND memory_revocation_pending=FALSE AND skill_revocation_pending=FALSE',[r.nativeSessionId,r.keySha256,conversationId,uid,sourceContextStart]);
   }
   if(r.context?.compactions&&taskRun)await taskRun.emit('state',{action:'context_compacted',...r.context});
 
@@ -1368,7 +1387,7 @@ async function executeDurableChat({ identity, run, request, signal, emit, leaseO
   const verifiedRequest = await verifyDurableChatAttachments(request, { uploadsRoot: path.join(RUNTIME, "_uploads"), identity });
   const durable = validateStoredChatRequest(verifiedRequest, row.tenant_id);
   const me = { user: { id: row.id, tenant_id: row.tenant_id, username: row.username, email: row.email, role: row.role }, tenant: { id: row.tenant_id } };
-  const taskRun = { runId: run.runId, signal, emit, leaseOwner, stopped: false, modelSelection: durable.modelSelection || null, attachmentEvidence: durable.attachmentEvidence || [] };
+  const taskRun = { runId: run.runId, signal, emit, leaseOwner, stopped: false, modelSelection: durable.modelSelection || null, pinnedSkills:durable.pinnedSkills||null, attachmentEvidence: durable.attachmentEvidence || [] };
   await handleChat(null, null, me, { ...durable.body, conversationId: run.conversationId }, taskRun);
   const outcome = taskRun.outcome || { ok: true, stopped: taskRun.stopped };
   return { ...outcome, completionPayload: taskRun.finalPayload || { ok: outcome.ok !== false, stopped: outcome.stopped === true } };
@@ -2189,6 +2208,18 @@ async function handle(req, res) {
     }
   }
 
+  if(p==='/api/published-skills'){
+    const identity={userId:me.user.id,tenantId:me.tenant.id};
+    try{if(req.method==='GET')return json(res,200,{ok:true,skills:await publishedSkills.list(identity)});
+      if(req.method==='POST')return json(res,200,await publishedSkills.publish(identity,JSON.parse(await readBody(req,512*1024))));
+    }catch(error){return json(res,error.statusCode||409,{ok:false,code:error.code||'SKILL_OPERATION_FAILED',error:'技能发布失败，请检查名称、版本及纯文本文件。'});}
+  }
+  const skillDisable=p.match(/^\/api\/published-skills\/([a-z0-9]+(?:-[a-z0-9]+)*)\/disable$/);
+  if(skillDisable&&req.method==='POST'){
+    try{return json(res,200,await publishedSkills.disable({userId:me.user.id,tenantId:me.tenant.id},skillDisable[1]));}
+    catch(error){return json(res,error.statusCode||409,{ok:false,code:error.code||'SKILL_OPERATION_FAILED',error:'技能已停止准入，但上下文清理可能未完成，请重试停用。'});}
+  }
+
   // Only authenticated host endpoints can confirm memory; request provenance/assertions are rejected.
   if(p==='/api/memory'||p==='/api/memory/confirm'||p==='/api/memory/retry'){
     const identity={userId:me.user.id,tenantId:me.tenant.id};
@@ -2564,7 +2595,10 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
       await conversationModelPreference(uid, conversationId);
       const selection = await conversations.getModelSelection(uid,conversationId);
       if (!selection) return json(res,404,{ok:false,code:"NOT_FOUND",error:"对话不存在或不属于你"});
-      const request = bindChatModelSelection(captured, me.tenant.id, selection.model, selection.reasoningEffort);
+      const modelBound=bindChatModelSelection(captured, me.tenant.id, selection.model, selection.reasoningEffort);
+      const existingRun=idempotencyKey?await taskStore.getRunByIdempotencyKey(runIdentity,idempotencyKey):null;
+      const pins=existingRun?.request?.pinnedSkills||await publishedSkills.pin(runIdentity,normalizedRequest.body.skillReleaseIds||[]);
+      const request=bindChatSkillPins(modelBound,me.tenant.id,pins);
       const submission = await taskExecution.submit(runIdentity, {
         conversationId,
         idempotencyKey,
@@ -2802,6 +2836,7 @@ async function main() {
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
   taskStore = createTaskStore(auth.db);
+  publishedSkills=createSkillPublicationStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   memoryProvenance=createMemoryProvenanceStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   sources=createSourceStore({db:auth.db,uploadsRoot:path.join(RUNTIME,'_uploads'),onRevoke:async(identity,conversationIds)=>{
     const affected=new Set(conversationIds);let cursor=null;

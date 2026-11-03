@@ -5,6 +5,7 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { LlmError } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import {installPublishedSkillProvider} from './published-skill-provider.mjs';
 import {installNativeContextGateR4} from './dsh-native-context-r4-candidate.mjs';
 import {nativeImageMessage} from './native-image-message.mjs';
 
@@ -16,7 +17,7 @@ const { listStylePresets, stylePresetSummary } = require("./presets.cjs");
 const crypto = require("node:crypto");
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit"]);
+const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit", "skill_resource"]);
 const NATIVE_RUN_TOOL_NAMES = new Set(['ask_user_question', 'skill', 'web_search']);
 const RUN_TOOL_NAMES = new Set([...HOST_RUN_TOOL_NAMES, ...NATIVE_RUN_TOOL_NAMES]);
 const MEDIA_TASK_TYPES = new Set(["text2image", "image2image", "text2video", "image2video"]);
@@ -91,9 +92,10 @@ function budgetAdmissionError(code, fallback) {
 function loadRunBudgetPolicy(profile = "default") {
   const dshHome = process.env.DSH_HOME;
   if (!dshHome) throw Object.assign(new Error("Run budget configuration root is unavailable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
-  const mediaTask = /^media:(text2image|image2image|text2video|image2video)$/.exec(profile)?.[1] || null;
-  if (profile !== "default" && profile !== "csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
-  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? "run-budget-media.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
+  const mediaTask = /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.exec(profile)?.[1] || null;
+  const withSkill=profile==='skill'||profile==='skill-csv'||profile.startsWith('skill-media:');
+  if (profile !== "default" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
   let text;
   try { text = readFileSync(configPath, "utf8"); }
   catch {
@@ -138,8 +140,8 @@ function loadRunBudgetPolicy(profile = "default") {
   if (mediaTask) {
     // This host-selected profile scopes a single explicitly granted task.
     // Count limits remain the existing Run guard, never a monetary promise.
-    if (limits.maxDurationMs !== 180000 || limits.maxOutputTokens !== 512 || limits.maxModelCalls !== 3 || limits.contextModelCalls !== 1 || limits.maxToolCalls !== 1 || limits.maxToolCallsPerKey !== 1 || limits.maxRetries !== 0 ||
-        limits.maxCost !== undefined || limits.allowedTools?.length !== 1 || limits.allowedTools[0] !== "media_route") {
+    if (limits.maxDurationMs !== 180000 || limits.maxOutputTokens !== 512 || limits.maxModelCalls !== (withSkill?5:3) || limits.contextModelCalls !== 1 || limits.maxToolCalls !== (withSkill?3:1) || limits.maxToolCallsPerKey !== 1 || limits.maxRetries !== 0 ||
+        limits.maxCost !== undefined || JSON.stringify(limits.allowedTools)!==JSON.stringify(withSkill?['media_route','skill','skill_resource']:['media_route'])) {
       throw Object.assign(new Error("Controlled media policy is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
     }
     limits.allowedMediaTaskTypes = [mediaTask];
@@ -199,7 +201,7 @@ const MEDIA_NO_LINK_NOTE =
 const name = "persistent-runner";
 const inject = ["agentDefaultModel", "agents", "sessions", "attachments"];
 const RPC_PROTOCOL_VERSION = 1;
-const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1", "native-context-v1"]);
+const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1", "native-context-v1", "skill-pins-v1"]);
 const CONTROL_ERROR_MESSAGES = Object.freeze({
   RUNNER_SETUP_FAILED: "Persistent runner setup failed",
   RUNNER_QUEUE_FAILED: "Parent command could not be processed",
@@ -300,6 +302,10 @@ function apply(ctx) {
         if(!active?.recordModelIntents)throw budgetAdmissionError('MISSING_INTENT_RECORDER');
         await requestParentTool(sid,'northstar.model_request_intent',{provider:intent.provider,model:intent.model,purpose:'compaction',turn:active.requestTurn||0,step:active.requestStep||0,maxTokens:intent.maxTokens||null});
       },
+    });
+    const publishedSkillProvider=installPublishedSkillProvider(ctx,{
+      getActiveTurn:agent=>[...activeTurns.values()].find(turn=>turn.agent===agent),
+      readRelease:(active,releaseId)=>requestParentTool(active.sessionId,'northstar.skill_snapshot',{releaseId}),
     });
     const sessionQueues = new Map(); // sessionId -> FIFO task/close chain
     let shutdownRequested = false;
@@ -456,7 +462,7 @@ function apply(ctx) {
           || (cmd.compact!==undefined&&typeof cmd.compact!=='boolean')
           || (cmd.runId!==undefined&&(typeof cmd.runId!=='string'||!cmd.runId.trim()||cmd.runId.length>128))
           || (cmd.recordModelIntents !== undefined && typeof cmd.recordModelIntents !== "boolean")
-          || (cmd.budgetProfile !== undefined && cmd.budgetProfile !== "csv" && !/^media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
+          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
         emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
           code: cmd.protocolVersion !== RPC_PROTOCOL_VERSION ? "PROTOCOL_VERSION_MISMATCH" : "TASK_FRAME_INVALID",
           message: "Parent task frame is invalid" });
@@ -474,6 +480,7 @@ function apply(ctx) {
         auxiliaryDispatches:0,
         auxiliaryAdmissions:0,
         primaryModelCalls:0,
+        pinnedSkills:cmd.pinnedSkills||{skills:[]},
         recordModelIntents: cmd.recordModelIntents === true,
         tenantId: String(cmd.tenantId || "").trim(),
         mediaRouteResults: [],
@@ -609,6 +616,12 @@ function apply(ctx) {
                 }
                 admission.settle();
                 return action;
+              });
+              registerRunTool(agentCtx,sid,'skill_resource',{
+                name:'skill_resource',description:'Read supporting text files from the exact published Skill release pinned to this Run. This grants no script or system execution.',
+                parameters:{releaseId:{type:'string',required:true},paths:{type:'array',required:true,items:{type:'string'}}},
+                output:{schema:{type:'object',additionalProperties:false,properties:{skillId:{type:'string'},version:{type:'string'},contentHash:{type:'string'},files:{type:'array',items:{type:'object',additionalProperties:false,properties:{path:{type:'string'},content:{type:'string'}}}}}},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
+                execute:args=>requestParentTool(sid,'northstar.skill_resource',args),
               });
               // M1 探针：注册一个与业务线无关的 demo 工具，验证「对话 → 真实 tool/call → tool/result」链路
               registerRunTool(agentCtx, sid, "get_current_time", {
@@ -906,6 +919,7 @@ function apply(ctx) {
 
         const agent = rec.agent;
         turn.agent = agent;
+        publishedSkillProvider.invalidate();
         firstSeq = agent.session.seq;
         if (activeBudget.expired) {
           rejectToolRequests(sid, "RUN_DURATION_LIMIT", "Run duration limit reached");
@@ -998,6 +1012,7 @@ function apply(ctx) {
             : (RUNNER_FAILURE_MESSAGES[code] || "Agent task failed before a complete response; diagnostic details were withheld");
         emit({ type: "done", sessionId: sid, ok: false, code, canceled: activeBudget?.expired === true || turn.cancelOrigin === "user", stopReason: activeBudget?.expired ? "timeout" : undefined, error, usage: usageEvidence.usage, usageEvidence, modelIdentity: firstSeq == null ? collectModelIdentity([], 0) : collectModelIdentity(rec?.agent?.session?.events || [], firstSeq), budget: safeBudgetSummary(activeBudget), ms: Date.now() - t0 });
       } finally {
+        await publishedSkillProvider.disposeTurn(turn);
         if (durationTimer) clearTimeout(durationTimer);
         if (activeTurns.get(sid) === turn) activeTurns.delete(sid);
       }

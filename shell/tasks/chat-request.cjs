@@ -9,6 +9,8 @@ const REQUEST_KIND = "northstar.chat";
 const REQUEST_VERSION = 1;
 const ATTACHMENT_REQUEST_VERSION = 2;
 const MODEL_REQUEST_VERSION = 3;
+const SKILL_REQUEST_VERSION = 4;
+const {pinSkillReleases}=require("../skills/release-snapshot.cjs");
 const HASH_CHUNK_BYTES = 64 * 1024;
 const TASK_TYPES = new Set(["text2image", "image2image", "text2video", "image2video"]);
 const REF_RE = /^\/uploads\/([0-9a-f-]{36})\/([A-Za-z0-9_-][A-Za-z0-9._-]{0,254})$/i;
@@ -24,7 +26,7 @@ function tenantUuid(value) { return typeof value === "string" && /^[0-9a-f-]{36}
 
 function normalizeChatRequest(input, tenantId) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Chat body must be an object");
-  const allowedInput = new Set(["conversationId", "idempotencyKey", "message", "image", "documents", "csvSelections", "sourceCitations", "media", "taskType", "context", "branchFrom", "regenerate"]);
+  const allowedInput = new Set(["conversationId", "idempotencyKey", "message", "image", "documents", "csvSelections", "sourceCitations", "skillReleaseIds", "media", "taskType", "context", "branchFrom", "regenerate"]);
   if (Object.keys(input).some((key) => !allowedInput.has(key))) throw fail("Chat body contains unsupported fields");
   if (!tenantUuid(tenantId)) throw fail("tenantId is invalid");
   const uploadRef = (value) => {
@@ -34,6 +36,10 @@ function normalizeChatRequest(input, tenantId) {
   };
   const body = {};
   if (input.message !== undefined) body.message = text(input.message, "message", 100000);
+  if(input.skillReleaseIds!==undefined){
+    if(!Array.isArray(input.skillReleaseIds)||input.skillReleaseIds.length>1||input.skillReleaseIds.some(id=>typeof id!=='string'||! /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(id)))throw fail('Skill selection is invalid');
+    body.skillReleaseIds=[...input.skillReleaseIds];
+  }
   if (input.image !== undefined && input.image !== null && input.image !== "") {
     body.image = text(input.image, "image", 2048);
     if (!uploadRef(body.image)) throw fail("image must be a tenant upload reference");
@@ -111,6 +117,16 @@ function attachmentRefs(body) {
 }
 
 function parseCanonicalRequest(request, tenantId) {
+  if(request?.schemaVersion===SKILL_REQUEST_VERSION){
+    const {pinnedSkills,...base}=request;
+    if(!pinnedSkills||Object.keys(pinnedSkills).sort().join(',')!=='pinHash,schemaVersion,skills'||pinnedSkills.schemaVersion!==1||!Array.isArray(pinnedSkills.skills)||pinnedSkills.skills.length>1)throw fail('Durable skill pin is invalid');
+    for(const pin of pinnedSkills.skills)if(!pin||Object.keys(pin).sort().join(',')!=='contentHash,releaseId,skillId,version'||! /^[a-f0-9-]{36}$/i.test(pin.releaseId||''))throw fail('Durable skill pin is invalid');
+    let snapshot;try{snapshot=pinSkillReleases(pinnedSkills.skills.map(pin=>({schemaVersion:1,...pin})));}catch{throw fail('Durable skill pin is invalid');}
+    if(crypto.createHash('sha256').update(JSON.stringify(snapshot)).digest('hex')!==pinnedSkills.pinHash)throw fail('Durable skill pin is invalid');
+    base.schemaVersion=MODEL_REQUEST_VERSION;const parsed=parseCanonicalRequest(base,tenantId);
+    if(JSON.stringify(parsed.request.body.skillReleaseIds||[])!==JSON.stringify(pinnedSkills.skills.map(pin=>pin.releaseId)))throw fail('Durable skill selection mismatch');
+    return {refs:parsed.refs,request:{...parsed.request,schemaVersion:SKILL_REQUEST_VERSION,pinnedSkills}};
+  }
   if (request?.schemaVersion !== MODEL_REQUEST_VERSION) return parseBaseRequest(request, tenantId);
   if (Object.keys(request).some((key) => !["kind", "schemaVersion", "body", "attachmentEvidence", "modelSelection"].includes(key))) throw fail("Durable chat request contains unsupported fields");
   const selection = request.modelSelection;
@@ -128,10 +144,11 @@ function bindChatModelSelection(request, tenantId, requestedModelId, reasoningEf
   if (request?.schemaVersion === MODEL_REQUEST_VERSION) throw fail("Model selection is already bound");
   return parseCanonicalRequest({ ...request, schemaVersion: MODEL_REQUEST_VERSION, modelSelection: { requestedModelId, ...(reasoningEffort === null ? {} : {reasoningEffort}) } }, tenantId).request;
 }
+function bindChatSkillPins(request,tenantId,pinnedSkills){if(request?.schemaVersion!==MODEL_REQUEST_VERSION)throw fail('Model snapshot must precede skill pin');return parseCanonicalRequest({...request,schemaVersion:SKILL_REQUEST_VERSION,pinnedSkills},tenantId).request;}
 function chatRequestIdempotencyView(request, tenantId) {
-  if (request?.kind !== REQUEST_KIND || request.schemaVersion !== MODEL_REQUEST_VERSION) return request;
+  if (request?.kind !== REQUEST_KIND || ! [MODEL_REQUEST_VERSION,SKILL_REQUEST_VERSION].includes(request.schemaVersion)) return request;
   const canonical = parseCanonicalRequest(request, tenantId).request;
-  const { modelSelection, ...base } = canonical;
+  const { modelSelection, pinnedSkills, ...base } = canonical;
   base.schemaVersion = Object.hasOwn(base, "attachmentEvidence") ? ATTACHMENT_REQUEST_VERSION : REQUEST_VERSION;
   return base;
 }
@@ -298,6 +315,8 @@ module.exports = {
   REQUEST_VERSION,
   ATTACHMENT_REQUEST_VERSION,
   MODEL_REQUEST_VERSION,
+  SKILL_REQUEST_VERSION,
+  bindChatSkillPins,
   bindChatModelSelection,
   chatRequestIdempotencyView,
   normalizeChatRequest,

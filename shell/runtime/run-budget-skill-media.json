@@ -1,0 +1,14 @@
+{
+  "maxDurationMs": 180000,
+  "maxModelCalls": 5,
+  "maxToolCalls": 3,
+  "maxToolCallsPerKey": 1,
+  "maxRetries": 0,
+  "maxOutputTokens": 512,
+  "allowedTools": [
+    "media_route",
+    "skill",
+    "skill_resource"
+  ],
+  "contextModelCalls": 1
+}

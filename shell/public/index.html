@@ -320,6 +320,7 @@
           </div>
           <!-- 上传结果 / 失败原因提示：inline 显示，比 alert 清楚也不打断输入 -->
           <div class="composer-notice" id="composerNotice" hidden role="status" aria-live="polite"></div>
+          <div id="selectedSkillChip" class="meta" style="max-width:820px;margin:8px auto 0" hidden></div>
           <div class="meta" style="max-width:820px;margin:8px auto 0" id="cm"></div>
         </div>
         </div><!-- /.chat-main -->
@@ -329,7 +330,15 @@
     <!-- ============ 能力：技能 ============ -->
     <section class="view" id="v-skills"><div class="page">
       <div class="note">这些是<b>产品工作区</b>里的技能。DSH 的开发技能（社媒那 10 个）<b>不在产品里</b> —— 隔离已经生效。</div>
-      <div class="grid" id="skillGrid"></div>
+      <section class="card" id="publishedSkillPanel">
+        <h3>发布我的 Skill</h3><p>发布后版本内容固定；新版本需重新选择。停用会撤销可用性并清理模型上下文，聊天记录保留。</p>
+        <label>名称 <input id="publishSkillId" placeholder="my-review" maxlength="80"></label>
+        <label>版本 <input id="publishSkillVersion" placeholder="1.0.0" maxlength="64"></label>
+        <label>SKILL.md <textarea id="publishSkillMain" rows="9" placeholder="---&#10;name: my-review&#10;description: 说明用途&#10;---&#10;具体工作指令"></textarea></label>
+        <label>附属纯文本文件（可选）<input id="publishSkillFiles" type="file" multiple accept=".md,.txt,.json,.yaml,.yml"></label>
+        <button id="publishSkillSubmit">发布固定版本</button><p id="publishSkillStatus" role="status"></p>
+        <div id="publishedSkillList"></div>
+      </section><div class="grid" id="skillGrid"></div>
       <!-- 技能详情：点卡片后在下方展开（说明 + 去使用 + 需要时先引导连接账户） -->
       <div class="skill-detail" id="skillDetail" hidden></div>
     </div></section>

@@ -26,6 +26,8 @@ async function launch(t, source, extraEnv = {}) {
     ['shell/runtime/usage.cjs', 'usage.cjs'],
     ['shell/runtime/native-image-message.mjs', 'native-image-message.mjs'],
     ['shell/runtime/dsh-native-context-r4-candidate.mjs', 'dsh-native-context-r4-candidate.mjs'],
+    ['shell/runtime/published-skill-provider.mjs', 'published-skill-provider.mjs'],
+    ['shell/skills/release-snapshot.cjs', 'skill-release-snapshot.cjs'],
     ['business/media/presets.cjs', 'presets.cjs'],
     ['business/attribution/ga-connector/executor.js', 'ga-query-executor.cjs'],
   ]) fs.copyFileSync(path.join(repo, from), path.join(profile, to));

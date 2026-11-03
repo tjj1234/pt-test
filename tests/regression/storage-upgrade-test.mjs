@@ -27,7 +27,7 @@ async function snapshot(storage, userId) {
     const order = table === 'user_memory' ? 'key' : 'id';
     result[table] = (await storage.adapter.query(`SELECT * FROM ${table} WHERE ${where}=$1 ORDER BY ${order}`, [userId])).rows;
     // This column is intentionally introduced by the upgrade, not legacy data.
-    if (table === 'conversations') for (const row of result[table]) { delete row.model_preference; delete row.reasoning_effort; delete row.source_context_start; delete row.source_revocation_pending; delete row.memory_revocation_pending; delete row.native_session_id; delete row.native_session_key_sha256; }
+    if (table === 'conversations') for (const row of result[table]) { delete row.model_preference; delete row.reasoning_effort; delete row.source_context_start; delete row.source_revocation_pending; delete row.memory_revocation_pending; delete row.native_session_id; delete row.native_session_key_sha256; delete row.skill_context_hash; delete row.skill_revocation_pending; }
     if (table === 'users') for (const row of result[table]) delete row.disabled_at;
   }
   return result;

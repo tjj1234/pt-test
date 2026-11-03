@@ -81,6 +81,8 @@ test("real DSH SDK and persistent-runner isolate sessions across parent RPC and 
   fs.copyFileSync(path.join(root, "shell/runtime/usage.cjs"), path.join(profile, "usage.cjs"));
   fs.copyFileSync(path.join(root, "shell/runtime/native-image-message.mjs"), path.join(profile, "native-image-message.mjs"));
   fs.copyFileSync(path.join(root, "shell/runtime/dsh-native-context-r4-candidate.mjs"), path.join(profile, "dsh-native-context-r4-candidate.mjs"));
+  fs.copyFileSync(path.join(root, "shell/runtime/published-skill-provider.mjs"), path.join(profile, "published-skill-provider.mjs"));
+  fs.copyFileSync(path.join(root, "shell/skills/release-snapshot.cjs"), path.join(profile, "skill-release-snapshot.cjs"));
   fs.writeFileSync(path.join(profile, "run-budget.json"), JSON.stringify({ maxDurationMs: 15000, maxModelCalls: 8, maxToolCalls: 8, maxToolCallsPerKey: 4, maxRetries: 0 }));
   fs.copyFileSync(path.join(root, "business/media/presets.cjs"), path.join(profile, "presets.cjs"));
   fs.copyFileSync(path.join(root, "business/attribution/ga-connector/executor.js"), path.join(profile, "ga-query-executor.cjs"));

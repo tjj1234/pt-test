@@ -160,6 +160,8 @@ test('persistent runner runs distinct sessions concurrently with isolated result
   fs.copyFileSync(path.join(repoRoot, 'shell/runtime/usage.cjs'), path.join(profileDir, 'usage.cjs'));
   fs.copyFileSync(path.join(repoRoot, 'shell/runtime/native-image-message.mjs'), path.join(profileDir, 'native-image-message.mjs'));
   fs.copyFileSync(path.join(repoRoot, 'shell/runtime/dsh-native-context-r4-candidate.mjs'), path.join(profileDir, 'dsh-native-context-r4-candidate.mjs'));
+  fs.copyFileSync(path.join(repoRoot, 'shell/runtime/published-skill-provider.mjs'), path.join(profileDir, 'published-skill-provider.mjs'));
+  fs.copyFileSync(path.join(repoRoot, 'shell/skills/release-snapshot.cjs'), path.join(profileDir, 'skill-release-snapshot.cjs'));
   fs.copyFileSync(path.join(repoRoot, 'business/media/presets.cjs'), path.join(profileDir, 'presets.cjs'));
   fs.copyFileSync(path.join(repoRoot, 'business/attribution/ga-connector/executor.js'), path.join(profileDir, 'ga-query-executor.cjs'));
   fs.symlinkSync(path.join(repoRoot, 'shell/node_modules'), path.join(profileDir, 'node_modules'), 'dir');

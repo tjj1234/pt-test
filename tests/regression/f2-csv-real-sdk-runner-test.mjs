@@ -65,6 +65,8 @@ test('real locked SDK traverses CSV Run tool, emits durable artifact and complet
     ['shell/runtime/usage.cjs', 'usage.cjs'], ['business/media/presets.cjs', 'presets.cjs'],
     ['shell/runtime/native-image-message.mjs', 'native-image-message.mjs'],
     ['shell/runtime/dsh-native-context-r4-candidate.mjs', 'dsh-native-context-r4-candidate.mjs'],
+    ['shell/runtime/published-skill-provider.mjs', 'published-skill-provider.mjs'],
+    ['shell/skills/release-snapshot.cjs', 'skill-release-snapshot.cjs'],
     ['business/attribution/ga-connector/executor.js', 'ga-query-executor.cjs'],
   ]) fs.copyFileSync(path.join(root, source), path.join(profile, destination));
   fs.copyFileSync(path.join(root, 'shell/runtime/run-budget.json'), path.join(profile, 'run-budget.json'));

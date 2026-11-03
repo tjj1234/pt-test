@@ -1222,3 +1222,14 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 
 .mem-add{flex-wrap:wrap}.mem-add input{min-width:200px}.mem-add select{max-width:240px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
 .mem-row{display:grid;grid-template-columns:minmax(140px,1fr) minmax(200px,3fr) auto;align-items:start}.mem-meta{grid-column:1/-1;font-size:12px;color:var(--sub)}.mem-meta button{margin-left:8px}
+
+/* Published Skill forms share the existing page/card typography. */
+#publishedSkillPanel{margin-bottom:20px;display:grid;gap:12px}
+#publishedSkillPanel>h3,#publishedSkillPanel>p{margin:0}
+#publishedSkillPanel label{display:flex;flex-direction:column;gap:6px;font-size:13px}
+#publishedSkillPanel input,#publishedSkillPanel textarea{box-sizing:border-box;width:100%;padding:10px;border:1px solid var(--line,#ddd);border-radius:8px;background:var(--bg,#fff);color:inherit;font:inherit}
+#publishedSkillPanel textarea{min-height:190px;resize:vertical;font-family:ui-monospace,monospace}
+#publishedSkillPanel button,#selectedSkillChip button{width:fit-content;padding:7px 12px;border:1px solid var(--line,#ddd);border-radius:8px;background:var(--bg,#fff);color:inherit;cursor:pointer}
+#publishedSkillPanel button:disabled{opacity:.5;cursor:default}
+#publishedSkillList{display:grid;gap:10px}#publishedSkillList .card button+button{margin-left:8px}
+#publishSkillStatus{overflow-wrap:anywhere}#selectedSkillChip button{margin-left:10px}

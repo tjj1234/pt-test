@@ -817,6 +817,7 @@ function renderChat(messages) {
   if (artifactBody) artifactBody.replaceChildren();
   chat.innerHTML = "";
   const msgs = Array.isArray(messages) ? messages : [];
+  if(!state.skillSelectionOverride) { const last=msgs.filter(m=>m.role==="user").at(-1); state.skillSelection=last?.skillPins?.[0] || null; renderSelectedSkill(); }
   if (!msgs.length) {
     chat.innerHTML = '<div class="empty" id="hello"><h3>问点什么</h3>' +
       '<p>北极大盘为什么涨了？· 哪个素材在烧钱？· 埋点质量怎么样？</p>' +
@@ -970,6 +971,7 @@ async function openConversation(id, opts) {
   const loadSequence = ++conversationLoadSequence;
   const current = () => loadSequence === conversationLoadSequence && isViewing(id);
   const force = !!(opts && opts.force);
+  if(state.activeId !== id) { state.skillSelection = null; state.skillSelectionOverride = false; renderSelectedSkill(); }
   state.activeId = id;
   clearSourceCitations();
   syncConversationBusy();
@@ -1151,6 +1153,7 @@ async function runChat(payload) {
   let serializedPayload = null;
   let idempotencyKey = null;
   if (!payload.resumeRunId) {
+    payload.skillReleaseIds = state.skillSelection ? [state.skillSelection.releaseId] : [];
     try { serializedPayload = JSON.stringify(payload); }
     catch { composerNotice("请求内容无法序列化，这次请求未发送。", "err"); return; }
     idempotencyKey = window.crypto && crypto.randomUUID ? crypto.randomUUID() : (Date.now().toString(36) + "-" + Math.random().toString(36).slice(2));
@@ -3048,6 +3051,7 @@ async function renderSkillDetail(skill, box, hooks) {
 }
 
 async function loadSkills() {
+  void loadPublishedSkills();
   const g = $("#skillGrid");
   const detail = $("#skillDetail");
   if (detail) { detail.hidden = true; detail.textContent = ""; }
@@ -3088,6 +3092,30 @@ async function loadSkills() {
     g.appendChild(c);
   }
 }
+function renderSelectedSkill() {
+  const chip=$("#selectedSkillChip");if(!chip)return;chip.replaceChildren();chip.hidden=!state.skillSelection;
+  if(!state.skillSelection)return;
+  chip.appendChild(mkNode("span","","Skill："+state.skillSelection.skillId+" @ "+state.skillSelection.version));
+  const clear=mkNode("button","","移除");clear.type="button";clear.onclick=()=>{state.skillSelection=null;state.skillSelectionOverride=true;renderSelectedSkill();};chip.appendChild(clear);
+}
+async function loadPublishedSkills() {
+  const box=$("#publishedSkillList");if(!box)return;
+  try {const response=await fetch("/api/published-skills");const data=await response.json();if(!response.ok)throw Error(data.error||"读取失败");box.replaceChildren();
+    for(const item of data.skills||[]) { const row=mkNode("div","card");row.appendChild(mkNode("strong","",item.skill_id+" @ "+item.version));
+      row.appendChild(mkNode("p","",item.pending_cleanup?"停用清理未完成，请重试":item.enabled?"已发布 · "+item.fileCount+" 个文件":"已停用"));
+      const use=mkNode("button","","在对话中使用");use.disabled=!item.enabled||item.pending_cleanup;use.onclick=async()=>{if(!state.activeId&&!await newConversation())return;state.skillSelection={releaseId:item.release_id,skillId:item.skill_id,version:item.version,contentHash:item.content_hash};state.skillSelectionOverride=true;renderSelectedSkill();switchView("chat");};row.appendChild(use);
+      const disable=mkNode("button","",item.pending_cleanup?"重试停用清理":"停用");disable.disabled=!item.enabled&&!item.pending_cleanup;disable.onclick=async()=>{disable.disabled=true;try{const r=await fetch("/api/published-skills/"+encodeURIComponent(item.skill_id)+"/disable",{method:"POST"});const j=await r.json();if(!r.ok)throw Error(j.error||"停用失败");if(state.skillSelection?.skillId===item.skill_id){state.skillSelection=null;state.skillSelectionOverride=true;renderSelectedSkill();}}catch(e){$("#publishSkillStatus").textContent=e.message;}await loadPublishedSkills();};row.appendChild(disable);box.appendChild(row);
+    }
+  }catch(e){box.textContent=e.message;}
+}
+const publishSkillSubmit=$("#publishSkillSubmit");
+if(publishSkillSubmit)publishSkillSubmit.onclick=async()=>{
+  const status=$("#publishSkillStatus");publishSkillSubmit.disabled=true;status.textContent="发布中…";
+  try {const extras=[...$("#publishSkillFiles").files];if(extras.length>15||extras.reduce((sum,f)=>sum+f.size,0)+new TextEncoder().encode($("#publishSkillMain").value).length>256*1024)throw Error("最多16个文件，总计256 KiB");
+    const files=[{path:"SKILL.md",content:$("#publishSkillMain").value},...await Promise.all(extras.map(async f=>({path:f.name,content:await f.text()})))];
+    const response=await fetch("/api/published-skills",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({skillId:$("#publishSkillId").value.trim(),version:$("#publishSkillVersion").value.trim(),files})});const result=await response.json();if(!response.ok)throw Error(result.code+"："+result.error);status.textContent="已发布 "+result.skillId+" @ "+result.version+"，请选择使用。";await loadPublishedSkills();
+  }catch(e){status.textContent=e.message;}finally{publishSkillSubmit.disabled=false;}
+};
 /* SKILL_DETAIL_END */
 
 /* ---- 状态 ---- */
