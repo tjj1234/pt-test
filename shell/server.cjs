@@ -813,6 +813,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
       taskType = savedType;
     }
   }
+  if(process.env.PT_MEDIA_GENERATION==="off"&&taskType)return rejectChat(409,{ok:false,code:"FEATURE_NOT_RELEASED",error:"媒体生成功能即将上线。"});
   if ((taskType === "image2image" || taskType === "image2video") && !messages[messages.length - 1]?.image) {
     return rejectChat(400, { ok: false, code: "MEDIA_REFERENCE_IMAGE_REQUIRED", error: "请先上传参考图再生成" });
   }
@@ -1729,7 +1730,7 @@ async function handle(req, res) {
   if(managedMediaMatch)return managedMediaReader(req,res,runIdentity,{runId:managedMediaMatch[1],filename:managedMediaMatch[2]});
   const mediaAuthorizationMatch = p.match(/^\/api\/runs\/([a-f0-9-]{36})\/media-authorization$/i);
   if (mediaAuthorizationMatch && ["GET","POST"].includes(req.method)) {
-    if(process.env.PT_CONTROLLED_MEDIA_AUTHORIZATION !== "1")return json(res,404,{ok:false,code:"NOT_FOUND"});
+    if(process.env.PT_MEDIA_GENERATION==="off"||process.env.PT_CONTROLLED_MEDIA_AUTHORIZATION !== "1")return json(res,404,{ok:false,code:"NOT_FOUND"});
     try {
       const result=req.method === "GET" ? await mediaAuthorization.status(runIdentity,mediaAuthorizationMatch[1])
         : await mediaAuthorization.authorize(runIdentity,mediaAuthorizationMatch[1],JSON.parse(await readBody(req,4096)));
@@ -2001,7 +2002,7 @@ async function handle(req, res) {
     }
 
     const tools = await toolsRegistry.listToolsForWorkspace(context.workspaceId, context);
-    const skills = tools.map((t) => {
+    const skills = tools.filter(t=>process.env.PT_MEDIA_GENERATION!=="off"||t.name!=="media.route").map((t) => {
       const requiresConnector = REQUIRES_CONNECTOR[t.name] || false;
       const skill = {
         id: t.name,
@@ -2292,7 +2293,8 @@ async function handle(req, res) {
       ok: true,
       models: cat.models,
       eligibility: Object.fromEntries(cat.models.map((model) => [model.id, selectChatModel(cat, model.id)])),
-      mediaQualification: buildMediaQualificationMatrix(cat),
+      features: {mediaGeneration:process.env.PT_MEDIA_GENERATION!=="off"},
+      mediaQualification: process.env.PT_MEDIA_GENERATION==="off"?{ok:false,code:"FEATURE_NOT_RELEASED",rows:[]}:buildMediaQualificationMatrix(cat),
       availability: cat.availability,
       catalogDiagnostics: cat.catalogDiagnostics || null,
       current: current || modelCatalog.AUTO_ID,
@@ -2547,6 +2549,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
     let body = {};
     try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
 
+    if(process.env.PT_MEDIA_GENERATION==="off"&&body.taskType)return json(res,409,{ok:false,code:"FEATURE_NOT_RELEASED",error:"媒体生成功能即将上线；当前支持图片理解。"});
     const uid = me.user.id;
     const idempotencyKey = String(req.headers["idempotency-key"] || body.idempotencyKey || crypto.randomUUID());
     const conversationId = String(body.conversationId || "").trim();
@@ -2854,7 +2857,7 @@ async function main() {
   managedMediaReader=createManagedMediaReader({workspaceRoot:path.join(RUNTIME,"workspaces"),getRun:(identity,runId)=>taskStore.getRun(identity,runId)});
   managedMediaHosts=String(process.env.PT_MEDIA_ASSET_HOSTS||"").split(",").map(host=>host.trim().toLowerCase()).filter(Boolean);
   if(managedMediaHosts.length)managedMediaFetch=createPinnedAssetFetch({allowedHosts:managedMediaHosts});
-  if(process.env.PT_CONTROLLED_MEDIA_AUTHORIZATION === "1"&&!managedMediaFetch)throw Object.assign(new Error("Managed media asset hosts are required"),{code:"MEDIA_PUBLISH_CONFIGURATION_INVALID"});
+  if(process.env.PT_MEDIA_GENERATION!=="off"&&process.env.PT_CONTROLLED_MEDIA_AUTHORIZATION === "1"&&!managedMediaFetch)throw Object.assign(new Error("Managed media asset hosts are required"),{code:"MEDIA_PUBLISH_CONFIGURATION_INVALID"});
   taskScheduler = createSessionScheduler({
     perUserLimit: Number(process.env.PT_RUNS_PER_USER || 4),
     globalLimit: Number(process.env.PT_RUNS_GLOBAL || 16),

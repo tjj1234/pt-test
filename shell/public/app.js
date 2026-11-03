@@ -2592,6 +2592,7 @@ async function loadModels() {
     const j = await r.json().catch(() => null);
     if (sequence !== modelLoadSequence || (state.activeId || null) !== conversationId) return;
     if (!r.ok || !j || !j.ok || !Array.isArray(j.models)) throw new Error("MODEL_SYNC_FAILED");
+    const mediaReleased=j.features?.mediaGeneration!==false;if(genTypeEl)genTypeEl.hidden=!mediaReleased;if(!mediaReleased)setGenType(DEFAULT_GEN_TYPE);
     mediaQualification = j.mediaQualification || null;
     modelCaps.clear();
     modelSelect.innerHTML = "";

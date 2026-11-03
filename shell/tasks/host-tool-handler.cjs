@@ -24,6 +24,7 @@ function createHostToolHandler({ registry, context, mediaHandler, csvHandler }) 
     if (!request || typeof request !== "object" || Array.isArray(request)) throw error("TOOL_REQUEST_INVALID", "Tool request is invalid");
     const { name } = request;
     if (typeof name !== "string" || !ALLOWED_TOOLS.has(name)) throw error("TOOL_NOT_ALLOWED", "Tool is not available through the host RPC");
+    if(name==="media.route"&&process.env.PT_MEDIA_GENERATION==="off")throw error("FEATURE_NOT_RELEASED","媒体生成功能即将上线",409);
     if (typeof request.requestId !== "string" || !REQUEST_ID.test(request.requestId)) throw error("TOOL_REQUEST_INVALID", "Tool request ID is invalid");
     if (name === "media.route" && !mediaHandler) throw error("RUN_REQUIRED", "media.route requires a durable Run");
     if (name === "csv.analyze" && !csvHandler) throw error("RUN_REQUIRED", "csv.analyze requires a durable Run");

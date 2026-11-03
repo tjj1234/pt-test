@@ -35,7 +35,7 @@ value.writeScopedCache(scopeId,{scopeId,models:[m],lastSuccessfulAt:at,lastCompl
 const plain={...m,id:'fixture-plain',model:'fixture-plain'};return {models:[m,plain],scopeId,availability:{status:'available',modelIds:[m.id,'fixture-plain']},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts)};return value;};`);
   const profiles=path.join(runtime,'dsh-home/profiles');fs.mkdirSync(profiles,{recursive:true});fs.symlinkSync(path.join(root,'shell/node_modules'),path.join(profiles,'node_modules'),'dir');
-  const start=()=>{child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0'},stdio:['ignore','pipe','pipe']});
+  const start=()=>{child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0',PT_MEDIA_GENERATION:'off'},stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',b=>logs+=b);child.stderr.on('data',b=>logs+=b);};start();
   const req=(url,{user=0,method='GET',body}={})=>fetch('http://127.0.0.1:'+port+url,{method,headers:{Cookie:cookies[user],...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
   const json=async(url,opts)=>{const r=await req(url,opts);assert.equal(r.status,200,await r.clone().text());return r.json();};
@@ -45,6 +45,8 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
   const uploaded=await json('/api/upload',{method:'POST',body:{image:bytes.toString('base64')}});
   const conversationId=(await json('/api/conversations',{method:'POST'})).id;
   await json('/api/models/select',{method:'POST',body:{conversationId,model:'fixture-vision'}});
+  assert.equal((await json('/api/models')).features.mediaGeneration,false);assert.equal((await json('/api/skills')).skills.some(s=>s.id==='media.route'),false);
+  const blocked=await req('/api/chat',{method:'POST',body:{conversationId,message:'generate',taskType:'text2image'}});assert.equal(blocked.status,409);assert.equal((await blocked.json()).code,'FEATURE_NOT_RELEASED');
   let round=0;
   for(const body of [{message:'Describe',image:uploaded.url},{message:'Recall image'},{regenerate:true}]){
    const r=await req('/api/chat',{method:'POST',body:{conversationId,...body}});const text=await r.text();assert.match(text,/NATIVE_IMAGE_HTTP_OK/,text+logs);
