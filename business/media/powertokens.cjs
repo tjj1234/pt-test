@@ -140,6 +140,15 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function upstreamHttpError(status, operation) {
+  const codes = {401:"KEY_INVALID",402:"QUOTA_INSUFFICIENT",403:"UPSTREAM_FORBIDDEN"};
+  const hints = {401:"API Key 无效或已过期",402:"账户余额不足",403:"上游拒绝访问，请核对权限与模型状态"};
+  const error = new Error(`PowerTokens ${operation} HTTP ${status}: ${hints[status] || "上游请求失败"}`);
+  error.code = codes[status] || "UPSTREAM_HTTP_ERROR";
+  error.upstreamStatus = status;
+  return error;
+}
+
 async function postJson(fetchImpl, url, body, apiKey) {
   const res = await fetchImpl(url, {
     method: "POST",
@@ -149,7 +158,8 @@ async function postJson(fetchImpl, url, body, apiKey) {
     signal: AbortSignal.timeout(180000),
   });
   if (!res.ok) {
-    throw new Error(`PowerTokens API ${res.status}: ${await res.text()}`);
+    try { await res.body?.cancel(); } catch {}
+    throw upstreamHttpError(res.status, "提交");
   }
   return res.json();
 }
@@ -240,12 +250,12 @@ async function pollTask(fetchImpl, statusUrl, apiKey, timeoutMs, kind) {
     }
     if (httpStatus >= 500) {
       server5xx++;
-      if (server5xx >= 8) throw new Error(`${kind}任务查询连续 ${server5xx} 次 5xx（${httpStatus}），熔断退出：${text.slice(0, 300)}`);
+      if (server5xx >= 8) throw new Error(`${kind}任务查询连续 ${server5xx} 次 5xx（${httpStatus}），熔断退出`);
       await sleep(pollDelay(attempts));
       continue;
     }
     if (httpStatus !== 200) {
-      throw new Error(`${kind}任务查询返回非预期状态 ${httpStatus}：${text.slice(0, 300)}`);
+      throw upstreamHttpError(httpStatus, `${kind}任务查询`);
     }
 
     // 200：重置两个错误计数器（坑 13：查询成功即恢复）
@@ -256,7 +266,7 @@ async function pollTask(fetchImpl, statusUrl, apiKey, timeoutMs, kind) {
     const outUrl = kind === "video" ? extractVideoUrl(data) : extractImageUrl(data);
     const status = readStatus(data).toLowerCase();
     if (status && FAIL_STATUSES.has(status)) {
-      throw new Error(`${kind}任务失败（status=${status}）：${text.slice(0, 300)}`);
+      throw new Error(`${kind}任务失败（status=${status}）`);
     }
     if (outUrl && !PENDING_STATUSES.has(status)) return data;
     if (status && SUCCESS_STATUSES.has(status)) return data;
@@ -269,7 +279,7 @@ async function pollTask(fetchImpl, statusUrl, apiKey, timeoutMs, kind) {
       // 状态缺失或未知枚举：显式计数熔断（坑 02/12）
       unreadable++;
       if (unreadable >= 40) {
-        throw new Error(`${kind}任务连续 ${unreadable} 次状态缺失或未知（status=${status || "<missing>"}），熔断退出；最后原始响应：${text.slice(0, 500)}`);
+        throw new Error(`${kind}任务连续 ${unreadable} 次状态缺失或未知（status=${status || "<missing>"}），熔断退出`);
       }
     }
     await sleep(pollDelay(attempts));
