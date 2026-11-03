@@ -1138,3 +1138,7 @@ Context阻断证据提交f186f34后继续独立XLSX链，不等待其他包。�
 ### 2026-11-02：串行闭合与远程保存检查点
 本轮功能提交6c5a4cc（推理本地链）、0638d8f（CSV分析Excel本地链）；中间f186f34单独记录Context R4阻断，不算功能闭合。两条链在当前共享源码的绑定报告均验证通过；未跑最终全量发布验收、未部署、无真实付费provider。用户/Gemini批次交付汇总新增32行原样保留，另作进度文档提交，不混进两个功能提交。
 按用户此前明确指定tjj1234/pt-test保存工作与当前逐条提交要求，将集成分支feature/northstar-integration-20261102推送同名远程分支；此条在push前记录，成功须以push回执与ls-remote同hash为准。不触碰main或backup/northstar-wip-20261102-safety。下一待闭合为跨资料检索/删除失效；Context仍8项主审失败及真实压缩入口未证明，记忆/Skill/音视频与全量剩余范围不降级为完成。当前没有本助手子Agent；机械测试已结束，浏览器夹具已关闭自身临时会话。
+
+### 2026-11-03：r28有界交付、用户授权直接部署完成
+用户将范围改为核心链＋三类标准媒体，排除Seedance全家族/图生视频及AV/PDF/OCR/联网审批/真实账单；Gemini后续包暂缓，新OAuth文档不采用。r28确切归档e4aa5e2042b831267acc6ce7ad620b6d8ba36d8e4d5163542ba6260c78e0d501，217源码/419成员；最终ZIP b4ca44ebde755b08710b51632f8d0837d0a531254c33ff0fc63258f64a5771db，45成员；263/263、Linux23+4+1、六链browser/source-log绑定通过。源码3deac76，交付062fe47，已推送同名集成分支。Context原R4阻断已被修复后的10项独立反例及产品链验收取代，历史blocked报告不再代表r28当前状态。
+用户明确授权SSH自行部署后，目标锁依赖安装、Node24生产闭包/PTy通过；旧服务无有效Run租约，停机后PG备份真实隔离恢复及runtime/secrets/env/unit备份校验通过，隔离迁移24→29保留171Run。settings精确基线升级并重建profile，15:10:49北京时间切换r28，PID302282、active/running、无重启；217源码哈希、29迁移、171Run、公网HTTPS与app.js、登录页和认证边界通过。7账号只读fresh目录的Seedream T2I/I2I和Wan T2V手动资格通过，零付费生成，不伪造runtime verification或媒体AUTO。恢复点、实际日志及边界见evidence/R28-ONLINE-DEPLOYMENT-20261103.md；功能清单ONLINE-R28-FEATURES-20261103.md。不要把已上线、只读资格通过与真实付费业务验收混写。认证口令不入仓库和文档。
