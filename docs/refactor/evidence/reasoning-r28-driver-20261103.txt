@@ -1,0 +1,4 @@
+{"chain":"reasoning","check":"ui","exitCode":0,"timedOut":false}
+{"chain":"reasoning","check":"boundaries","exitCode":0,"timedOut":false}
+{"chain":"reasoning","check":"http-sdk","exitCode":0,"timedOut":false}
+{"chain":"reasoning","status":"MECHANICAL_PASS","report":"docs/refactor/evidence/reasoning-r28-final-20261103.json","sourceDrift":[]}

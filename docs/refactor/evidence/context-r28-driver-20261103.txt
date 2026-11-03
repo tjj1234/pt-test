@@ -1,0 +1,5 @@
+{"chain":"context","check":"main-regressions","exitCode":0,"timedOut":false}
+{"chain":"context","check":"probe","exitCode":0,"timedOut":false}
+{"chain":"context","check":"unit-review","exitCode":0,"timedOut":false}
+{"chain":"context","check":"http-sdk","exitCode":0,"timedOut":false}
+{"chain":"context","status":"MECHANICAL_PASS","report":"docs/refactor/evidence/context-r28-final-20261103.json","sourceDrift":[]}

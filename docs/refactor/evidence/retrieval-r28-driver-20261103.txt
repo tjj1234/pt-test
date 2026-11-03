@@ -1,0 +1,4 @@
+{"chain":"retrieval","check":"probe","exitCode":0,"timedOut":false}
+{"chain":"retrieval","check":"unit-review","exitCode":0,"timedOut":false}
+{"chain":"retrieval","check":"http-sdk","exitCode":0,"timedOut":false}
+{"chain":"retrieval","status":"MECHANICAL_PASS","report":"docs/refactor/evidence/retrieval-r28-final-20261103.json","sourceDrift":[]}

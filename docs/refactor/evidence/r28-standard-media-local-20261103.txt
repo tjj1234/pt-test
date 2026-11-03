@@ -1,0 +1,15 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/f1-managed-http-sdk-sSl749/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ standard-three release authorizes, generates, hosts and reopens only selected media (3460.170417ms)
+✔ standard-three release excludes Seedance and image-to-video (1.191ms)
+✔ release facts enable only named standard models and task-specific manual qualification (3.157083ms)
+✔ release facts never invent permission, availability, fresh state or runtime verification (0.548041ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3501.288

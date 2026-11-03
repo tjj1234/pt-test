@@ -1,0 +1,3 @@
+{"chain":"skill","check":"boundaries","exitCode":0,"timedOut":false}
+{"chain":"skill","check":"http-sdk","exitCode":0,"timedOut":false}
+{"chain":"skill","status":"MECHANICAL_PASS","report":"docs/refactor/evidence/skill-r28-final-20261103.json","sourceDrift":[]}

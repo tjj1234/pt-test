@@ -1,0 +1,4 @@
+{"chain":"memory","check":"legacy-http","exitCode":0,"timedOut":false}
+{"chain":"memory","check":"unit-review","exitCode":0,"timedOut":false}
+{"chain":"memory","check":"http-sdk","exitCode":0,"timedOut":false}
+{"chain":"memory","status":"MECHANICAL_PASS","report":"docs/refactor/evidence/memory-r28-final-20261103.json","sourceDrift":[]}
