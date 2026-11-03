@@ -240,7 +240,7 @@ async function pollTask(fetchImpl, statusUrl, apiKey, timeoutMs, kind) {
   let unreadable = 0;
   while (Date.now() - start < timeoutMs) {
     attempts++;
-    const { httpStatus, json, text } = await fetchTaskStatus(fetchImpl, statusUrl, apiKey);
+    const { httpStatus, json } = await fetchTaskStatus(fetchImpl, statusUrl, apiKey);
 
     if (httpStatus === 429) {
       rateLimited++;
@@ -268,9 +268,9 @@ async function pollTask(fetchImpl, statusUrl, apiKey, timeoutMs, kind) {
     if (status && FAIL_STATUSES.has(status)) {
       throw new Error(`${kind}任务失败（status=${status}）`);
     }
-    if (outUrl && !PENDING_STATUSES.has(status)) return data;
+    if (outUrl && (!status || SUCCESS_STATUSES.has(status))) return data;
     if (status && SUCCESS_STATUSES.has(status)) return data;
-    if (isProgressComplete(data)) return data;
+    if ((!status || SUCCESS_STATUSES.has(status)) && isProgressComplete(data)) return data;
 
     if (PENDING_STATUSES.has(status)) {
       // 只有已识别的进行中状态才能清除异常计数；未知枚举不能静默空转。
@@ -279,7 +279,7 @@ async function pollTask(fetchImpl, statusUrl, apiKey, timeoutMs, kind) {
       // 状态缺失或未知枚举：显式计数熔断（坑 02/12）
       unreadable++;
       if (unreadable >= 40) {
-        throw new Error(`${kind}任务连续 ${unreadable} 次状态缺失或未知（status=${status || "<missing>"}），熔断退出`);
+        throw new Error(`${kind}任务连续 ${unreadable} 次状态缺失或未知，熔断退出`);
       }
     }
     await sleep(pollDelay(attempts));

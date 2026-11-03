@@ -10,3 +10,9 @@ for(const [status,code] of [[401,'KEY_INVALID'],[402,'QUOTA_INSUFFICIENT'],[403,
   await assert.rejects(callMediaRoute({}, {taskType:'text2video',prompt:'fixture'}, {apiKey:'fixture',fetchImpl}),error=>{assert.equal(error.code,code);assert.doesNotMatch(error.message,/PRIVATE_UPSTREAM_SENTINEL/);return true;});assert.deepEqual(calls,['POST','GET']);
  });
 }
+
+test('unknown upstream status and URL never become success or leak raw status',async(t)=>{
+ t.mock.method(globalThis,'setTimeout',fn=>{queueMicrotask(fn);return 0;});let posts=0,gets=0;
+ const fetchImpl=async(_url,opts)=>{if(opts.method==='POST'){posts++;return new Response(JSON.stringify({id:'fixture-task'}));}gets++;return new Response(JSON.stringify({status:'PRIVATE_UPSTREAM_SENTINEL',progress:100,url:'https://cdn.example.test/result.mp4'}));};
+ await assert.rejects(callMediaRoute({}, {taskType:'text2video',prompt:'fixture'}, {apiKey:'fixture',fetchImpl,timeoutMs:30000}),error=>{assert.doesNotMatch(error.message,/PRIVATE_UPSTREAM_SENTINEL/);assert.match(error.message,/状态缺失或未知/);return true;});assert.equal(posts,1);assert.equal(gets,40);
+});
