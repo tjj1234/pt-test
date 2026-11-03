@@ -21,18 +21,18 @@ const {default:Persistence}=await load('@deepseek-ai/dsh-session-persistence-jso
 const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[Persistence,{root:path.join(process.env.DSH_HOME,'sessions')}],[Prompt,{}],[Tools,{}],[Loop,{agents:[]}],[Attachments,{dshHome:process.env.DSH_HOME}]])await ctx.plugin(plugin,...(config===undefined?[]:[config]));
 ctx.provide('loader',{await:async()=>{}});ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-vision'})});ctx.provide('appExit',code=>process.exit(code));
 class Adapter extends LlmAdapter{
- async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:['text','image']};}
+ async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:model==='fixture-plain'?['text']:['text','image']};}
  async *stream(options){const images=options.messages.flatMap(m=>m.content||[]).filter(b=>b.type==='image');for(const b of images)await ctx.attachments.readImage(b.attachment);fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({images:images.length})+'\\n');yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:'NATIVE_IMAGE_HTTP_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
 }
 ctx.llm.registerAdapter(['fixture'],new Adapter());fs.writeFileSync(${JSON.stringify(pid)},String(process.pid));const {apply}=await import(pathToFileURL(path.join(process.env.DSH_HOME,'profiles/run-persistent/persistent-runner.mjs')));apply(ctx);
 `);
   const preload=path.join(temp,'preload.cjs');fs.writeFileSync(preload,`const Module=require('node:module'),load=Module._load;Module._load=function(name,parent){const value=load.apply(this,arguments);
-if(parent?.filename.endsWith('/server.cjs')&&name==='./models/dsh-configured-catalog.cjs')return {...value,configuredModels:()=>['fixture-vision']};
+if(parent?.filename.endsWith('/server.cjs')&&name==='./models/dsh-configured-catalog.cjs')return {...value,configuredModels:()=>['fixture-vision','fixture-plain']};
 if(parent?.filename.endsWith('/server.cjs')&&name==='./model-catalog.cjs')return {...value,getCatalog:async opts=>{
 const {normalizePtRecord}=require(${JSON.stringify(path.join(root,'shell/models/capabilities.cjs'))});const scopeId=value.resolveScopeId(opts),at=new Date().toISOString(),prior=value.readScopedCache(scopeId);
 const m=normalizePtRecord({id:'fixture-vision',supported_tasks:['textChat','imageUnderstanding'],supported_endpoint_types:['openai-response'],input_modalities:['text','image'],output_modalities:['text']},{scopeId,observedAt:at,sourceVersion:'fixture',permission:true,localPolicy:{enabled:true,source:'fixture',version:'1',tasks:['textChat']},adaptations:{textChat:{adapterId:'fixture',version:'1',endpoint:'openai-chat-completions',source:'fixture'}},verifications:prior?.models[0]?.verifications||{}});
 value.writeScopedCache(scopeId,{scopeId,models:[m],lastSuccessfulAt:at,lastCompleteAt:null,nextSyncAt:null,syncFailureCount:0});
-return {models:[m],scopeId,availability:{status:'available',modelIds:[m.id]},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
+const plain={...m,id:'fixture-plain',model:'fixture-plain'};return {models:[m,plain],scopeId,availability:{status:'available',modelIds:[m.id,'fixture-plain']},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts)};return value;};`);
   const profiles=path.join(runtime,'dsh-home/profiles');fs.mkdirSync(profiles,{recursive:true});fs.symlinkSync(path.join(root,'shell/node_modules'),path.join(profiles,'node_modules'),'dir');
   const start=()=>{child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0'},stdio:['ignore','pipe','pipe']});
@@ -56,6 +56,9 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
    }
   }
   const calls=()=>fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse);assert.equal(calls().length,3);assert.ok(calls().every(c=>c.images===1));
+  await json('/api/models/select',{method:'POST',body:{conversationId,model:'fixture-plain'}});
+  const unsupported=await req('/api/chat',{method:'POST',body:{conversationId,message:'Historical image needs vision'}});await unsupported.text();const unsupportedRun=await json('/api/runs/'+unsupported.headers.get('x-agent-run-id'));assert.equal(unsupportedRun.run.state,'failed');assert.equal(calls().length,3,'text-only model must not receive historical images');
+  await json('/api/models/select',{method:'POST',body:{conversationId,model:'fixture-vision'}});
   const foreign=(await json('/api/conversations',{user:1,method:'POST'})).id;
   const denied=await req('/api/chat',{user:1,method:'POST',body:{conversationId:foreign,message:'read',image:uploaded.url}});assert.ok(denied.status>=400);
   fs.writeFileSync(path.join(runtime,'_uploads',uploaded.url.split('/').slice(-2).join('/')),Buffer.from('changed'));

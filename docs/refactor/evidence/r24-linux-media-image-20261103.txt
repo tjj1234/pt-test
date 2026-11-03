@@ -1,0 +1,28 @@
+TAP version 13
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/f1-managed-http-sdk-FVwg08/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: same HTTP server and actual locked SDK authorize, generate, host and reopen four media types
+ok 1 - same HTTP server and actual locked SDK authorize, generate, host and reopen four media types
+  ---
+  duration_ms: 9146.185129
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/native-image-http-UDBf6M/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: HTTP verified upload reaches native DSH images, survives cold replay, and rejects changed/cross-tenant bytes
+ok 2 - HTTP verified upload reaches native DSH images, survives cold replay, and rejects changed/cross-tenant bytes
+  ---
+  duration_ms: 8207.376421
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 18070.737884

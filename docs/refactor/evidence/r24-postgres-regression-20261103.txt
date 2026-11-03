@@ -1,0 +1,8 @@
+run-regression (postgres)：发现 4 个回归套件
+
+✓ run-sse-multi-instance-postgres-test.mjs (1786ms)
+✓ t03-external-operation-lock-order-postgres-test.mjs (1462ms)
+✓ task-lease-postgres-review-test.mjs (5543ms)
+✓ task-store-postgres-integration-test.mjs (1222ms)
+
+run-regression：共 4 个套件，通过 4，失败 0

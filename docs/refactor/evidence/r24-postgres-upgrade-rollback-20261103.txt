@@ -1,0 +1,3 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-upgrade-pg-FWph1j/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"rollbackRepositoryRead":true,"status":"R24_POSTGRES_UPGRADE_PASS","prior":"001-023","current":"001-028","preserved":["conversation","memory","encrypted-key"],"legacyMemory":"unconfirmed","replay":"idempotent"}
