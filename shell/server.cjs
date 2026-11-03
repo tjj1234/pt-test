@@ -193,7 +193,7 @@ async function ensureModelCatalog(userId, { force = false } = {}) {
     let configuredIds = [];
     try { configuredIds = configuredModels({settings: path.join(tenantMod.DSH_HOME, 'settings.yaml'), template: path.join(__dirname, 'dsh-settings.yaml')}); }
     catch { log.warn('dsh_model_configuration_unavailable', {errorCode: 'DSH_SETTINGS_INVALID'}); }
-    return constrainCatalog(catalog, configuredIds);
+    return constrainCatalog({...catalog,models:require("./models/release-media-policy.cjs").visibleModels(catalog.models)}, configuredIds);
   }).finally(() => _catalogBusyByScope.delete(scopeId));
   _catalogBusyByScope.set(scopeId, pending);
   return pending;
@@ -813,7 +813,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
       taskType = savedType;
     }
   }
-  if(process.env.PT_MEDIA_GENERATION==="off"&&taskType)return rejectChat(409,{ok:false,code:"FEATURE_NOT_RELEASED",error:"媒体生成功能即将上线。"});
+  if(taskType&&!require("./models/release-media-policy.cjs").allowedTask(taskType))return rejectChat(409,{ok:false,code:"FEATURE_NOT_RELEASED",error:"媒体生成功能即将上线。"});
   if ((taskType === "image2image" || taskType === "image2video") && !messages[messages.length - 1]?.image) {
     return rejectChat(400, { ok: false, code: "MEDIA_REFERENCE_IMAGE_REQUIRED", error: "请先上传参考图再生成" });
   }
@@ -2293,7 +2293,7 @@ async function handle(req, res) {
       ok: true,
       models: cat.models,
       eligibility: Object.fromEntries(cat.models.map((model) => [model.id, selectChatModel(cat, model.id)])),
-      features: {mediaGeneration:process.env.PT_MEDIA_GENERATION!=="off"},
+      features: {mediaGeneration:process.env.PT_MEDIA_GENERATION!=="off",mediaTaskTypes:["text2image","image2image","text2video","image2video"].filter(t=>require("./models/release-media-policy.cjs").allowedTask(t))},
       mediaQualification: process.env.PT_MEDIA_GENERATION==="off"?{ok:false,code:"FEATURE_NOT_RELEASED",rows:[]}:buildMediaQualificationMatrix(cat),
       availability: cat.availability,
       catalogDiagnostics: cat.catalogDiagnostics || null,
@@ -2549,7 +2549,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
     let body = {};
     try { body = JSON.parse((await readBody(req)) || "{}"); } catch (e) {}
 
-    if(process.env.PT_MEDIA_GENERATION==="off"&&body.taskType)return json(res,409,{ok:false,code:"FEATURE_NOT_RELEASED",error:"媒体生成功能即将上线；当前支持图片理解。"});
+    if(body.taskType&&!require("./models/release-media-policy.cjs").allowedTask(body.taskType))return json(res,409,{ok:false,code:"FEATURE_NOT_RELEASED",error:"媒体生成功能即将上线；当前支持图片理解。"});
     const uid = me.user.id;
     const idempotencyKey = String(req.headers["idempotency-key"] || body.idempotencyKey || crypto.randomUUID());
     const conversationId = String(body.conversationId || "").trim();

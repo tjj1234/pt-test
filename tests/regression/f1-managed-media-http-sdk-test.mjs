@@ -33,7 +33,7 @@ class FixtureAdapter extends LlmAdapter{
 ctx.llm.registerAdapter(['managed-fixture'],new FixtureAdapter());
 const {apply}=await import(pathToFileURL(path.join(process.env.DSH_HOME,'profiles/run-persistent/persistent-runner.mjs')));apply(ctx);
 `;
-test('same HTTP server and actual locked SDK authorize, generate, host and reopen four media types',{timeout:60000},async()=>{
+test(process.env.NORTHSTAR_STANDARD3_TEST==='1'?'standard-three release authorizes, generates, hosts and reopens only selected media':'same HTTP server and actual locked SDK authorize, generate, host and reopen four media types',{timeout:60000},async()=>{
  const temp=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'f1-managed-http-sdk-'));
  const runtime=path.join(temp,'runtime'),dataDir=path.join(temp,'db'),masterKeyFile=path.join(temp,'key'),selector=path.join(temp,'selector.json'),trace=path.join(temp,'posts.jsonl'),pidFile=path.join(temp,'sdk.pid');
  let storage,child,output='';
@@ -58,7 +58,7 @@ if(parent?.filename.endsWith('/server.cjs')&&name==='../business/media/powertoke
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>{if(command!==process.execPath||args[1]!=='--profile')throw Error('unexpected fixture launcher');return value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts);}};
 return value;};`);
   const profiles=path.join(runtime,'dsh-home/profiles');fs.mkdirSync(profiles,{recursive:true});fs.symlinkSync(path.join(root,'shell/node_modules'),path.join(profiles,'node_modules'),'dir');
-  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_SHELL_PORT:String(port),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0',PT_CONTROLLED_MEDIA_AUTHORIZATION:'1',PT_MEDIA_ASSET_HOSTS:'cdn.example.test'},stdio:['ignore','pipe','pipe']});
+  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_SHELL_PORT:String(port),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0',...(process.env.NORTHSTAR_STANDARD3_TEST==='1'?{PT_MEDIA_GENERATION:'standard3'}:{}),PT_CONTROLLED_MEDIA_AUTHORIZATION:'1',PT_MEDIA_ASSET_HOSTS:'cdn.example.test'},stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',b=>output+=b);child.stderr.on('data',b=>output+=b);
   const req=(url,{user=0,method='GET',body,headers={}}={})=>fetch('http://127.0.0.1:'+port+url,{method,headers:{...headers,...(user===null?{}:{Cookie:cookies[user]}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(30000)});
   const json=async(url,opts)=>{const response=await req(url,opts);assert.equal(response.status,200,await response.clone().text());return response.json();};
@@ -66,7 +66,7 @@ return value;};`);
   await json('/api/auth/key',{method:'POST',body:{key:'fixture-no-paid-key'}});
   const input=Buffer.from([137,80,78,71,13,10,26,10,8,7,6,5]);const uploaded=await json('/api/upload',{method:'POST',body:{image:input.toString('base64')}});
   const results=[];
-  for(const taskType of ['text2image','image2image','text2video','image2video']){
+  for(const taskType of (process.env.NORTHSTAR_STANDARD3_TEST==='1'?['text2image','image2image','text2video']:['text2image','image2image','text2video','image2video'])){
    fs.writeFileSync(selector,JSON.stringify({taskType}));const conversationId=(await json('/api/conversations',{method:'POST'})).id;
    const response=await req('/api/chat',{method:'POST',body:{conversationId,message:'Create fixture '+taskType,taskType,...(taskType.startsWith('image2')?{image:uploaded.url}:{})}});
    const runId=response.headers.get('x-agent-run-id');assert.ok(runId);const stream=response.text();
@@ -80,7 +80,7 @@ return value;};`);
    const history=(await json('/api/conversations/'+conversationId)).conversation.messages;assert.equal(history.find(m=>m.role==='assistant').media[0].url,media.url);
    results.push({conversationId,runId});
   }
-  const posts=fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse);assert.equal(posts.length,4);
+  const posts=fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse);assert.equal(posts.length,process.env.NORTHSTAR_STANDARD3_TEST==='1'?3:4);
   for(const post of posts){if(post.taskType.endsWith('image')){assert.equal(post.n,1);assert.equal(post.size,'2048x2048');}else{assert.equal(post.seconds,'5');assert.equal(post.size,'720P');assert.equal(post.ratio,'16:9');}assert.equal(post.reference,post.taskType.startsWith('image2')?'data:image/png;base64,'+input.toString('base64'):null);}
   // A media tool failure must not turn the model success claim into a completed Run.
   // The pure acceptance gate separately checks remote-success-shaped results
@@ -97,7 +97,7 @@ return value;};`);
   const failedRun=await json('/api/runs/'+failedRunId);assert.equal(failedRun.run.state,'failed');assert.equal(failedRun.managedMedia.media.length,0);
   const failedHistory=(await json('/api/conversations/'+failedConversation)).conversation.messages;assert.equal(failedHistory.some(m=>m.role==='assistant'&&m.media?.length),false);
   // Same warm process returns to the default zero-tool profile afterwards.
-  fs.writeFileSync(selector,JSON.stringify({mode:'chat'}));const ordinary=await req('/api/chat',{method:'POST',body:{conversationId:results.at(-1).conversationId,message:'Ordinary text fixture'}});const ordinaryId=ordinary.headers.get('x-agent-run-id');assert.match(await ordinary.text(),/Managed fixture completed/);assert.equal(fs.readFileSync(trace,'utf8').trim().split('\n').length,4);
+  fs.writeFileSync(selector,JSON.stringify({mode:'chat'}));const ordinary=await req('/api/chat',{method:'POST',body:{conversationId:results.at(-1).conversationId,message:'Ordinary text fixture'}});const ordinaryId=ordinary.headers.get('x-agent-run-id');assert.match(await ordinary.text(),/Managed fixture completed/);assert.equal(fs.readFileSync(trace,'utf8').trim().split('\n').length,process.env.NORTHSTAR_STANDARD3_TEST==='1'?3:4);
   const ordinaryEvents=await json('/api/runs/'+ordinaryId+'/events');const ordinaryBudget=ordinaryEvents.events.find(e=>e.type==='usage'&&e.payload.kind==='run_budget');assert.equal(ordinaryBudget.payload.limits.maxToolCalls,0);assert.equal(ordinaryBudget.payload.limits.maxOutputTokens,128);assert.equal(ordinaryBudget.payload.snapshot.modelCalls,1);assert.equal(ordinaryBudget.payload.snapshot.toolCalls,0);
  }finally{
   if(child&&child.exitCode===null){const ended=new Promise(resolve=>child.once('exit',resolve));child.kill('SIGTERM');await ended;}

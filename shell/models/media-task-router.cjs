@@ -24,6 +24,8 @@ function isVerified(candidate, task, adapter) {
 }
 
 function checkCandidate(candidate, taskType, availability, mode) {
+  if(require("./release-media-policy.cjs").isSeedance(candidate?.id))return {code:"MODEL_EXCLUDED_FROM_RELEASE"};
+  if(!require("./release-media-policy.cjs").allowedTask(taskType))return {code:"FEATURE_NOT_RELEASED"};
   const requirements = MEDIA_TASKS[taskType];
   if (!record(candidate) || !text(candidate.id)) return { code: "CANDIDATE_INVALID" };
   if (scopeOf(candidate) !== availability.scopeId) return { code: "MODEL_SCOPE_MISMATCH" };
