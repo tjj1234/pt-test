@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "chain": "skill",
+  "status": "MECHANICAL_PASS",
+  "acceptanceDecision": "MAIN_AGENT_REQUIRED",
+  "scope": "local-controlled-fixtures; no paid provider or target deployment",
+  "baseCommit": "acc3cc6c9ec7dd163d7be1dc6e1a91d1cf954fba",
+  "generatedAt": "2026-11-03T02:51:34.438Z",
+  "sources": {
+    "scripts/northstar-chain-checks.mjs": "26b6ec919b6890fa8567d17667212b3e75ca4f87fb3153233e0e41cf220d9497",
+    "shell/attachments/source-store.cjs": "03dcf706ea1d6ccfc9ac95359c3ec568e21e77917867f31023032b39a0d28686",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/db-migrations/027_native_context_session.sql": "92ad6cdab29af8b41754dd02916ad1c2376a59d405aa34a0974aa1efc6bb88cb",
+    "shell/db-migrations/028_skill_publication.sql": "7e521b2a21b666a541ac097c41e9d5a3ac935d5a4dae0dd6abd2775c3cb08165",
+    "shell/memory/provenance-store.cjs": "c5ed87bddefcf11c238f8fc2e6ba453f9bdb4ab7e5b5c7c7c86d5a5180f45134",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+    "shell/persistent-runner.mjs": "ee22cd736a6e95294dbfc0bec48a0def339d58cbc96f20bba5de80e46d9c0626",
+    "shell/public/app.js": "f76c542576b74ed462fff94d55c96f0b1c58dee584e9bdc3d4522e79fea10889",
+    "shell/public/index.html": "659d194af24b585d5015e5c6c63226718c55b8253d037223eb768efa32c01294",
+    "shell/public/styles.css": "e5559bcb38d1a134f3b716d02bdbf88b436a1649cd63abba2ed1461c65e24e5d",
+    "shell/runtime/dsh-adapter.cjs": "ffab59d5d7c010e158f96529c6291d07c91987d1305258a4fff4294774105560",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "546a1409bb6dfb574ecb9c0a71482a52714e58ed40d3909b1f2f74dd0b75a701",
+    "shell/runtime/published-skill-provider.mjs": "2bfc496097487330c93e03d73fb87923450156fd5443c3d9acab521ef2329eaf",
+    "shell/runtime/run-budget-csv.json": "9f5419dfad11192227620e080cbafc20bc7075294ff00d9b19f85b78bd6c6db9",
+    "shell/runtime/run-budget-media.json": "29771b1acb1eac781d551745e063a86172abcca4d758f72cff50793be60b4287",
+    "shell/runtime/run-budget-skill-csv.json": "48fdc62eed50c04af5c3f3328a013078678079016e3604bccbe02540c7095631",
+    "shell/runtime/run-budget-skill-media.json": "0e2ca3820e72415f367332bf4092c4e08f69782b89c1994c6f4f522b7fbce453",
+    "shell/runtime/run-budget-skill.json": "d7266ff5f8f044fb9acd6064ffa6ba01cfc11a07dd7f547482de52df0187435f",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/server.cjs": "4afed94234b89890954e3325c7c1ae01ebbe871c621518c6605e01df52f9b104",
+    "shell/skills/publication-store.cjs": "629e75d38ea2399f1fee1d5a139acb923d2cf7a75998c3f2a16c2658ba2f62e4",
+    "shell/skills/release-snapshot.cjs": "257dbcb713fdf7772e41f05848da4de970c4c51a22ee1e56d5719ba3c08ef487",
+    "shell/tasks/chat-request.cjs": "4e04396baf1b525b6de998f10d687187df652dcca2f4acee1bf4595c2fba8ecd",
+    "shell/tasks/store.cjs": "6b9d330e1d1ebbfea377092f0abd64cdc0b8de48b89be906140b5c8da3bfccca",
+    "shell/tenant.cjs": "98c4a9a6459575ccce1fb9b94acb436b380fa7f13424696242febd2181a8ba28",
+    "tests/probes/skill-browser-driver-20261102.js": "ba63fb8d942e24b6fa06965f6c4c6293445bedb99d90bf3fc84992c02b0e0488",
+    "tests/regression/native-tool-run-gate-sdk-test.mjs": "85be0b683d50879e95b85326f83373bce3e9e382d2f99241bdfd28847eb8a407",
+    "tests/regression/published-skill-provider-test.mjs": "0b5a810163622c492f7455bffd094ab85b707549122d864faeefb21c01829bac",
+    "tests/regression/skill-http-sdk-integration-test.mjs": "6c00159d499170f76f430f6f92f17f4ef973bb14123c49a4f0412ed62ef0a014",
+    "tests/regression/skill-publication-store-test.mjs": "87c9f8fba8d40a86e1085731953ea8d6558e58a6ea2d255e0279c1ccf7e08bcc",
+    "tests/regression/skill-run-snapshot-test.mjs": "2d2fd764b8b4e3d83d2715005e1d48b5c8103a729242bd667456011bb185d271",
+    "tests/regression/storage-upgrade-test.mjs": "7b9e11f0ed4da5db886c738e8862d8ea9198e9b38d0c6eb40310713db4729ef1"
+  },
+  "sourceDrift": [],
+  "checks": [
+    {
+      "id": "boundaries",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/skill-publication-store-test.mjs",
+        "tests/regression/published-skill-provider-test.mjs",
+        "tests/regression/skill-run-snapshot-test.mjs",
+        "tests/regression/native-tool-run-gate-sdk-test.mjs",
+        "tests/regression/storage-upgrade-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 4005,
+      "log": "docs/refactor/evidence/skill-chain-checks-r24-20261103-boundaries.txt",
+      "logSha256": "b668b5f7aabe2b26eae32909a18dd09de6af9699e21cc85a0b6cd9a8aca67623"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/skill-http-sdk-integration-test.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 7165,
+      "log": "docs/refactor/evidence/skill-chain-checks-r24-20261103-http-sdk.txt",
+      "logSha256": "94afe65bc7f6a132f7ae252a3ae5317139373153e5df073d71b7d326c955de8f"
+    }
+  ]
+}

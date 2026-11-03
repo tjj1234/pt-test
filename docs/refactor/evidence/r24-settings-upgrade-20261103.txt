@@ -1,0 +1,1 @@
+{"status":"R14_TO_R24_SETTINGS_PROFILE_LOCAL_PASS","oldSettingsMatchesReportedReceipt":true,"oldProfileMatchesReportedReceipt":true,"oldManifest":"08e5a633b227427522aa802cff5cb8b61a1b859e687eb4358d141dd9c7e135af","newTemplateHash":"5df264dce03602cc49b201f19e80ccf6b72e8d6d67ea29740240a79bd46fdce9","modelsAdded":3,"oldSettingsBackup":true,"oldProfileBackup":true,"providerCalls":0}

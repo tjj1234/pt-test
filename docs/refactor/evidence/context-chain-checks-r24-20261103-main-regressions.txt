@@ -1,0 +1,47 @@
+{
+  "candidate": "shell/runtime/dsh-native-context-r4-candidate.mjs",
+  "status": "REVIEW_REGRESSIONS_PASS",
+  "providerCalls": 0,
+  "checks": [
+    {
+      "name": "ticket-requires-budget-admission",
+      "passed": true
+    },
+    {
+      "name": "ticket-requires-complete-binding",
+      "passed": true
+    },
+    {
+      "name": "ticket-rejects-nonfinite-ttl",
+      "passed": true
+    },
+    {
+      "name": "replaced-active-run-rejected-before-dispatch",
+      "passed": true
+    },
+    {
+      "name": "actual-output-token-cap-enforced",
+      "passed": true
+    },
+    {
+      "name": "intent-failure-does-not-leak-error-detail",
+      "passed": true
+    },
+    {
+      "name": "event-callback-failure-settles-admission",
+      "passed": true
+    },
+    {
+      "name": "unconsumed-stream-return-releases-admission",
+      "passed": true
+    },
+    {
+      "name": "frozen-native-request-oversized-output-denied",
+      "passed": true
+    },
+    {
+      "name": "ticket-consume-requires-all-binding-fields",
+      "passed": true
+    }
+  ]
+}
