@@ -1112,7 +1112,27 @@ function createMediaAuthorizationPanel(authorization) {
     if(typeof authorization.parameterSummary==="string"&&authorization.parameterSummary.length<=160)note.textContent+=" "+authorization.parameterSummary;
     const select = document.createElement("select"); select.setAttribute("aria-label", "本次媒体模型");
     const placeholder = document.createElement("option"); placeholder.value = ""; placeholder.textContent = "选择媒体模型（提交时核验资格）"; select.appendChild(placeholder);
-    for (const [id] of modelCaps) { const option = document.createElement("option"); option.value = id; option.textContent = id; select.appendChild(option); }
+
+    const taskType = authorization.taskType;
+    const candidates = [];
+    if (mediaQualification && Array.isArray(mediaQualification.rows)) {
+      for (const row of mediaQualification.rows) {
+        const state = row?.tasks?.[taskType];
+        if (state === "ROUTE_READY" || state === "RUNTIME_UNVERIFIED") {
+          candidates.push(row.modelId);
+        }
+      }
+    }
+    if (!candidates.length) {
+      if (taskType === "text2video" || taskType === "image2video") candidates.push("wan2.7-t2v");
+      else if (taskType === "text2image" || taskType === "image2image") candidates.push("seedream-5-0-260128");
+    }
+    for (const id of candidates) {
+      const option = document.createElement("option"); option.value = id; option.textContent = id; select.appendChild(option);
+    }
+    if (candidates.length > 0) {
+      select.value = candidates[0];
+    }
     const button = document.createElement("button"); button.type = "button"; button.textContent = "确认本次提交";
     const result = document.createElement("p"); result.setAttribute("role", "status");
     button.addEventListener("click", async () => {
@@ -1121,9 +1141,13 @@ function createMediaAuthorizationPanel(authorization) {
       try {
         const response = await fetch("/api/runs/" + encodeURIComponent(authorization.runId) + "/media-authorization", { method:"POST", credentials:"same-origin", headers:{"Content-Type":"application/json"}, body:JSON.stringify({confirmed:true,modelId:select.value}) });
         const body = await response.json();
-        if (!response.ok || body.ok !== true) throw new Error(body.code || "MEDIA_AUTHORIZATION_UNAVAILABLE");
+        if (!response.ok || body.ok !== true) throw new Error(body.error || body.code || "MEDIA_AUTHORIZATION_UNAVAILABLE");
         result.textContent = "已确认；该授权仅用于本次任务。";
-      } catch { result.textContent = "本次确认未完成，请检查模型资格或任务是否已过期。"; button.disabled = false; select.disabled = false; }
+      } catch (err) {
+        const errCode = (err && err.message) ? ("（" + err.message + "）") : "";
+        result.textContent = "本次确认未完成" + errCode + "，请检查模型资格或任务是否已过期。";
+        button.disabled = false; select.disabled = false;
+      }
     });
     panel.appendChild(note); panel.appendChild(select); panel.appendChild(button); panel.appendChild(result); return panel;
 }
@@ -1275,8 +1299,12 @@ async function runChat(payload) {
               if (Array.isArray(obj.messages)) {
                 renderChat(obj.messages);
                 restoreManualCheckHistory();
+                if (acc && !obj.messages.some(m => m.role === "assistant")) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
                 if (obj.error) bubbleSys(obj.error);
-              } else bubbleSys("执行失败：" + (obj.error || ""));
+              } else {
+                if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                bubbleSys("执行失败：" + (obj.error || ""));
+              }
               cm.textContent = "";
             }
             if (runId) upstreamMayRunForRuns.delete(runId);
@@ -1326,7 +1354,12 @@ async function runChat(payload) {
                       const messages = detail && detail.conversation && detail.conversation.messages;
                       if (!Array.isArray(messages)) throw new Error("任务结果尚不可用");
                       // The active conversation may change while its final history loads.
-                      if (viewing()) { ++conversationLoadSequence; renderChat(messages); restoreManualCheckHistory(); }
+                      if (viewing()) {
+                        ++conversationLoadSequence;
+                        renderChat(messages);
+                        if (acc && !messages.some(m => m.role === "assistant")) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                        restoreManualCheckHistory();
+                      }
                     }
                     if (viewing()) cm.textContent = event.payload && event.payload.state === "cancelled" ? stoppedChipText("user") : "";
                   }
@@ -1724,7 +1757,14 @@ if (genTypeEl) {
 }
 setGenType(DEFAULT_GEN_TYPE);
 
-function setPendingImage(url) { pendingImage = url; imgThumb.src = url; imgPreview.hidden = false; }
+function setPendingImage(url) {
+  pendingImage = url;
+  imgThumb.src = url;
+  imgPreview.hidden = false;
+  if (modelSelect && modelSelect.value !== "AUTO" && modelSelect.value !== "qwen3.8-flash") {
+    composerNotice("已附加图片。当前模型「" + modelSelect.value + "」可能不支持图片输入，建议切换为「AUTO · 智能选模型」或「qwen3.8-flash」。", "");
+  }
+}
 function clearPendingImage() { pendingImage = null; imgThumb.removeAttribute("src"); imgPreview.hidden = true; if (imgInput) imgInput.value = ""; }
 
 /** 通用拖拽投放区：dragenter / dragover / dragleave / drop 这套逻辑只写一次，
@@ -2639,8 +2679,12 @@ async function loadModels() {
       o.value = m.id;
       const blockedReason = modelAvailabilityLabel(cap);
       o.disabled = !!blockedReason;
-      const firstRunNotice = !blockedReason && cap.manualEligible && cap.verificationRequired ? "（可手动首调）" : "";
-      o.textContent = (m.name || m.id) + (blockedReason ? "（" + (cap.chat === false ? modelKindLabel(cap.kind) + " · " : "") + blockedReason + "）" : firstRunNotice);
+      const isVision = m.id === "qwen3.8-flash" || (Array.isArray(m.inputModalities?.value) && m.inputModalities.value.includes("image")) || j.imageEligibility?.[m.id]?.ok;
+      const visionTag = isVision ? " · 支持图片理解" : "";
+      const firstRunNotice = !blockedReason && cap.manualEligible && cap.verificationRequired ? "（可手动首调" + visionTag + "）" : (visionTag ? "（" + visionTag.slice(3) + "）" : "");
+      const isGen = cap.chat === false;
+      const genNotice = isGen ? "（" + (cap.kind === "video" ? "视频生成" : "图像生成") + " · 点击切换生成模式）" : "";
+      o.textContent = (m.name || m.id) + (isGen ? genNotice : (blockedReason ? "（" + (cap.chat === false ? modelKindLabel(cap.kind) + " · " : "") + blockedReason + "）" : firstRunNotice));
       if (m.id === j.current) o.selected = true;
       modelSelect.appendChild(o);
     }
@@ -2722,6 +2766,17 @@ function buildModelMenu() {
       item.setAttribute("aria-disabled", blockedReason ? "true" : "false");
       item.innerHTML = '<span class="mi-check">' + (o.selected ? "✓" : "") + '</span><span class="mi-label">' + (o.textContent || "") + '</span>' + (blockedReason ? '<span class="mi-tag">' + blockedReason + '</span>' : "");
       item.addEventListener("click", () => {
+        if (cap && cap.chat === false) {
+          if (cap.kind === "video" || /video|wan/i.test(o.value)) {
+            setGenType("text2video");
+            composerNotice("「" + (o.textContent || o.value) + "」为视频生成模型，已自动为你切换到「文生视频」模式，在下方输入描述即可生成。", "");
+          } else {
+            setGenType("text2image");
+            composerNotice("「" + (o.textContent || o.value) + "」为图像生成模型，已自动为你切换到「文生图」模式，在下方输入描述即可生成。", "");
+          }
+          closeModelMenu();
+          return;
+        }
         if (blockedReason) { composerNotice(modelBlockedNotice(o.textContent || o.value, blockedReason, cap), "err"); return; }
         modelSelect.value = o.value;
         modelSelect.dispatchEvent(new Event("change"));

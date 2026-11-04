@@ -30,7 +30,7 @@ const modelCatalog = require("./model-catalog.cjs");
 const {readHostMediaReviews,createReviewedMediaCatalogGetter}=require("./models/reviewed-media-catalog-view.cjs");
 const reviewedMediaCatalog = process.env.PT_MEDIA_REVIEW_FILE
   ? createReviewedMediaCatalogGetter({getCatalog:modelCatalog.getCatalog,readReviews:()=>readHostMediaReviews(process.env.PT_MEDIA_REVIEW_FILE)})
-  : process.env.PT_MEDIA_GENERATION === "standard3" ? async options => require("./models/standard-media-catalog.cjs").standardMediaCatalog(await modelCatalog.getCatalog(options)) : modelCatalog.getCatalog;
+  : process.env.PT_MEDIA_GENERATION !== "off" ? async options => require("./models/standard-media-catalog.cjs").standardMediaCatalog(await modelCatalog.getCatalog(options)) : modelCatalog.getCatalog;
 const { routeTextTask, routeChatTask } = require("./models/task-router.cjs");
 const {nativeImageCandidates}=require('./models/native-image-qualification.cjs');
 const {reviewedImageOverrides}=require('./models/reviewed-image-facts.cjs');
@@ -215,11 +215,22 @@ function catalogInternalFallback(error, failureStage) {
 }
 
 function selectChatModel(catalog, requestedModelId, task='textChat') {
-  return routeChatTask({
+  let routed = routeChatTask({
     candidates: task==='imageUnderstanding'?nativeImageCandidates(catalog):(catalog?.models || []), requirements: { task },
     selection: requestedModelId === modelCatalog.AUTO_ID ? { mode: "auto" } : { mode: "manual", modelId: requestedModelId },
     availability: catalog?.availability,
   });
+  if (!routed.ok && requestedModelId === modelCatalog.AUTO_ID && task === 'imageUnderstanding') {
+    const visionCandidates = nativeImageCandidates(catalog).filter(m => m.tasks?.imageUnderstanding?.value === true && m.availability === 'present' && m.permission === true);
+    if (visionCandidates.length) {
+      routed = routeChatTask({
+        candidates: nativeImageCandidates(catalog), requirements: { task },
+        selection: { mode: "manual", modelId: visionCandidates[0].id },
+        availability: catalog?.availability,
+      });
+    }
+  }
+  return routed;
 }
 const ROUTE_REASON_MESSAGES = Object.freeze({
   AVAILABILITY_UNKNOWN: "当前模型目录状态未确认，请刷新模型列表。",
@@ -240,9 +251,16 @@ const ROUTE_REASON_MESSAGES = Object.freeze({
 function routeFailurePayload(routed, requestedModelId,task='textChat') {
   const reasons = routed?.detail?.reasons || (Array.isArray(routed?.detail) ? routed.detail : []);
   const reasonCodes = [...new Set(reasons.map((reason) => reason?.code).filter((code) => typeof code === "string"))];
-  const error = task==='imageUnderstanding' ? '当前没有通过资格核验的图片理解模型，请选择已确认支持图片输入的模型。' : requestedModelId === modelCatalog.AUTO_ID
-    ? "没有满足当前文字对话资格的模型，请检查模型目录和资格状态。"
-    : (ROUTE_REASON_MESSAGES[reasonCodes[0]] || "所选模型不具备当前文字对话资格。请查看模型列表中的原因并重新选择。");
+  let error;
+  if (task === 'imageUnderstanding') {
+    error = requestedModelId === modelCatalog.AUTO_ID
+      ? '当前没有通过资格核验的图片理解模型，请选择已确认支持图片输入的模型（如 qwen3.8-flash）。'
+      : ('当前所选模型「' + requestedModelId + '」不支持图片理解，请切换为支持图片输入的模型（如 qwen3.8-flash）或选择「AUTO · 智能选模型」。');
+  } else {
+    error = requestedModelId === modelCatalog.AUTO_ID
+      ? "没有满足当前文字对话资格的模型，请检查模型目录和资格状态。"
+      : (ROUTE_REASON_MESSAGES[reasonCodes[0]] || "所选模型不具备当前文字对话资格。请查看模型列表中的原因并重新选择。");
+  }
   return {
     ok: false,
     code: requestedModelId === modelCatalog.AUTO_ID ? "NO_ELIGIBLE_MODEL" : "MODEL_NOT_EXECUTABLE",
@@ -1394,7 +1412,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     }
   }
 
-  if(!DRY_RUN_CHAT&&routed.task==='imageUnderstanding'&&requestedModelId!==modelCatalog.AUTO_ID&&taskRun?.runId&&r.ok===true){
+  if(!DRY_RUN_CHAT&&routed.task==='imageUnderstanding'&&taskRun?.runId&&r.ok===true){
     try{
       const verified=modelCatalog.recordManualImageUnderstandingVerification({catalog:cat,modelId:selectedModel,runId:taskRun.runId,
         budget:r.budget,modelIdentity:r.modelIdentity,imageInput:r.imageInput});
@@ -2335,13 +2353,15 @@ async function handle(req, res) {
     if (currentSelection) current = currentSelection.model;
     const cat = await ensureModelCatalog(me.user.id, { force: true });
     const fallbackModel = modelCatalog.pickDefaultModel(cat.models, tenantMod.defaultModel());
+    const mediaCat = process.env.PT_MEDIA_GENERATION !== "off" ? require("./models/standard-media-catalog.cjs").standardMediaCatalog(cat) : cat;
     // 默认选项改成 AUTO（智能路由）；没选过模型的用户一律落在 AUTO 上
     return json(res, 200, {
       ok: true,
       models: cat.models,
       eligibility: Object.fromEntries(cat.models.map((model) => [model.id, selectChatModel(cat, model.id)])),
+      imageEligibility: Object.fromEntries(cat.models.map((model) => [model.id, selectChatModel(cat, model.id, 'imageUnderstanding')])),
       features: {mediaGeneration:process.env.PT_MEDIA_GENERATION!=="off",mediaTaskTypes:["text2image","image2image","text2video","image2video"].filter(t=>require("./models/release-media-policy.cjs").allowedTask(t))},
-      mediaQualification: process.env.PT_MEDIA_GENERATION==="off"?{ok:false,code:"FEATURE_NOT_RELEASED",rows:[]}:buildMediaQualificationMatrix(cat),
+      mediaQualification: process.env.PT_MEDIA_GENERATION==="off"?{ok:false,code:"FEATURE_NOT_RELEASED",rows:[]}:buildMediaQualificationMatrix(mediaCat),
       availability: cat.availability,
       catalogDiagnostics: cat.catalogDiagnostics || null,
       current: current || modelCatalog.AUTO_ID,
