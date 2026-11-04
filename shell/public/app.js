@@ -1300,10 +1300,11 @@ async function runChat(payload) {
                 renderChat(obj.messages);
                 restoreManualCheckHistory();
                 const lastUserIdx = obj.messages.map(m => m.role).lastIndexOf("user");
-                const hasTurnAssistant = lastUserIdx >= 0
-                  ? obj.messages.slice(lastUserIdx + 1).some(m => m.role === "assistant")
-                  : obj.messages.some(m => m.role === "assistant");
-                if (acc && !hasTurnAssistant) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                const turnAssistant = lastUserIdx >= 0
+                  ? obj.messages.slice(lastUserIdx + 1).filter(m => m.role === "assistant").pop()
+                  : obj.messages.filter(m => m.role === "assistant").pop();
+                const accSaved = Boolean(acc && turnAssistant && turnAssistant.text && turnAssistant.text.includes(acc.trim()));
+                if (acc && !accSaved) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
                 if (obj.error) bubbleSys(obj.error);
               } else {
                 if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
@@ -1362,10 +1363,11 @@ async function runChat(payload) {
                         ++conversationLoadSequence;
                         renderChat(messages);
                         const lastUserIdx = messages.map(m => m.role).lastIndexOf("user");
-                        const hasTurnAssistant = lastUserIdx >= 0
-                          ? messages.slice(lastUserIdx + 1).some(m => m.role === "assistant")
-                          : messages.some(m => m.role === "assistant");
-                        if (acc && !hasTurnAssistant) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                        const turnAssistant = lastUserIdx >= 0
+                          ? messages.slice(lastUserIdx + 1).filter(m => m.role === "assistant").pop()
+                          : messages.filter(m => m.role === "assistant").pop();
+                        const accSaved = Boolean(acc && turnAssistant && turnAssistant.text && turnAssistant.text.includes(acc.trim()));
+                        if (acc && !accSaved) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
                         restoreManualCheckHistory();
                       }
                     }

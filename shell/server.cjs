@@ -1394,54 +1394,77 @@ async function handleChat(req, res, me, body, taskRun = null) {
   if (htmlBlockMatch && (!r.artifacts || !r.artifacts.some(a => a && a.rel && a.rel.endsWith(".html")))) {
     try {
       const tenantWs = tenantMod.getTenantWorkspace ? tenantMod.getTenantWorkspace(me.tenant.id) : path.join(RUNTIME, "workspaces", me.tenant.id);
-      fs.mkdirSync(tenantWs, { recursive: true });
-      const htmlContent = htmlBlockMatch[1].trim();
-
-      let htmlRel = "report.html";
-      let htmlAbs = path.join(tenantWs, htmlRel);
-
-      let candidateExists = false;
+      let wsStat;
       try {
-        fs.lstatSync(htmlAbs);
-        candidateExists = true;
+        wsStat = fs.lstatSync(tenantWs);
       } catch (e) {
-        if (e.code !== "ENOENT") throw e;
-      }
-
-      if (candidateExists) {
-        let seq = 1;
-        while (true) {
-          const nextRel = "report_" + (++seq) + ".html";
-          const nextAbs = path.join(tenantWs, nextRel);
-          try {
-            fs.lstatSync(nextAbs);
-          } catch (e) {
-            if (e.code === "ENOENT") {
-              htmlRel = nextRel;
-              htmlAbs = nextAbs;
-              break;
-            }
-          }
-          if (seq > 1000) {
-            htmlRel = "report_" + Date.now() + ".html";
-            htmlAbs = path.join(tenantWs, htmlRel);
-            break;
-          }
+        if (e && e.code === "ENOENT") {
+          fs.mkdirSync(tenantWs, { recursive: true });
+          wsStat = fs.lstatSync(tenantWs);
+        } else {
+          throw e;
         }
       }
-
-      const fd = fs.openSync(htmlAbs, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
-      try {
-        fs.writeFileSync(fd, htmlContent, "utf8");
-      } finally {
-        fs.closeSync(fd);
+      if (!wsStat || wsStat.isSymbolicLink() || !wsStat.isDirectory()) {
+        throw new Error("tenant workspace is not a safe directory");
       }
+      const dirFlags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
+      const dirFd = fs.openSync(tenantWs, dirFlags);
+      try {
+        const htmlContent = htmlBlockMatch[1].trim();
+        let written = false;
+        let seq = 1;
+        while (!written && seq <= 1000) {
+          const htmlRel = seq === 1 ? "report.html" : "report_" + seq + ".html";
+          const htmlAbs = path.join(tenantWs, htmlRel);
+          let exists = false;
+          try {
+            fs.lstatSync(htmlAbs);
+            exists = true;
+          } catch (e) {
+            if (e && e.code !== "ENOENT") throw e;
+          }
+          if (exists) {
+            seq++;
+            continue;
+          }
 
-      const stat = fs.statSync(htmlAbs);
-      const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: htmlRel, size: stat.size, mtime: stat.mtimeMs });
-      if (art) {
-        hostArtifacts.set(art.rel, art);
-        sse({ artifact: art });
+          let fd;
+          try {
+            fd = fs.openSync(htmlAbs, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+          } catch (openErr) {
+            if (openErr && (openErr.code === "EEXIST" || openErr.code === "EINVAL")) {
+              seq++;
+              continue;
+            }
+            throw openErr;
+          }
+
+          try {
+            fs.writeFileSync(fd, htmlContent, "utf8");
+            if (typeof fs.fsyncSync === "function") fs.fsyncSync(fd);
+          } catch (writeErr) {
+            try { fs.closeSync(fd); } catch (_) {}
+            try { fs.unlinkSync(htmlAbs); } catch (_) {}
+            throw writeErr;
+          }
+          fs.closeSync(fd);
+
+          const stat = fs.statSync(htmlAbs);
+          if (!stat.isFile() || (typeof stat.nlink === "number" && stat.nlink !== 1)) {
+            try { fs.unlinkSync(htmlAbs); } catch (_) {}
+            throw new Error("artifact must be regular file with nlink=1");
+          }
+
+          const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: htmlRel, size: stat.size, mtime: stat.mtimeMs });
+          if (art) {
+            hostArtifacts.set(art.rel, art);
+            sse({ artifact: art });
+          }
+          written = true;
+        }
+      } finally {
+        try { fs.closeSync(dirFd); } catch (_) {}
       }
     } catch (e) {
       log.warn("html_artifact_materialize_failed", { error: e && e.message ? e.message : String(e) });
