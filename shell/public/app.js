@@ -1299,7 +1299,11 @@ async function runChat(payload) {
               if (Array.isArray(obj.messages)) {
                 renderChat(obj.messages);
                 restoreManualCheckHistory();
-                if (acc && !obj.messages.some(m => m.role === "assistant")) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                const lastUserIdx = obj.messages.map(m => m.role).lastIndexOf("user");
+                const hasTurnAssistant = lastUserIdx >= 0
+                  ? obj.messages.slice(lastUserIdx + 1).some(m => m.role === "assistant")
+                  : obj.messages.some(m => m.role === "assistant");
+                if (acc && !hasTurnAssistant) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
                 if (obj.error) bubbleSys(obj.error);
               } else {
                 if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
@@ -1357,7 +1361,11 @@ async function runChat(payload) {
                       if (viewing()) {
                         ++conversationLoadSequence;
                         renderChat(messages);
-                        if (acc && !messages.some(m => m.role === "assistant")) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                        const lastUserIdx = messages.map(m => m.role).lastIndexOf("user");
+                        const hasTurnAssistant = lastUserIdx >= 0
+                          ? messages.slice(lastUserIdx + 1).some(m => m.role === "assistant")
+                          : messages.some(m => m.role === "assistant");
+                        if (acc && !hasTurnAssistant) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
                         restoreManualCheckHistory();
                       }
                     }

@@ -1395,11 +1395,50 @@ async function handleChat(req, res, me, body, taskRun = null) {
     try {
       const tenantWs = tenantMod.getTenantWorkspace ? tenantMod.getTenantWorkspace(me.tenant.id) : path.join(RUNTIME, "workspaces", me.tenant.id);
       fs.mkdirSync(tenantWs, { recursive: true });
-      const htmlRel = "report.html";
-      const htmlAbs = path.join(tenantWs, htmlRel);
-      fs.writeFileSync(htmlAbs, htmlBlockMatch[1].trim(), "utf8");
+      const htmlContent = htmlBlockMatch[1].trim();
+
+      let htmlRel = "report.html";
+      let htmlAbs = path.join(tenantWs, htmlRel);
+
+      let candidateExists = false;
+      try {
+        fs.lstatSync(htmlAbs);
+        candidateExists = true;
+      } catch (e) {
+        if (e.code !== "ENOENT") throw e;
+      }
+
+      if (candidateExists) {
+        let seq = 1;
+        while (true) {
+          const nextRel = "report_" + (++seq) + ".html";
+          const nextAbs = path.join(tenantWs, nextRel);
+          try {
+            fs.lstatSync(nextAbs);
+          } catch (e) {
+            if (e.code === "ENOENT") {
+              htmlRel = nextRel;
+              htmlAbs = nextAbs;
+              break;
+            }
+          }
+          if (seq > 1000) {
+            htmlRel = "report_" + Date.now() + ".html";
+            htmlAbs = path.join(tenantWs, htmlRel);
+            break;
+          }
+        }
+      }
+
+      const fd = fs.openSync(htmlAbs, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+      try {
+        fs.writeFileSync(fd, htmlContent, "utf8");
+      } finally {
+        fs.closeSync(fd);
+      }
+
       const stat = fs.statSync(htmlAbs);
-      const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: "report.html", size: stat.size, mtime: stat.mtimeMs });
+      const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: htmlRel, size: stat.size, mtime: stat.mtimeMs });
       if (art) {
         hostArtifacts.set(art.rel, art);
         sse({ artifact: art });
