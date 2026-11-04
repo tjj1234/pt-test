@@ -684,8 +684,14 @@ async function handleChat(req, res, me, body, taskRun = null) {
     return;
   };
 
+  const hasAttachments = Boolean(
+    body.image ||
+    (Array.isArray(body.documents) && body.documents.length) ||
+    (Array.isArray(body.media) && body.media.length) ||
+    (Array.isArray(body.sourceCitations) && body.sourceCitations.length)
+  );
   if (!conversationId) return rejectChat(400, { ok: false, error: "缺少 conversationId" });
-  if (!regenerate && !hasBranch && !msgRaw) return rejectChat(400, { ok: false, error: "问题不能为空" });
+  if (!regenerate && !hasBranch && !msgRaw && !hasAttachments) return rejectChat(400, { ok: false, error: "问题不能为空" });
 
   // 加载对话（归属校验：只取属于当前用户的）
   const conv = await conversations.get(uid, conversationId);
@@ -711,6 +717,12 @@ async function handleChat(req, res, me, body, taskRun = null) {
   }
   let messages = Array.isArray(conv.messages) ? conv.messages : [];
   let question = msgRaw;
+  if (!question && hasAttachments) {
+    if (body.image) question = "请分析这张图片";
+    else if (Array.isArray(body.documents) && body.documents.length) question = "请分析附件内容";
+    else if (Array.isArray(body.media) && body.media.length) question = "请分析音视频内容";
+    else question = "请分析引用的资料内容";
+  }
 
   // v3 Runs retain the preference captured before enqueue. Legacy v1/v2
   // requests have no historical snapshot and use the bound conversation value.
@@ -2879,7 +2891,31 @@ async function main() {
   memoryProvenance=createMemoryProvenanceStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   sources=createSourceStore({db:auth.db,uploadsRoot:path.join(RUNTIME,'_uploads'),onRevoke:async(identity,conversationIds)=>{
     const affected=new Set(conversationIds);let cursor=null;
-    do{const page=await taskStore.listRuns(identity,{afterRunId:cursor,limit:500});for(const run of page.runs){if(affected.has(run.conversationId)&&['queued','running','waiting_external','awaiting_confirmation','cancelling'].includes(run.state)){const result=await taskExecution.cancel(identity,run.runId);if(['queued','running','waiting_external','awaiting_confirmation','cancelling'].includes(result.run?.state))throw Error('Run not drained');}}cursor=page.hasMore?page.nextCursor:null;}while(cursor);
+    do{
+      const page=await taskStore.listRuns(identity,{afterRunId:cursor,limit:500});
+      for(const run of page.runs){
+        if(affected.has(run.conversationId)&&['queued','running','waiting_external','awaiting_confirmation','cancelling'].includes(run.state)){
+          let curRun = run;
+          if (curRun.state !== 'cancelling') {
+            const result = await taskExecution.cancel(identity, curRun.runId);
+            curRun = result?.run || curRun;
+          }
+          for (let wait = 0; wait < 10 && ['queued','running','waiting_external','awaiting_confirmation','cancelling'].includes(curRun.state); wait++) {
+            await new Promise(r => setTimeout(r, 100));
+            curRun = await taskStore.getRun(identity, run.runId);
+          }
+          if (curRun && (curRun.state === 'cancelling' || curRun.state === 'queued')) {
+            try {
+              curRun = await taskStore.transition(identity, run.runId, 'cancelled', curRun.revision);
+            } catch (e) {
+              curRun = await taskStore.getRun(identity, run.runId);
+            }
+          }
+          if(['queued','running','waiting_external','awaiting_confirmation','cancelling'].includes(curRun?.state))throw Error('Run not drained');
+        }
+      }
+      cursor=page.hasMore?page.nextCursor:null;
+    }while(cursor);
     for(const id of affected)tenantMod.closeDshSession(id);
   }});
   controlledMediaGrants = createMediaGrantStoreCandidate(auth.db, {

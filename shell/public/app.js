@@ -1400,7 +1400,9 @@ async function runChat(payload) {
 
 async function ask(msg) {
   // composerLocked 这里再兜一道：输入框 disabled 挡得住手点，挡不住脚本/回车以外的路径
-  if (state.busy || state.composerLocked || !msg.trim()) return;
+  const readyMedia = pendingMedia.filter(m => m && m.url && !m.uploading);
+  const hasAttachments = Boolean(pendingImage || pendingDocs.length || readyMedia.length || pendingSourceCitations.length);
+  if (state.busy || state.composerLocked || (!msg.trim() && !hasAttachments)) return;
   // 只有「图生*」才必须有参考图；「文生*」和「自动」都不强制用户先传图
   const genCfg = genTypeCfg(state.genType);
   if (genCfg.needsRef && !pendingImage) {
@@ -1427,8 +1429,9 @@ async function ask(msg) {
     composerNotice("一次只能确认一个 CSV 分析范围，请移除多余选择后再发送", "err");
     return;
   }
+  const effectiveMsg = msg.trim() || (pendingImage ? "请分析这张图片" : (pendingDocs.length ? "请分析附件内容" : (readyMedia.length ? "请分析音视频内容" : "请分析引用的资料内容")));
   ta.value = ""; ta.style.height = "auto";
-  const payload = { conversationId: state.activeId, message: msg };
+  const payload = { conversationId: state.activeId, message: effectiveMsg };
   if(pendingSourceCitations.length)payload.sourceCitations=pendingSourceCitations.map(({label,...item})=>item);
   // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
   if (currentPanel) payload.context = { panel: currentPanel, panelLabel: TITLES[currentPanel] || currentPanel };
@@ -1454,7 +1457,7 @@ async function ask(msg) {
   // 立即渲染用户消息（乐观更新），AI 回复回来后再用服务器完整列表覆盖
   // media 也要带进乐观渲染，否则发出去要等服务器往返回来才看到播放器，像没发成功。
   renderMessage({
-    role: "user", text: msg, ts: Date.now(),
+    role: "user", text: effectiveMsg, ts: Date.now(),
     image: pendingImage || undefined, documents: payload.documents,
     media: optimisticMedia || payload.media,
   });
@@ -2311,18 +2314,23 @@ if (imgInput) imgInput.addEventListener("change", async () => {
 // 把素材直接拖进聊天输入区：复用 impDrop 那套 drop 逻辑（attachDropZone）
 attachDropZone(emptyInputEl, handleComposerFile);
 
-// NEW-1：Ctrl+V / 右键粘贴图片（读剪贴板 image/* 项，自动上传并预览）
+// NEW-1：Ctrl+V / 右键粘贴文件（支持图片、文档/表格、音视频，自动上传并预览）
 if (ta) ta.addEventListener("paste", async (e) => {
   const items = (e.clipboardData && e.clipboardData.items) || [];
-  let imgItem = null;
+  const files = [];
   for (const it of items) {
-    if (it && it.kind === "file" && /^image\//.test(it.type || "")) { imgItem = it; break; }
+    if (it && it.kind === "file") {
+      const f = it.getAsFile();
+      if (f && (isDocFile(f) || mediaKindOf(f) || /^image\//.test(f.type || ""))) {
+        files.push(f);
+      }
+    }
   }
-  if (!imgItem) return; // 剪贴板没有图片：走默认文本粘贴
-  e.preventDefault(); // 拦截，避免图片以 base64 文本污染输入框
-  const f = imgItem.getAsFile();
-  if (!f) return;
-  await handleComposerFile(f);
+  if (!files.length) return; // 剪贴板没有受支持的文件：走默认文本粘贴
+  e.preventDefault(); // 拦截，避免文件以二进制/base64 文本污染输入框
+  for (const f of files) {
+    await handleComposerFile(f);
+  }
 });
 
 /* ---- ⑦ 搜索 ---- */
@@ -2377,6 +2385,18 @@ function sourceLocation(hit){const loc=hit.locator||{};return loc.cell?`${loc.sh
 async function loadSources(){
  const list=$("#sourceList"),status=$("#sourceStatus");if(!list)return;
  try{const response=await fetch('/api/sources'+(state.activeId?'?conversationId='+encodeURIComponent(state.activeId):''),{credentials:'same-origin'});const value=await response.json();if(!response.ok||!value.ok)throw Error();sourceRecords=value.sources;list.replaceChildren();
+  if (sourceRecords.length > 0) {
+    const actRow = document.createElement('div');
+    actRow.style.cssText = 'display:flex;gap:8px;margin-bottom:6px;';
+    const select8 = document.createElement('button'); select8.type = 'button'; select8.textContent = '选前8项';
+    select8.addEventListener('click', () => { list.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach((c, idx) => { c.checked = idx < 8; }); });
+    const deselect = document.createElement('button'); deselect.type = 'button'; deselect.textContent = '取消全选';
+    deselect.addEventListener('click', () => { list.querySelectorAll('input[type="checkbox"]').forEach((c) => { c.checked = false; }); });
+    const clearChip = document.createElement('button'); clearChip.type = 'button'; clearChip.textContent = '清空已选引用';
+    clearChip.addEventListener('click', () => { clearSourceCitations(); });
+    actRow.appendChild(select8); actRow.appendChild(deselect); actRow.appendChild(clearChip);
+    list.appendChild(actRow);
+  }
   for(const source of sourceRecords){const row=document.createElement('div'),label=document.createElement('label'),check=document.createElement('input');check.type='checkbox';check.value=source.id;check.checked=!source.deleted&&sourceRecords.indexOf(source)<8;check.disabled=source.deleted;label.appendChild(check);label.appendChild(document.createTextNode(source.name+' · v'+source.version));row.appendChild(label);
    const remove=document.createElement('button');remove.type='button';remove.textContent=source.pendingCleanup?'重试删除':'删除';remove.addEventListener('click',async()=>{
     if(!confirm('删除此资料并停止受影响的运行？历史记录保留，但旧模型上下文不再使用。'))return;remove.disabled=true;
