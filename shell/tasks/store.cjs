@@ -257,7 +257,20 @@ function createTaskStore(db, opts = {}) {
   async function listRuns(identity, { afterRunId = null, limit = 100 } = {}) {
     c.assertContract("identity", identity);
     pageOptions(0, limit);
-    const result = await db.query("SELECT * FROM agent_runs WHERE user_id=$1 AND tenant_id=$2 AND ($3::uuid IS NULL OR run_id>$3::uuid) ORDER BY run_id LIMIT $4", [identity.userId, identity.tenantId, afterRunId, limit + 1]);
+    let afterCreatedAt = null;
+    if (afterRunId) {
+      const cursorRow = await db.query("SELECT created_at FROM agent_runs WHERE run_id=$1", [afterRunId]);
+      if (cursorRow.rows.length) afterCreatedAt = cursorRow.rows[0].created_at;
+    }
+    const result = afterCreatedAt
+      ? await db.query(
+          "SELECT * FROM agent_runs WHERE user_id=$1 AND tenant_id=$2 AND (created_at < $3 OR (created_at = $3 AND run_id < $4::uuid)) ORDER BY created_at DESC, run_id DESC LIMIT $5",
+          [identity.userId, identity.tenantId, afterCreatedAt, afterRunId, limit + 1]
+        )
+      : await db.query(
+          "SELECT * FROM agent_runs WHERE user_id=$1 AND tenant_id=$2 AND ($3::uuid IS NULL OR run_id < $3::uuid) ORDER BY created_at DESC, run_id DESC LIMIT $4",
+          [identity.userId, identity.tenantId, afterRunId, limit + 1]
+        );
     const runs = result.rows.slice(0, limit).map(decode);
     return { runs, nextCursor: runs.at(-1)?.runId ?? afterRunId, hasMore: result.rows.length > limit };
   }

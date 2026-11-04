@@ -1343,6 +1343,10 @@ async function handleChat(req, res, me, body, taskRun = null) {
   }
 
   if (!r.ok) {
+    if (["AGENT_TURN_INCOMPLETE", "RUN_TASK_FAILED", "AGENT_TURN_ABORTED", "RUN_DURATION_LIMIT", "AGENT_HOOK_ABORTED"].includes(r.code)) {
+      try { tenantMod.closeDshSession(conversationId); } catch (e) {}
+      try { await auth.db.query('UPDATE conversations SET native_session_id=NULL,native_session_key_sha256=NULL WHERE id=$1 AND user_id=$2', [conversationId, uid]); } catch (e) {}
+    }
     await persistSteps(r.steps);
     await persistUsage();
     // DSH 执行失败：把失败信息作为助手回复落库
@@ -1385,6 +1389,25 @@ async function handleChat(req, res, me, body, taskRun = null) {
   }
   const media = Array.isArray(r.media) ? r.media : null;
   const report = r.report && typeof r.report === "object" ? r.report : null;
+  const htmlBlockMatch = reply && (reply.match(/```html\s*([\s\S]*?<!DOCTYPE html[\s\S]*?<\/html>[\s\S]*?)```/i) ||
+                                  reply.match(/```html\s*(<html[\s\S]*?<\/html>)[\s\S]*?```/i));
+  if (htmlBlockMatch && (!r.artifacts || !r.artifacts.some(a => a && a.rel && a.rel.endsWith(".html")))) {
+    try {
+      const tenantWs = tenantMod.getTenantWorkspace ? tenantMod.getTenantWorkspace(me.tenant.id) : path.join(RUNTIME, "workspaces", me.tenant.id);
+      fs.mkdirSync(tenantWs, { recursive: true });
+      const htmlRel = "report.html";
+      const htmlAbs = path.join(tenantWs, htmlRel);
+      fs.writeFileSync(htmlAbs, htmlBlockMatch[1].trim(), "utf8");
+      const stat = fs.statSync(htmlAbs);
+      const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: "report.html", size: stat.size, mtime: stat.mtimeMs });
+      if (art) {
+        hostArtifacts.set(art.rel, art);
+        sse({ artifact: art });
+      }
+    } catch (e) {
+      log.warn("html_artifact_materialize_failed", { error: e && e.message ? e.message : String(e) });
+    }
+  }
   const artifacts = [...new Map([
     ...(Array.isArray(r.artifacts) ? r.artifacts.map(artifact => artifactsMod.normalizeArtifact(artifact)).filter(Boolean).map(artifact=>[artifact.rel,artifact]) : []),
     ...hostArtifacts.entries(),
@@ -2331,7 +2354,7 @@ async function handle(req, res) {
     const conversationId = query.get("conversationId");
     if (!conversationId || !(await conversations.getModelPreference(me.user.id, conversationId))) return json(res,404,{ok:false,code:"NOT_FOUND",error:"对话不存在或不属于你"});
     const model = query.get("model");
-    const cat = await ensureModelCatalog(me.user.id,{force:true});
+    const cat = await ensureModelCatalog(me.user.id, { force: false });
     const route = selectChatModel(cat,model);
     if (model === modelCatalog.AUTO_ID || !route.ok) return json(res,409,{ok:false,code:"MODEL_NOT_EXECUTABLE",error:"请先选择可用模型"});
     const controller = new AbortController();
@@ -2351,7 +2374,8 @@ async function handle(req, res) {
     const currentSelection = conversationId ? await conversations.getModelSelection(me.user.id,conversationId) : null;
     if (conversationId && !currentSelection) return json(res,404,{ok:false,code:"NOT_FOUND",error:"对话不存在或不属于你"});
     if (currentSelection) current = currentSelection.model;
-    const cat = await ensureModelCatalog(me.user.id, { force: true });
+    const forceCatalog = String(modelUrl.searchParams.get("force") || "") === "1" || String(modelUrl.searchParams.get("force") || "").toLowerCase() === "true";
+    const cat = await ensureModelCatalog(me.user.id, { force: forceCatalog });
     const fallbackModel = modelCatalog.pickDefaultModel(cat.models, tenantMod.defaultModel());
     const mediaCat = process.env.PT_MEDIA_GENERATION !== "off" ? require("./models/standard-media-catalog.cjs").standardMediaCatalog(cat) : cat;
     // 默认选项改成 AUTO（智能路由）；没选过模型的用户一律落在 AUTO 上
@@ -2380,7 +2404,7 @@ async function handle(req, res) {
     const model = String(body.model || "").trim();
     const conversationId = String(body.conversationId || "").trim();
     if (conversationId && !(await conversations.getModelPreference(me.user.id, conversationId))) return json(res, 404, { ok: false, code: "NOT_FOUND", error: "对话不存在或不属于你" });
-    const catSel = await ensureModelCatalog(me.user.id, { force: true });
+    const catSel = await ensureModelCatalog(me.user.id, { force: false });
     const selected = catSel.models.find((m) => m.id === model);
     if (model !== modelCatalog.AUTO_ID && !selected) return json(res, 400, { ok: false, code: "UNKNOWN_MODEL", error: "未知模型" });
     if (model !== modelCatalog.AUTO_ID) {

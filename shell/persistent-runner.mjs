@@ -982,6 +982,7 @@ function apply(ctx) {
             code: "AGENT_TURN_INCOMPLETE",
             message: "Agent turn ended without completion (reason=" + String(outcome.reason?.kind || "unknown").slice(0, 80) + ")",
           };
+          agentMap.delete(sid);
         } else if (!outcome.text.trim()) {
           failure = { code: "EMPTY_ASSISTANT_RESPONSE", message: "Agent turn completed without producing assistant text" };
         }
@@ -1007,6 +1008,7 @@ function apply(ctx) {
           ms: Date.now() - t0,
         });
       } catch (e) {
+        agentMap.delete(sid);
         rejectToolRequests(sid, "TASK_FAILED", "DSH task ended before the parent response arrived");
         const usageEvidence = firstSeq == null ? collectResponseUsage([], 0) : collectTurnUsage();
         const code = activeBudget?.expired ? "RUN_DURATION_LIMIT" : turn.cancelOrigin === "shutdown" ? "RUN_INTERRUPTED" : turn.cancelOrigin === "user" ? "RUN_CANCELLED" : (RUNNER_FAILURE_MESSAGES[e?.code] ? e.code : "RUN_TASK_FAILED");
