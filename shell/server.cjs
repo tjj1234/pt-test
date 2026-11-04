@@ -48,7 +48,7 @@ const artifactsMod = require("./runtime/artifacts.cjs");
 const { openTenantArtifact } = require("./runtime/artifact-open.cjs");
 
 // ---- 模块接线（全部最终名；conversations / tenant 为对话窗口化后的新版）----
-const { initAuth } = require("./auth.cjs");
+const { initAuth, callAnalyticsInternalTokenEndpoint } = require("./auth.cjs");
 const { handleAuthRoutes, sessionFromCookie } = require("./auth-routes.cjs");
 const { createGoogleAuthRoutes } = require("./auth-google-routes.cjs");
 const keysMod = require("./keys.cjs");
@@ -448,6 +448,27 @@ function dashProxyHeaders(req, tenantId) {
   return h;
 }
 
+const provisionedAnalyticsTenants = new Set();
+async function ensureTenantAnalytics(tenantId, label = "tenant") {
+  if (!tenantId || provisionedAnalyticsTenants.has(tenantId)) return;
+  try {
+    await callAnalyticsInternalTokenEndpoint(tenantId, `租户 ${label} 的分析 token`);
+    provisionedAnalyticsTenants.add(tenantId);
+  } catch (e) {
+    log.error("ensure_tenant_analytics_failed", { tenantId, error: e && e.message ? e.message : String(e) });
+  }
+}
+
+function inferMediaTaskType(text, hasImage) {
+  if (!text || typeof text !== "string") return null;
+  const t = text.trim();
+  const wantsVideo = /^(生成视频|文生视频|制作视频|做个视频|合成视频|帮我做个视频)/i.test(t) || /(生成视频|文生视频)/i.test(t);
+  const wantsImage = /^(生成图片|文生图|画一张|帮我画|绘制一张|生成一张.*图)/i.test(t) || /(生成图片|文生图)/i.test(t);
+  if (wantsVideo) return hasImage ? "image2video" : "text2video";
+  if (wantsImage) return hasImage ? "image2image" : "text2image";
+  return null;
+}
+
 /* ============================================================================
  * DSH 入口发现（跨平台）
  * ========================================================================== */
@@ -741,6 +762,10 @@ async function handleChat(req, res, me, body, taskRun = null) {
     return rejectChat(400, { ok: false, code: "MEDIA_TASK_UNSUPPORTED", error: "不支持该素材生成类型" });
   }
   let taskType = body.taskType || null;
+  if (!taskType && process.env.PT_MEDIA_GENERATION !== "off") {
+    const hasImage = Boolean(body.image || messages[messages.length - 1]?.image);
+    taskType = inferMediaTaskType(body.message, hasImage);
+  }
 
   // M2：当前上下文（如 { panel, panelLabel }），透传给 DSH 拼进系统提示
   const context = (body.context && typeof body.context === "object" && !Array.isArray(body.context)) ? body.context : null;
@@ -1646,6 +1671,7 @@ async function handle(req, res) {
       tenantId = owner.rows.length ? owner.rows[0].tenant_id : null;
     }
     if (!tenantId) return json(res, 403, { ok: false, error: "无法确定访问租户" });
+    await ensureTenantAnalytics(tenantId, tenantId);
     // B14：动态计算 HMAC token（无需缓存）
     const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
     if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
@@ -1664,6 +1690,7 @@ async function handle(req, res) {
     const meAttribution = await authed(req);
     if (!meAttribution) return json(res, 401, { ok: false, error: "没登录" });
     const tenantId = meAttribution.tenant ? meAttribution.tenant.id : null;
+    await ensureTenantAnalytics(tenantId, meAttribution.user?.username || tenantId);
     // B14：动态计算 HMAC token（无需缓存）
     const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
     if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
@@ -1683,6 +1710,7 @@ async function handle(req, res) {
     const meBusiness = await authed(req);
     if (!meBusiness) return json(res, 401, { ok: false, error: "没登录" });
     const tenantId = meBusiness.tenant ? meBusiness.tenant.id : null;
+    await ensureTenantAnalytics(tenantId, meBusiness.user?.username || tenantId);
     // B14：动态计算 HMAC token（无需缓存）
     const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
     if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
@@ -1959,6 +1987,7 @@ async function handle(req, res) {
     const INTERNAL_KEY = process.env.PT_DASH_INTERNAL_KEY;
     if (!INTERNAL_KEY) return json(res, 503, { ok: false, error: "内部密钥 PT_DASH_INTERNAL_KEY 未配置" });
     try {
+      await ensureTenantAnalytics(me.tenant.id, me.user?.username || me.tenant.id);
       const raw = await queryBusinessWorkspace({
         internalKey: INTERNAL_KEY,
         dashPort: DASH_PORT,
@@ -2834,6 +2863,7 @@ async function main() {
       const { createWorkspace } = require("./workspace/index.cjs");
       createWorkspace("ws_" + tenantId, tenantId);
       tenantMod.ensureTenantWorkspace(tenantId);
+      await ensureTenantAnalytics(tenantId, result?.user?.username || result?.user?.email || "google");
     },
   });
   const loopbackHosts = new Set(["127.0.0.1", "localhost", "::1"]);
@@ -2993,10 +3023,11 @@ async function main() {
 
       // P1-3 安全：CSP + 防嗅探 + 防点击劫持（脚本/连接/图片仅同源 + data/blob；媒体域名放行 *.volces.com；禁内联脚本）
       // media.route 的结果可能位于火山 TOS 或已验证的 PT R2 资源主机；图片展示也必须放行该 R2 主机。
+      // frame-ancestors 放行同源 'self'，允许本系统前端 iframe 加载 /dashboard/ 归因看板，阻断第三方跨站嵌入
       res.setHeader("Content-Security-Policy",
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; media-src 'self' https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; connect-src 'self' https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; media-src 'self' https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; connect-src 'self' https://*.volces.com https://pub-425ca9cea13d454a907692a0a9f80079.r2.dev; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
       res.setHeader("X-Content-Type-Options", "nosniff");
-      res.setHeader("X-Frame-Options", "DENY");
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
 
       // P0-4 安全：HTTPS 生产模式对所有响应加 HSTS
       if (COOKIE_SECURE) res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");

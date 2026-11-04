@@ -332,6 +332,9 @@ function apply(ctx) {
               !active.toolPolicy.allowedMediaTaskTypes.includes(args[0]?.taskType)) {
             throw deny("RUN_MEDIA_TASK_NOT_ALLOWED", "Run media task is outside the configured scope");
           }
+          if (name === "get_current_time") {
+            return await execute.apply(this, args);
+          }
           const admission = active.budget.admit({ type: "tool", key: canonicalToolKey(name, args[0]) });
           if (!admission.allowed) {
             if (admission.code === "RUN_DURATION_LIMIT") active.expire?.();
