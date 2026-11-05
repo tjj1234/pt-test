@@ -501,6 +501,7 @@ function apply(ctx) {
       let durationTimer = null;
       let activeBudget = null;
       let firstSeq = null;
+      let turnDispatched = false;
       const collectTurnUsage=()=>{
         const events=rec?.agent?.session?.events||[],evidence=collectResponseUsage(events,firstSeq??0);
         const recorded=events.filter(event=>event.seq>=(firstSeq??0)&&event.type==='compaction/summary'&&event.data?.llmStreamCall===true).length;
@@ -913,7 +914,7 @@ function apply(ctx) {
           };
           let handle;try{handle=cmd.resume===true?await agents.resume({...creationOptions,resumeSessionId:creationOptions.sessionId}):await agents.create(creationOptions);}catch(error){if(cmd.resume===true)throw budgetAdmissionError('NATIVE_SESSION_UNAVAILABLE');throw error;}const {agent}=handle;
           await agent.whenIdle();
-          rec = { agent, modelSelection: selection, hasNativeImages: cmd.resume===true && agent.session.deriveMessages().some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image')) };
+          rec = { agent, handle, modelSelection: selection, hasNativeImages: cmd.resume===true && agent.session.deriveMessages().some(message=>Array.isArray(message.content)&&message.content.some(block=>block.type==='image')) };
           turn.requiresImage = Boolean(turn.requiresImage || rec.hasNativeImages);
           agentMap.set(sid, rec);
           sessionKey.set(agent.session, sid);
@@ -950,6 +951,7 @@ function apply(ctx) {
           text:task + "\n\n[系统提示] " + MEDIA_NO_LINK_NOTE, images:cmd.inputImages ?? []});
         turn.newNativeImageCount=userMessage.content.filter(block=>block.type==='image').length;
         if(turn.cancelRequested||activeBudget.expired)throw new LlmError('Run cancelled before image dispatch',activeBudget.expired?'RUN_DURATION_LIMIT':'RUN_CANCELLED');
+        turnDispatched = true;
         agent.followup(userMessage);
         if(userMessage.content.some(block=>block.type==='image'))rec.hasNativeImages=true;
         await agent.whenIdle();
@@ -982,7 +984,11 @@ function apply(ctx) {
             code: "AGENT_TURN_INCOMPLETE",
             message: "Agent turn ended without completion (reason=" + String(outcome.reason?.kind || "unknown").slice(0, 80) + ")",
           };
-          agentMap.delete(sid);
+          if (agent.phase?.kind !== "idle") {
+            try { sessionKey.delete(agent.session); } catch {}
+            try { await rec?.handle?.dispose?.(); } catch {}
+            agentMap.delete(sid);
+          }
         } else if (!outcome.text.trim()) {
           failure = { code: "EMPTY_ASSISTANT_RESPONSE", message: "Agent turn completed without producing assistant text" };
         }
@@ -1008,7 +1014,11 @@ function apply(ctx) {
           ms: Date.now() - t0,
         });
       } catch (e) {
-        agentMap.delete(sid);
+        if (turnDispatched && rec?.agent?.phase?.kind !== "idle") {
+          try { sessionKey.delete(rec?.agent?.session); } catch {}
+          try { await rec?.handle?.dispose?.(); } catch {}
+        }
+        if (turnDispatched && rec?.agent?.phase?.kind !== "idle") agentMap.delete(sid);
         rejectToolRequests(sid, "TASK_FAILED", "DSH task ended before the parent response arrived");
         const usageEvidence = firstSeq == null ? collectResponseUsage([], 0) : collectTurnUsage();
         const code = activeBudget?.expired ? "RUN_DURATION_LIMIT" : turn.cancelOrigin === "shutdown" ? "RUN_INTERRUPTED" : turn.cancelOrigin === "user" ? "RUN_CANCELLED" : (RUNNER_FAILURE_MESSAGES[e?.code] ? e.code : "RUN_TASK_FAILED");
@@ -1030,6 +1040,7 @@ function apply(ctx) {
       if (rec) {
         try { await sessions.flush(rec.agent.session); } catch (e) { /* 忽略 */ }
         sessionKey.delete(rec.agent.session);
+        try { await rec.handle?.dispose?.(); } catch {}
         agentMap.delete(sid);
       }
       emit({ type: "closed", sessionId: sid });
