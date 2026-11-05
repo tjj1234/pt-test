@@ -1144,8 +1144,13 @@ function createMediaAuthorizationPanel(authorization) {
         if (!response.ok || body.ok !== true) throw new Error(body.error || body.code || "MEDIA_AUTHORIZATION_UNAVAILABLE");
         result.textContent = "已确认；该授权仅用于本次任务。";
       } catch (err) {
-        const errCode = (err && err.message) ? ("（" + err.message + "）") : "";
-        result.textContent = "本次确认未完成" + errCode + "，请检查模型资格或任务是否已过期。";
+        const notices = {
+          MODEL_NOT_EXECUTABLE: "所选模型当前不可用，请重新核对模型资格。",
+          MEDIA_AUTHORIZATION_INVALID: "确认参数无效，请刷新任务后重新检查。",
+          NOT_FOUND: "该任务不存在或当前账号无权访问。"
+        };
+        const notice = Object.hasOwn(notices, err?.message) ? notices[err.message] : "请检查模型资格或任务是否已过期。";
+        result.textContent = "本次确认未完成，" + notice;
         button.disabled = false; select.disabled = false;
       }
     });
