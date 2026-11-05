@@ -1,0 +1,15 @@
+{
+  "scope": "M0 design review only; no implementation acceptance",
+  "head": "bbd9997d1e19920dc1c850c31ec6c71dbc5994d1",
+  "candidate": "fb250a9329d5be0a36b5c000a463f644c7a61949",
+  "files": {
+    "docs/refactor/m0-brief-05-06/AC-MAP.md": "8b0ea601cb9bd18075ac0af3ed98b67762c13334df1afd37ca74a775c22d56e2",
+    "docs/refactor/m0-brief-05-06/BACKEND-PROPOSAL.md": "792c6f631aefba15e51e0e8dd52ff5ebe8aa5d0e07f99253c93ac3e3508970ec",
+    "docs/refactor/m0-brief-05-06/INDEX.md": "cbee9302af58fcc36c888234f2327c1a62ba411701ca34cef4fd484d142b1ee8",
+    "docs/refactor/m0-brief-05-06/PATCH-PLAN.md": "f08e64cdb149162c70f1b85cbfb08aff7ab1a1ad15b698fd91e89d31f1acd59b",
+    "docs/refactor/m0-brief-05-06/REUSE-MATRIX.md": "8acab5d6668ce4c36858286f773a646a8ba959dcfd8135e75d3868d6140d090a",
+    "docs/refactor/m0-brief-05-06/TRUST-AND-STATES.md": "9ec98bbf60a21d2d9d96cb32b35b8ba90831f9a842f732e498c2446171065e2f"
+  },
+  "mermaid_count": 3,
+  "decision": "M0_NEEDS_CLARIFICATION / M1_NOT_AUTHORIZED"
+}

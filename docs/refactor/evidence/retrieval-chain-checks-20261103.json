@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "chain": "retrieval",
+  "status": "MECHANICAL_PASS",
+  "acceptanceDecision": "MAIN_AGENT_REQUIRED",
+  "scope": "local-controlled-fixtures; no paid provider or target deployment",
+  "baseCommit": "3e379fd3ab08aa5829191d1536cab8cb653657dd",
+  "generatedAt": "2026-11-03T02:15:36.805Z",
+  "sources": {
+    "scripts/northstar-chain-checks.mjs": "297671f3fd9afa88a5cca49445ba28e4d4086480b4718ed49be28b8724971526",
+    "shell/attachments/source-retrieval-candidate.cjs": "8ffdffd2d382edeb2ac51c0badf956460b3cd2091dffb391a96767b6f20d7cb7",
+    "shell/attachments/source-search-worker.cjs": "2b3e5004971cc1885a8580e39dffb5c8cedf1479aa3121291e705b16a489fc1b",
+    "shell/attachments/source-store.cjs": "03dcf706ea1d6ccfc9ac95359c3ec568e21e77917867f31023032b39a0d28686",
+    "shell/attachments/text-decode.cjs": "32d84397eac4ef81e3c08b6dd67155ef388716a114f7f7ef8a454b4a7ddcab4e",
+    "shell/conversations.cjs": "a1086a4f49d5c5afca41cb00c9757c14b7a458a429bd6ac8dfeef539f367c464",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/db-migrations/027_native_context_session.sql": "92ad6cdab29af8b41754dd02916ad1c2376a59d405aa34a0974aa1efc6bb88cb",
+    "shell/memory/provenance-store.cjs": "c5ed87bddefcf11c238f8fc2e6ba453f9bdb4ab7e5b5c7c7c86d5a5180f45134",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+    "shell/public/app.js": "f76c542576b74ed462fff94d55c96f0b1c58dee584e9bdc3d4522e79fea10889",
+    "shell/public/index.html": "659d194af24b585d5015e5c6c63226718c55b8253d037223eb768efa32c01294",
+    "shell/public/styles.css": "e5559bcb38d1a134f3b716d02bdbf88b436a1649cd63abba2ed1461c65e24e5d",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "546a1409bb6dfb574ecb9c0a71482a52714e58ed40d3909b1f2f74dd0b75a701",
+    "shell/runtime/run-budget-csv.json": "9f5419dfad11192227620e080cbafc20bc7075294ff00d9b19f85b78bd6c6db9",
+    "shell/runtime/run-budget-media.json": "29771b1acb1eac781d551745e063a86172abcca4d758f72cff50793be60b4287",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/server.cjs": "4afed94234b89890954e3325c7c1ae01ebbe871c621518c6605e01df52f9b104",
+    "shell/tasks/chat-request.cjs": "4e04396baf1b525b6de998f10d687187df652dcca2f4acee1bf4595c2fba8ecd",
+    "tests/probes/source-browser-driver-20261102.js": "31db643ae2c47df9f7bf1d8d20d1612ca6863499bfb18a573ebbc0742f484696",
+    "tests/probes/source-retrieval-candidate-probe.mjs": "2430afe996376554a3e4e4e9e96daae22a71006d7aff69c26efa5207d6cad580",
+    "tests/regression/chat-request-attachments-test.mjs": "56163785f8af6d0ff7c189a3408d3c36be2c209bf6466963956c007c273f2e04",
+    "tests/regression/conversation-model-preference-test.mjs": "747ac44942c5b06f0be4e64546d3e85776862428a2c9216c7e827e5c1bff94b2",
+    "tests/regression/source-http-sdk-integration-test.mjs": "162430221f921febd29101deaeb44d44f318dbefe3722d27070d2bbd6ec1df20",
+    "tests/regression/source-retrieval-candidate-test.mjs": "a8e61c1cc155ca00de5e98c92dd82692e59218b5e7202c28b82bd065f67f1bbc",
+    "tests/regression/source-retrieval-main-review-test.mjs": "1ca678113d0b04ca055fe391f8f1e72d7af75a4990d7ef13b010dfd2fe6fb019",
+    "tests/regression/source-store-revocation-test.mjs": "3ab40b10868dc888beb0b831114f8c1e69dcda6fa36982b38ce06eac984e0a2c",
+    "tests/regression/storage-upgrade-test.mjs": "7b9e11f0ed4da5db886c738e8862d8ea9198e9b38d0c6eb40310713db4729ef1"
+  },
+  "sourceDrift": [],
+  "checks": [
+    {
+      "id": "probe",
+      "command": [
+        "node",
+        "tests/probes/source-retrieval-candidate-probe.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 31,
+      "log": "docs/refactor/evidence/retrieval-chain-checks-20261103-probe.txt",
+      "logSha256": "0344a2fc095a54f447a652666c30bdec95186c541179efeb3dbc44de13ae76e9"
+    },
+    {
+      "id": "unit-review",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/source-retrieval-candidate-test.mjs",
+        "tests/regression/source-retrieval-main-review-test.mjs",
+        "tests/regression/source-store-revocation-test.mjs",
+        "tests/regression/chat-request-attachments-test.mjs",
+        "tests/regression/conversation-model-preference-test.mjs",
+        "tests/regression/storage-upgrade-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 3837,
+      "log": "docs/refactor/evidence/retrieval-chain-checks-20261103-unit-review.txt",
+      "logSha256": "0170dc53a275ddbc5bbb9898438a547c791b01cb226ad70a41fa373766b19fc4"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/source-http-sdk-integration-test.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 9380,
+      "log": "docs/refactor/evidence/retrieval-chain-checks-20261103-http-sdk.txt",
+      "logSha256": "878dde3839b76b56dd76ee718b487d00b84746f42b10a9c82b07013d655b8fa0"
+    }
+  ]
+}

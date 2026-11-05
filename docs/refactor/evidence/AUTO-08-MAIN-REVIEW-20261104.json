@@ -1,0 +1,165 @@
+{
+  "time_utc": "2026-11-04T07:57:53.640Z",
+  "scope": "Independent original 08 selection/config behavior review only; no runtime integration, network, PT calls or deployment",
+  "node": "v24.14.0",
+  "protected_sha256": {
+    "docs/refactor/GEMINI-AUTO-DELIVERY-PACKAGE-20261103.md": "98f13fe7e506716909479871c89be8885b93a5f9c452652367662562ceaf94cb",
+    "shell/candidates/auto-20261103/index.cjs": "d8875ac8a9fd2ee2427b81edc633a53b24a15b5a39c7c940f1798bfc9591fea9",
+    "shell/candidates/auto-20261103/CONTRACT.md": "1e2ebfe0efad5cecb20ecff151bc891aaeed738dfe6eb70ceba39377a0e9df2f",
+    "tests/probes/auto-delivery-20261103.mjs": "795b2074afb736797f33d03724f758afaba480f1c16394494324ffe1026d5002"
+  },
+  "protected_unchanged": true,
+  "original_probe": {
+    "command": "node tests/probes/auto-delivery-20261103.mjs",
+    "exit_code": 0,
+    "error": null,
+    "total": 26,
+    "passed": 26,
+    "failed": 0
+  },
+  "total": 14,
+  "passed": 4,
+  "failed": 10,
+  "results": [
+    {
+      "id": "CTRL-01",
+      "group": "control",
+      "label": "原正常pre-dispatch选择首选",
+      "status": "PASS",
+      "actual": {
+        "ok": true,
+        "modelId": "model-a",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "primary",
+        "configVersion": "review-1"
+      }
+    },
+    {
+      "id": "CTRL-02",
+      "group": "control",
+      "label": "原pre-dispatch资格预筛可选fallback",
+      "status": "PASS",
+      "actual": {
+        "ok": true,
+        "modelId": "model-c",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "fallback",
+        "configVersion": "review-1"
+      }
+    },
+    {
+      "id": "CTRL-03",
+      "group": "control",
+      "label": "原dispatched后的fallback分支确实被拦",
+      "status": "PASS",
+      "actual": {
+        "ok": false,
+        "code": "FALLBACK_AFTER_DISPATCH",
+        "detail": "cannot switch to fallback after dispatch"
+      }
+    },
+    {
+      "id": "CTRL-04",
+      "group": "control",
+      "label": "所有资格false时不选模型",
+      "status": "PASS",
+      "actual": {
+        "ok": false,
+        "code": "MISSING_ELIGIBLE_MODEL",
+        "detail": "no eligible model for taskType \"textChat\""
+      }
+    },
+    {
+      "id": "R1-01",
+      "group": "R1",
+      "label": "PAYMENT_UNKNOWN不能被跳过后选其他primary",
+      "status": "FAIL",
+      "actual": null,
+      "expected": "UNKNOWN_PAYMENT_RESULT",
+      "error": "{\"ok\":true,\"modelId\":\"model-b\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"review-1\"}\n+ actual - expected\n\n+ undefined\n- 'UNKNOWN_PAYMENT_RESULT'\n"
+    },
+    {
+      "id": "R1-02",
+      "group": "R1",
+      "label": "显式UNKNOWN_PAYMENT_RESULT不能变成fallback",
+      "status": "FAIL",
+      "actual": null,
+      "expected": "UNKNOWN_PAYMENT_RESULT",
+      "error": "{\"ok\":true,\"modelId\":\"model-c\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"fallback\",\"configVersion\":\"review-1\"}\n+ actual - expected\n\n+ undefined\n- 'UNKNOWN_PAYMENT_RESULT'\n"
+    },
+    {
+      "id": "R2-01",
+      "group": "R2",
+      "label": "dispatched不能改选第二个primary",
+      "status": "FAIL",
+      "actual": true,
+      "expected": false,
+      "error": "{\"ok\":true,\"modelId\":\"model-b\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"review-1\"}\n\ntrue !== false\n"
+    },
+    {
+      "id": "R2-02",
+      "group": "R2",
+      "label": "dispatched不能改选manual模型",
+      "status": "FAIL",
+      "actual": true,
+      "expected": false,
+      "error": "{\"ok\":true,\"modelId\":\"model-b\",\"taskType\":\"textChat\",\"mode\":\"manual\",\"source\":\"manual\",\"configVersion\":\"review-1\"}\n\ntrue !== false\n"
+    },
+    {
+      "id": "R3-01",
+      "group": "R3",
+      "label": "未知dispatchState不能视为pre-dispatch",
+      "status": "FAIL",
+      "actual": null,
+      "expected": "CONFIG_INVALID",
+      "error": "{\"ok\":true,\"modelId\":\"model-c\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"fallback\",\"configVersion\":\"review-1\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-02",
+      "group": "R3",
+      "label": "非法selection.mode不能默认为auto",
+      "status": "FAIL",
+      "actual": null,
+      "expected": "CONFIG_INVALID",
+      "error": "{\"ok\":true,\"modelId\":\"model-a\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"review-1\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R4-01",
+      "group": "R4",
+      "label": "重复fallback应被严格配置校验拒绝",
+      "status": "FAIL",
+      "actual": false,
+      "expected": true,
+      "error": "[]"
+    },
+    {
+      "id": "R4-02",
+      "group": "R4",
+      "label": "primary与fallback重复模型应拒绝",
+      "status": "FAIL",
+      "actual": false,
+      "expected": true,
+      "error": "[]"
+    },
+    {
+      "id": "R5-01",
+      "group": "R5",
+      "label": "空pinVersion不能被当有效版本pin",
+      "status": "FAIL",
+      "actual": false,
+      "expected": true,
+      "error": "[]"
+    },
+    {
+      "id": "R6-01",
+      "group": "R6",
+      "label": "外部config突变不能使router与选择结果版本不同",
+      "status": "FAIL",
+      "actual": "mutated-unpublished",
+      "expected": "review-1",
+      "error": "{\"routerVersion\":\"review-1\",\"result\":{\"ok\":true,\"modelId\":\"model-a\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"mutated-unpublished\"}}\n+ actual - expected\n\n+ 'mutated-unpublished'\n- 'review-1'\n"
+    }
+  ]
+}

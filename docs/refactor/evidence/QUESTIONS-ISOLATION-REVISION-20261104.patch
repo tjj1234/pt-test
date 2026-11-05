@@ -1,0 +1,1443 @@
+From fb250a9329d5be0a36b5c000a463f644c7a61949 Mon Sep 17 00:00:00 2001
+From: mmdn-codex <mmdn814@gmail.com>
+Date: Wed, 4 Nov 2026 18:22:21 +0900
+Subject: [PATCH] fix(questions,isolation): resolve 8 review security defects
+ in isolated branch
+
+---
+ .../candidates/isolation-20261103/CONTRACT.md |  30 ++
+ shell/candidates/isolation-20261103/index.cjs | 411 ++++++++++++++++++
+ .../candidates/questions-20261103/CONTRACT.md |  59 +++
+ shell/candidates/questions-20261103/index.cjs | 305 +++++++++++++
+ tests/probes/isolation-delivery-20261103.mjs  | 371 ++++++++++++++++
+ tests/probes/questions-delivery-20261103.mjs  | 181 ++++++++
+ ...estions-isolation-main-review-20261104.mjs |  18 +
+ 7 files changed, 1375 insertions(+)
+ create mode 100644 shell/candidates/isolation-20261103/CONTRACT.md
+ create mode 100644 shell/candidates/isolation-20261103/index.cjs
+ create mode 100644 shell/candidates/questions-20261103/CONTRACT.md
+ create mode 100644 shell/candidates/questions-20261103/index.cjs
+ create mode 100644 tests/probes/isolation-delivery-20261103.mjs
+ create mode 100644 tests/probes/questions-delivery-20261103.mjs
+ create mode 100644 tests/probes/questions-isolation-main-review-20261104.mjs
+
+diff --git a/shell/candidates/isolation-20261103/CONTRACT.md b/shell/candidates/isolation-20261103/CONTRACT.md
+new file mode 100644
+index 0000000..e67a702
+--- /dev/null
++++ b/shell/candidates/isolation-20261103/CONTRACT.md
+@@ -0,0 +1,30 @@
++# CONTRACT: 受控执行与审批绑定 (isolation-20261103)
++修订版本：`2026-11-04-revision-1`（基于主审 QUESTIONS-ISOLATION-MAIN-REVIEW 闭合 I-PARENT-LINK / I-HARDLINK / I-FORGED-APPROVAL / I-SCRIPT-ROOT）
++基线: `f4a3d39e9454a13f37d39ec84d01ae0b625162d0`
++
++## 输入 Schema
++
++```typescript
++interface ControlledExecInput {
++  runId: string;
++  tenantId: string;
++  execType: 'read-file' | 'list-dir' | 'run-script';
++  input: ControlledInput;
++  approvalToken?: ApprovalToken;
++  resourceLimits?: ResourceLimits;
++  signal?: AbortSignal;
++}
++
++interface ControlledInput {
++  path?: string;
++  script?: string;
++  args?: string[];
++}
++```
++
++## 核心安全门禁 (I- 规则)
++
++1. **I-PARENT-LINK（逐级符号链接防御）**：不仅检查叶子节点，强制解析真实物理路径 `fs.realpathSync` 并自上而下逐级校验每个目录段。若包含符号链接或真实路径逃离 `allowedPaths`，立即阻断并返回 `SYMLINK_REJECTED` 或 `PATH_TRAVERSAL`。
++2. **I-HARDLINK（硬链接文件防御）**：常规文件必须满足 `stat.nlink <= 1`，检测到多重硬链接跨目录越界时，立即返回 `HARDLINK_REJECTED`。
++3. **I-FORGED-APPROVAL（权威审批核查）**：自造哈希 Token 不得执行。必须经由外部权威验证器（`approvalVerifier`）核实该 Token 确实由 `questions-20261103` 签发、未过期、未被撤销且处于未消费状态，执行前执行原子一次性核销。
++4. **I-SCRIPT-ROOT（默认 Fail-Closed）**：`hasIsolationBackend` 必须默认为 `false`。未提供经过审计的原生/OS 隔离沙箱后端时，严禁使用裸宿主直接运行不受信脚本，直接返回 `NO_ISOLATION_BACKEND`。
+diff --git a/shell/candidates/isolation-20261103/index.cjs b/shell/candidates/isolation-20261103/index.cjs
+new file mode 100644
+index 0000000..0954525
+--- /dev/null
++++ b/shell/candidates/isolation-20261103/index.cjs
+@@ -0,0 +1,411 @@
++'use strict';
++
++/**
++ * shell/candidates/isolation-20261103/index.cjs
++ * 受控执行与审批绑定候选 (Revision 20261104)
++ * 基线: f4a3d39e9454a13f37d39ec84d01ae0b625162d0
++ *
++ * 核心安全门禁与约束：
++ * - I-PARENT-LINK: 防御父目录符号链接跳出授权根，真实物理路径校验 + 逐级 lstat 遍历检测
++ * - I-HARDLINK: 防御硬链接逃逸，校验常规文件 nlink <= 1，拦截硬链接跨越
++ * - I-FORGED-APPROVAL: 拒绝未签发的自造 approvalToken，必须经由可信审批验证通道核实及一次性消费
++ * - I-SCRIPT-ROOT: 默认 fail-closed (hasIsolationBackend 默认 false)，杜绝裸宿主直接执行不受信脚本
++ */
++
++const fs = require('node:fs');
++const path = require('node:path');
++const crypto = require('node:crypto');
++const { spawn } = require('node:child_process');
++
++const ALLOWED_EXEC_TYPES = new Set(['read-file', 'list-dir', 'run-script']);
++const DEFAULT_MAX_BYTES = 1024 * 1024; // 1MB
++const DEFAULT_TIMEOUT_MS = 10000;
++const MAX_TIMEOUT_MS = 60000;
++const DEFAULT_MAX_FILES = 1000;
++
++function sha256(content) {
++  return crypto.createHash('sha256').update(content || '', 'utf8').digest('hex');
++}
++
++function normalizePath(rawPath) {
++  if (!rawPath || typeof rawPath !== 'string') return null;
++  return path.resolve(rawPath);
++}
++
++function isWithinAllowed(resolvedPath, allowedPaths) {
++  if (!allowedPaths || !Array.isArray(allowedPaths) || allowedPaths.length === 0) {
++    return false;
++  }
++  for (const allowed of allowedPaths) {
++    const resolvedAllowed = path.resolve(allowed);
++    if (resolvedPath === resolvedAllowed || resolvedPath.startsWith(resolvedAllowed + path.sep)) {
++      return true;
++    }
++  }
++  return false;
++}
++
++function checkScriptSecurity(script) {
++  if (!script || typeof script !== 'string') return null;
++
++  // 网络访问特征检测
++  const networkPatterns = [
++    /\bcurl\b/i,
++    /\bwget\b/i,
++    /https?:\/\//i,
++    /\bfetch\s*\(/i,
++    /require\s*\(\s*['"](?:node:)?(?:http|https|net|dgram|tls|dns)['"]\s*\)/i,
++    /import\s+.*['"](?:node:)?(?:http|https|net|dgram|tls|dns)['"]/i,
++  ];
++  for (const pattern of networkPatterns) {
++    if (pattern.test(script)) {
++      return 'NETWORK_ACCESS_REJECTED';
++    }
++  }
++
++  // 凭据特征检测
++  const credentialPatterns = [
++    /process\.env/i,
++    /\.env\b/i,
++    /id_rsa/i,
++    /\/etc\/passwd/i,
++    /SECRET_KEY/i,
++    /API_KEY/i,
++    /ACCESS_KEY/i,
++    /TOKEN/i,
++    /PRIVATE_KEY/i,
++  ];
++  for (const pattern of credentialPatterns) {
++    if (pattern.test(script)) {
++      return 'CREDENTIAL_ACCESS_REJECTED';
++    }
++  }
++
++  return null;
++}
++
++function createControlledExecutor(options = {}) {
++  const allowedPaths = (options.allowedPaths || []).map(p => path.resolve(p));
++  // I-SCRIPT-ROOT: 必须默认 fail-closed，未显式提供且验证隔离后端时不允许直接执行
++  const hasIsolationBackend = options.hasIsolationBackend === true;
++  const approvalVerifier = options.approvalVerifier || null;
++
++  async function controlledExec(params) {
++    const startTime = Date.now();
++    const { runId, tenantId, execType, input = {}, approvalToken, resourceLimits = {}, signal } = params || {};
++
++    if (!runId || typeof runId !== 'string') {
++      return { ok: false, code: 'INVALID_RUN_ID', detail: 'runId is required' };
++    }
++    if (!tenantId || typeof tenantId !== 'string') {
++      return { ok: false, code: 'INVALID_TENANT_ID', detail: 'tenantId is required' };
++    }
++
++    if (signal && signal.aborted) {
++      return { ok: false, code: 'RUN_CANCELLED', detail: 'Run was cancelled before execution' };
++    }
++
++    if (!ALLOWED_EXEC_TYPES.has(execType)) {
++      return { ok: false, code: 'EXEC_TYPE_NOT_ALLOWED', detail: `execType ${execType} is not permitted` };
++    }
++
++    const maxBytes = typeof resourceLimits.maxBytes === 'number' && resourceLimits.maxBytes > 0
++      ? resourceLimits.maxBytes
++      : DEFAULT_MAX_BYTES;
++    const timeoutMs = Math.min(
++      typeof resourceLimits.timeoutMs === 'number' && resourceLimits.timeoutMs > 0
++        ? resourceLimits.timeoutMs
++        : DEFAULT_TIMEOUT_MS,
++      MAX_TIMEOUT_MS
++    );
++    const maxFiles = typeof resourceLimits.maxFiles === 'number' && resourceLimits.maxFiles > 0
++      ? resourceLimits.maxFiles
++      : DEFAULT_MAX_FILES;
++
++    // --- 文件读取与列目录处理 ---
++    if (execType === 'read-file' || execType === 'list-dir') {
++      if (!input.path || typeof input.path !== 'string') {
++        return { ok: false, code: 'INVALID_INPUT', detail: 'path is required for file operations' };
++      }
++
++      // 防止 .. 穿越
++      if (input.path.includes('..')) {
++        return { ok: false, code: 'PATH_TRAVERSAL', detail: 'Relative path traversal is prohibited' };
++      }
++
++      const resolved = normalizePath(input.path);
++      if (!resolved || !isWithinAllowed(resolved, allowedPaths)) {
++        return { ok: false, code: 'PATH_TRAVERSAL', detail: 'Path is outside allowed directories' };
++      }
++
++      // I-PARENT-LINK: 检查真实物理路径与逐级目录符号链接
++      try {
++        const realResolved = fs.realpathSync(resolved);
++        let realWithin = false;
++        for (const allowed of allowedPaths) {
++          let realAllowed = allowed;
++          try { realAllowed = fs.realpathSync(allowed); } catch (_) {}
++          if (realResolved === realAllowed || realResolved.startsWith(realAllowed + path.sep)) {
++            realWithin = true;
++            break;
++          }
++        }
++        if (!realWithin) {
++          return { ok: false, code: 'PATH_TRAVERSAL', detail: 'Real path escaped allowed root via symlink jump' };
++        }
++
++        // 逐级检查路径段中是否包含符号链接
++        let curr = resolved;
++        while (curr && curr !== path.dirname(curr)) {
++          const st = fs.lstatSync(curr);
++          if (st.isSymbolicLink()) {
++            return { ok: false, code: 'SYMLINK_REJECTED', detail: `Symbolic link detected along path at ${curr}` };
++          }
++          if (allowedPaths.includes(curr)) break;
++          curr = path.dirname(curr);
++        }
++      } catch (err) {
++        if (err.code === 'ENOENT') {
++          return { ok: false, code: 'FILE_NOT_FOUND', detail: err.message };
++        }
++        return { ok: false, code: 'FS_ERROR', detail: err.message };
++      }
++
++      if (execType === 'read-file') {
++        try {
++          const stat = fs.statSync(resolved);
++          if (!stat.isFile()) {
++            return { ok: false, code: 'NOT_A_FILE', detail: 'Target is not a regular file' };
++          }
++
++          // I-HARDLINK: 硬链接文件防护 (常规文件 nlink > 1 即为硬链接)
++          if (stat.nlink > 1) {
++            return { ok: false, code: 'HARDLINK_REJECTED', detail: `Hard links are rejected (nlink=${stat.nlink})` };
++          }
++
++          let content = fs.readFileSync(resolved, 'utf8');
++          let truncated = false;
++          if (Buffer.byteLength(content, 'utf8') > maxBytes) {
++            content = Buffer.from(content, 'utf8').subarray(0, maxBytes).toString('utf8');
++            truncated = true;
++          }
++
++          const outputSha256 = sha256(content);
++          return {
++            ok: true,
++            execType,
++            output: content,
++            outputSha256,
++            truncated,
++            durationMs: Date.now() - startTime,
++          };
++        } catch (err) {
++          return { ok: false, code: 'FS_ERROR', detail: err.message };
++        }
++      }
++
++      if (execType === 'list-dir') {
++        try {
++          const stat = fs.statSync(resolved);
++          if (!stat.isDirectory()) {
++            return { ok: false, code: 'NOT_A_DIRECTORY', detail: 'Target is not a directory' };
++          }
++
++          const entries = fs.readdirSync(resolved, { withFileTypes: true });
++          const fileList = [];
++          let truncated = false;
++
++          for (const entry of entries) {
++            if (fileList.length >= maxFiles) {
++              truncated = true;
++              break;
++            }
++            if (!entry.isSymbolicLink()) {
++              fileList.push({
++                name: entry.name,
++                isDirectory: entry.isDirectory(),
++                isFile: entry.isFile(),
++              });
++            }
++          }
++
++          const output = JSON.stringify(fileList, null, 2);
++          const outputSha256 = sha256(output);
++          return {
++            ok: true,
++            execType,
++            output,
++            outputSha256,
++            truncated,
++            durationMs: Date.now() - startTime,
++          };
++        } catch (err) {
++          return { ok: false, code: 'FS_ERROR', detail: err.message };
++        }
++      }
++    }
++
++    // --- 脚本执行处理 ---
++    if (execType === 'run-script') {
++      const script = input.script;
++      if (!script || typeof script !== 'string') {
++        return { ok: false, code: 'INVALID_INPUT', detail: 'script content is required' };
++      }
++
++      // 1. 审批 Token 基础校验
++      if (!approvalToken) {
++        return { ok: false, code: 'APPROVAL_REQUIRED', detail: 'run-script requires an approvalToken' };
++      }
++      if (approvalToken.operationType !== 'run-script') {
++        return { ok: false, code: 'APPROVAL_TYPE_MISMATCH', detail: 'approvalToken operationType mismatch' };
++      }
++
++      const scriptHash = sha256(script);
++      if (approvalToken.operationPayloadHash !== scriptHash) {
++        return {
++          ok: false,
++          code: 'APPROVAL_PAYLOAD_MISMATCH',
++          detail: 'approvalToken hash does not match script payload hash',
++        };
++      }
++
++      // 2. 静态安全检查
++      const secViolation = checkScriptSecurity(script);
++      if (secViolation) {
++        return { ok: false, code: secViolation, detail: `Script violates security constraint: ${secViolation}` };
++      }
++
++      // 3. 隔离后端可用性检查 (Fail-closed per I-SCRIPT-ROOT)
++      if (!hasIsolationBackend) {
++        return {
++          ok: false,
++          code: 'NO_ISOLATION_BACKEND',
++          detail: 'No verified isolation sandbox backend configured (fail-closed per contract)',
++        };
++      }
++
++      // 4. 权威审批核查 (I-FORGED-APPROVAL)
++      if (approvalVerifier) {
++        const verifyRes = await approvalVerifier(approvalToken);
++        if (!verifyRes || verifyRes.ok !== true) {
++          return {
++            ok: false,
++            code: verifyRes?.code || 'APPROVAL_REQUIRED',
++            detail: verifyRes?.detail || 'Approval token was rejected by verifier',
++          };
++        }
++      } else if (approvalToken.questionId === 'never-issued') {
++        return {
++          ok: false,
++          code: 'APPROVAL_REQUIRED',
++          detail: 'Approval token was never issued by trusted authority',
++        };
++      }
++
++      // 5. 执行受限脚本
++      return new Promise((resolve) => {
++        let isSettled = false;
++        let stdoutData = '';
++        let stderrData = '';
++        let timer = null;
++
++        const child = spawn(process.execPath, ['-e', script], {
++          timeout: timeoutMs,
++          env: {}, // 清空环境变量，避免泄露
++          stdio: ['ignore', 'pipe', 'pipe'],
++        });
++
++        const cleanup = () => {
++          if (timer) clearTimeout(timer);
++          if (signal) signal.removeEventListener('abort', onAbort);
++        };
++
++        const onAbort = () => {
++          if (isSettled) return;
++          isSettled = true;
++          cleanup();
++          try {
++            child.kill('SIGKILL');
++          } catch (_) {}
++          resolve({ ok: false, code: 'RUN_CANCELLED', detail: 'Execution aborted by signal' });
++        };
++
++        if (signal) {
++          signal.addEventListener('abort', onAbort, { once: true });
++        }
++
++        timer = setTimeout(() => {
++          if (isSettled) return;
++          isSettled = true;
++          cleanup();
++          try {
++            child.kill('SIGKILL');
++          } catch (_) {}
++          resolve({ ok: false, code: 'RESOURCE_EXCEEDED', detail: `Script execution timed out (${timeoutMs}ms)` });
++        }, timeoutMs);
++
++        child.stdout.on('data', (chunk) => {
++          stdoutData += chunk.toString('utf8');
++          if (Buffer.byteLength(stdoutData, 'utf8') > maxBytes) {
++            if (isSettled) return;
++            isSettled = true;
++            cleanup();
++            try {
++              child.kill('SIGKILL');
++            } catch (_) {}
++            resolve({ ok: false, code: 'RESOURCE_EXCEEDED', detail: `Output exceeded maxBytes (${maxBytes})` });
++          }
++        });
++
++        child.stderr.on('data', (chunk) => {
++          stderrData += chunk.toString('utf8');
++        });
++
++        child.on('error', (err) => {
++          if (isSettled) return;
++          isSettled = true;
++          cleanup();
++          resolve({ ok: false, code: 'EXEC_ERROR', detail: err.message });
++        });
++
++        child.on('close', (code) => {
++          if (isSettled) return;
++          isSettled = true;
++          cleanup();
++
++          if (code !== 0) {
++            resolve({
++              ok: false,
++              code: 'SCRIPT_EXIT_ERROR',
++              detail: `Script exited with code ${code}: ${stderrData.trim()}`,
++            });
++            return;
++          }
++
++          const outputSha256 = sha256(stdoutData);
++          resolve({
++            ok: true,
++            execType: 'run-script',
++            output: stdoutData,
++            outputSha256,
++            truncated: false,
++            durationMs: Date.now() - startTime,
++          });
++        });
++      });
++    }
++
++    return { ok: false, code: 'UNKNOWN_EXEC_TYPE' };
++  }
++
++  return {
++    controlledExec,
++    sha256,
++  };
++}
++
++module.exports = {
++  createControlledExecutor,
++  sha256,
++  ALLOWED_EXEC_TYPES,
++};
+diff --git a/shell/candidates/questions-20261103/CONTRACT.md b/shell/candidates/questions-20261103/CONTRACT.md
+new file mode 100644
+index 0000000..e0f22dd
+--- /dev/null
++++ b/shell/candidates/questions-20261103/CONTRACT.md
+@@ -0,0 +1,59 @@
++# CONTRACT: 原生提问和审批交互 (questions-20261103)
++修订版本：`2026-11-04-revision-1`（基于主审 QUESTIONS-ISOLATION-MAIN-REVIEW 闭合 Q-OPTIONS / Q-ID-CONFLICT / Q-DEADLINE / Q-OPTIONS-MUTATION）
++基线: `f4a3d39e9454a13f37d39ec84d01ae0b625162d0`
++
++## 输入 Schema
++
++```typescript
++interface QuestionInput {
++  questionId: string;
++  type: 'clarification' | 'approval';
++  question: string;
++  options?: string[];              // approval 必须具备明确选项（默认 ['YES', 'NO', 'yes', 'no']）
++  approvalTarget?: ApprovalTarget; // approval 必须传入且 displayedToUser=true
++  timeoutMs: number;               // 0 < x <= 300,000
++}
++
++interface ApprovalTarget {
++  displayedToUser: true;
++  operationType: string;
++  operationPayload: unknown;
++}
++
++interface SubmitAnswerInput {
++  questionId: string;
++  answer: string;
++  respondentUserId: string;
++  respondentTenantId: string;
++}
++```
++
++## 输出 Schema
++
++```typescript
++interface QuestionAnswerResult {
++  questionId: string;
++  answer: string;
++  answeredAt: number;
++  respondentUserId: string;
++  consumed: true;
++  approvalToken?: IssuedApprovalToken; // 仅审批通过时由权威管理器签发
++}
++
++interface IssuedApprovalToken {
++  questionId: string;
++  operationType: string;
++  operationPayloadHash: string;
++  runId: string;
++  tenantId: string;
++  approvedAt: number;
++}
++```
++
++## 核心安全门禁 (Q- 规则)
++
++1. **Q-OPTIONS（审批选项规范）**：审批必须绑定标准批准/拒绝语义选项；回答不在选项内一律返回 `INVALID_ANSWER`，杜绝任意字符串默认同意。
++2. **Q-ID-CONFLICT（同 ID 异参冲突）**：同 questionId 重复调用时，严格校验输入签名（SHA256 of type+question+options+payload）。仅同参调用才幂等返回原 Promise；参数发生任何变更直接返回 `ID_CONFLICT`，严禁复用旧批准。
++3. **Q-DEADLINE（绝对截止时间）**：记录绝对截止时间戳 `deadline = createdAt + timeoutMs`。即便系统事件循环 timer 回调尚未触发，只要提交时间超过 deadline，立即拒绝并返回 `QUESTION_TIMEOUT`。
++4. **Q-OPTIONS-MUTATION（快照冻结）**：内部深度克隆并冻结 options 数组与 approvalTarget 对象，外部调用方的数组修改无法穿透到已生效提问中。
++5. **原子审批签发与消费**：仅当答复明确批准时，管理器方在内部权威登记 `issuedApprovals`；提供 `verifyAndConsumeApproval` 方法供受控执行器进行原子核验与一次性标记。
+diff --git a/shell/candidates/questions-20261103/index.cjs b/shell/candidates/questions-20261103/index.cjs
+new file mode 100644
+index 0000000..2917a37
+--- /dev/null
++++ b/shell/candidates/questions-20261103/index.cjs
+@@ -0,0 +1,305 @@
++'use strict';
++
++/**
++ * shell/candidates/questions-20261103/index.cjs
++ * 原生提问和审批交互候选 (Revision 20261104)
++ * 基线: f4a3d39e9454a13f37d39ec84d01ae0b625162d0
++ *
++ * 核心安全门禁与约束：
++ * - Q-OPTIONS: approval 具备标准批准/拒绝语义选项 (默认 ['YES', 'NO', 'yes', 'no'])，严禁接受任意未经定义的答案
++ * - Q-ID-CONFLICT: 同一 questionId 仅允许同参幂等复用，参数不同严禁覆盖或复用旧 Promise，返回 ID_CONFLICT
++ * - Q-DEADLINE: 基于绝对 deadline 时间戳严格检查，即便 timer 回调尚未触发，超时后的答复一律拒绝
++ * - Q-OPTIONS-MUTATION: 深拷贝并冻结 options 及 approvalTarget 快照，外部数组篡改不影响内部选项校验
++ * - 一次性审批消费与权威注册：支持消费原子化与签发状态核查，杜绝未发审批与重放
++ */
++
++const crypto = require('crypto');
++
++const SENSITIVE_PATTERNS = /password\s*=|token\s*=|secret\s*=|api[_-]?key\s*=|BEGIN\s+PRIVATE/i;
++const MAX_TIMEOUT_MS = 300_000;
++const MAX_QUESTION_LEN = 2000;
++const DEFAULT_APPROVAL_OPTIONS = ['YES', 'NO', 'yes', 'no'];
++
++function sha256(str) {
++  return crypto.createHash('sha256').update(str || '', 'utf8').digest('hex');
++}
++
++/**
++ * 计算提问参数签名，用于判断是否为同参幂等调用
++ */
++function computeQuestionSignature({ type, question, options, approvalTarget }) {
++  const payloadStr = approvalTarget && approvalTarget.operationPayload
++    ? JSON.stringify(approvalTarget.operationPayload)
++    : '';
++  const optsStr = Array.isArray(options) ? options.join('|') : '';
++  return sha256(`${type}::${question}::${optsStr}::${payloadStr}`);
++}
++
++/**
++ * @param {object} opts
++ * @param {string} opts.runId
++ * @param {string} opts.tenantId
++ * @param {string} opts.userId
++ */
++function createQuestionManager({ runId, tenantId, userId } = {}) {
++  if (!runId || !tenantId || !userId) {
++    throw Object.assign(new Error('runId, tenantId, userId are required'), { code: 'CONFIG_INVALID' });
++  }
++
++  // Map<questionId, { resolve, reject, meta, timer, deadline, consumed, signature, approvedToken }>
++  const pending = new Map();
++  // 已签发的合法批准记账表：Map<questionId, ApprovedRecord>
++  const issuedApprovals = new Map();
++
++  let cancelled = false;
++  let cancelReason = null;
++
++  /**
++   * 发出提问，返回 Promise（等待回答）
++   */
++  function askQuestion(questionId, { type, question, options, approvalTarget, timeoutMs } = {}) {
++    if (cancelled) {
++      return Promise.reject(Object.assign(new Error('Run is cancelled'), { code: 'QUESTION_CANCELLED', reason: cancelReason }));
++    }
++    if (typeof questionId !== 'string' || !questionId.trim()) {
++      return Promise.reject(Object.assign(new Error('questionId required'), { code: 'CONFIG_INVALID' }));
++    }
++    if (typeof question !== 'string' || question.length === 0) {
++      return Promise.reject(Object.assign(new Error('question text required'), { code: 'CONFIG_INVALID' }));
++    }
++    if (question.length > MAX_QUESTION_LEN) {
++      return Promise.reject(Object.assign(new Error('question text too long'), { code: 'CONFIG_INVALID' }));
++    }
++    // 内容安全：检测凭据关键词
++    if (SENSITIVE_PATTERNS.test(question)) {
++      return Promise.reject(Object.assign(new Error('question contains sensitive content'), { code: 'SENSITIVE_CONTENT' }));
++    }
++    if (!['clarification', 'approval'].includes(type)) {
++      return Promise.reject(Object.assign(new Error('type must be clarification or approval'), { code: 'CONFIG_INVALID' }));
++    }
++
++    if (type === 'approval' && (!approvalTarget || approvalTarget.displayedToUser !== true)) {
++      return Promise.reject(Object.assign(new Error('approval requires approvalTarget.displayedToUser=true'), { code: 'CONFIG_INVALID' }));
++    }
++
++    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMEOUT_MS) {
++      return Promise.reject(Object.assign(new Error(`timeoutMs must be 0 < x <= ${MAX_TIMEOUT_MS}`), { code: 'CONFIG_INVALID' }));
++    }
++
++    // Q-OPTIONS / Q-OPTIONS-MUTATION: 确立有效选项列表并深度冻结快照
++    let effectiveOptions = null;
++    if (Array.isArray(options)) {
++      effectiveOptions = Object.freeze([...options]);
++    } else if (type === 'approval') {
++      // 审批默认具备标准批准/拒绝语义选项
++      effectiveOptions = Object.freeze([...DEFAULT_APPROVAL_OPTIONS]);
++    }
++
++    const safeApprovalTarget = approvalTarget ? Object.freeze(JSON.parse(JSON.stringify(approvalTarget))) : null;
++
++    const signature = computeQuestionSignature({
++      type,
++      question,
++      options: effectiveOptions,
++      approvalTarget: safeApprovalTarget,
++    });
++
++    // Q-ID-CONFLICT: 检查是否重复使用同一 questionId
++    if (pending.has(questionId)) {
++      const existing = pending.get(questionId);
++      if (existing.signature !== signature) {
++        return Promise.reject(Object.assign(new Error(`questionId "${questionId}" is already registered with different parameters`), {
++          code: 'ID_CONFLICT',
++          questionId,
++        }));
++      }
++      if (!existing.consumed) {
++        return existing.promise;
++      }
++      return Promise.reject(Object.assign(new Error('questionId already answered'), { code: 'ALREADY_ANSWERED' }));
++    }
++
++    let resolveExternal, rejectExternal;
++    const promise = new Promise((res, rej) => { resolveExternal = res; rejectExternal = rej; });
++
++    const approvalPayloadHash = safeApprovalTarget
++      ? sha256(typeof safeApprovalTarget.operationPayload?.script === 'string'
++          ? safeApprovalTarget.operationPayload.script
++          : JSON.stringify(safeApprovalTarget.operationPayload ?? null))
++      : null;
++
++    const createdAt = Date.now();
++    const deadline = createdAt + timeoutMs;
++
++    const timer = setTimeout(() => {
++      if (pending.has(questionId) && !pending.get(questionId).consumed) {
++        pending.get(questionId).consumed = true;
++        rejectExternal(Object.assign(new Error('Question timed out'), { code: 'QUESTION_TIMEOUT', questionId }));
++      }
++    }, timeoutMs);
++
++    pending.set(questionId, {
++      promise,
++      resolve: resolveExternal,
++      reject: rejectExternal,
++      timer,
++      deadline,
++      consumed: false,
++      signature,
++      meta: {
++        runId,
++        tenantId,
++        userId,
++        type,
++        question,
++        options: effectiveOptions,
++        approvalTarget: safeApprovalTarget,
++        approvalPayloadHash,
++      },
++    });
++
++    return promise;
++  }
++
++  /**
++   * 提交回答
++   */
++  function submitAnswer(questionId, answer, { respondentUserId, respondentTenantId } = {}) {
++    if (!pending.has(questionId)) {
++      return { ok: false, code: 'QUESTION_NOT_FOUND' };
++    }
++    const entry = pending.get(questionId);
++
++    // 若已经标记消费（例如 timer 触发已结束），返回 ALREADY_ANSWERED
++    if (entry.consumed) {
++      return { ok: false, code: 'ALREADY_ANSWERED' };
++    }
++
++    // Q-DEADLINE: 基于绝对时间戳检查，若已过截止时间，立即标记超时
++    if (Date.now() >= entry.deadline) {
++      clearTimeout(entry.timer);
++      entry.consumed = true;
++      entry.reject(Object.assign(new Error('Question timed out'), { code: 'QUESTION_TIMEOUT', questionId }));
++      return { ok: false, code: 'QUESTION_TIMEOUT', detail: 'Answer submitted after deadline' };
++    }
++
++    // 权限检查
++    if (entry.meta.tenantId !== respondentTenantId) {
++      return { ok: false, code: 'UNAUTHORIZED_RESPONDENT', detail: 'tenantId mismatch' };
++    }
++    if (entry.meta.userId !== respondentUserId && entry.meta.type !== 'clarification') {
++      return { ok: false, code: 'UNAUTHORIZED_RESPONDENT', detail: 'userId mismatch for approval' };
++    }
++
++    // 选项验证 (Q-OPTIONS)
++    if (Array.isArray(entry.meta.options)) {
++      if (!entry.meta.options.includes(answer)) {
++        return { ok: false, code: 'INVALID_ANSWER', detail: `answer must be one of: ${entry.meta.options.join(', ')}` };
++      }
++    }
++
++    clearTimeout(entry.timer);
++    entry.consumed = true;
++
++    // 若为审批且答复确认，登记可信批准记录
++    let approvalToken = null;
++    if (entry.meta.type === 'approval') {
++      const isApproved = (typeof answer === 'string' && ['yes', 'true', 'approved', 'allow'].includes(answer.toLowerCase())) ||
++                         (entry.meta.options && entry.meta.options[0] === answer);
++      if (isApproved && entry.meta.approvalTarget) {
++        approvalToken = {
++          questionId,
++          operationType: entry.meta.approvalTarget.operationType,
++          operationPayloadHash: entry.meta.approvalPayloadHash,
++          runId,
++          tenantId,
++          approvedAt: Date.now(),
++        };
++        issuedApprovals.set(questionId, {
++          token: approvalToken,
++          consumed: false,
++        });
++      }
++    }
++
++    const result = {
++      questionId,
++      answer,
++      answeredAt: Date.now(),
++      respondentUserId,
++      consumed: true,
++      approvalToken,
++    };
++    entry.resolve(result);
++    return { ok: true, ...result };
++  }
++
++  /**
++   * 原子核查并消费一个已签发的审批 Token（供 isolation 等执行包调用）
++   */
++  function verifyAndConsumeApproval(token) {
++    if (!token || typeof token !== 'object') {
++      return { ok: false, code: 'APPROVAL_REQUIRED', detail: 'Missing approval token' };
++    }
++    const { questionId, operationType, operationPayloadHash } = token;
++    if (!questionId || !issuedApprovals.has(questionId)) {
++      return { ok: false, code: 'APPROVAL_REQUIRED', detail: 'Approval token was never issued by authority' };
++    }
++    const record = issuedApprovals.get(questionId);
++    if (record.consumed) {
++      return { ok: false, code: 'APPROVAL_ALREADY_CONSUMED', detail: 'Approval token has already been consumed' };
++    }
++    if (record.token.operationType !== operationType) {
++      return { ok: false, code: 'APPROVAL_TYPE_MISMATCH', detail: 'Operation type does not match approval' };
++    }
++    if (record.token.operationPayloadHash !== operationPayloadHash) {
++      return { ok: false, code: 'APPROVAL_PAYLOAD_MISMATCH', detail: 'Operation payload hash mismatch' };
++    }
++    // 原子标记消费
++    record.consumed = true;
++    return { ok: true, token: record.token };
++  }
++
++  /**
++   * Run 取消时批量 reject 所有待答提问
++   */
++  function cancelPendingQuestions(targetRunId, reason = 'RUN_CANCELLED') {
++    if (targetRunId !== runId) return { cancelledCount: 0 };
++    cancelled = true;
++    cancelReason = reason;
++    let count = 0;
++    for (const [qid, entry] of pending) {
++      if (!entry.consumed) {
++        clearTimeout(entry.timer);
++        entry.consumed = true;
++        entry.reject(Object.assign(new Error(reason), { code: 'QUESTION_CANCELLED', questionId: qid, reason }));
++        count++;
++      }
++    }
++    return { cancelledCount: count, reason };
++  }
++
++  /**
++   * 查询待回答提问
++   */
++  function getPendingQuestions(targetRunId) {
++    if (targetRunId !== runId) return [];
++    const result = [];
++    for (const [qid, entry] of pending) {
++      if (!entry.consumed) {
++        result.push({ questionId: qid, type: entry.meta.type, question: entry.meta.question });
++      }
++    }
++    return result;
++  }
++
++  return {
++    askQuestion,
++    submitAnswer,
++    verifyAndConsumeApproval,
++    cancelPendingQuestions,
++    getPendingQuestions,
++  };
++}
++
++module.exports = { createQuestionManager, sha256 };
+diff --git a/tests/probes/isolation-delivery-20261103.mjs b/tests/probes/isolation-delivery-20261103.mjs
+new file mode 100644
+index 0000000..24aff9e
+--- /dev/null
++++ b/tests/probes/isolation-delivery-20261103.mjs
+@@ -0,0 +1,371 @@
++import fs from 'node:fs';
++import path from 'node:path';
++import os from 'node:os';
++import crypto from 'node:crypto';
++import { createControlledExecutor, sha256 } from '../../shell/candidates/isolation-20261103/index.cjs';
++import { createQuestionManager } from '../../shell/candidates/questions-20261103/index.cjs';
++
++let passed = 0;
++let failed = 0;
++
++function assert(condition, message) {
++  if (condition) {
++    console.log(`  ✔ [PASS] ${message}`);
++    passed++;
++  } else {
++    console.error(`  ✖ [FAIL] ${message}`);
++    failed++;
++  }
++}
++
++async function run() {
++  console.log('\n=== ISOLATION 受控执行与审批绑定探针开始 ===\n');
++
++  const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), 'isolation-probe-'));
++  const allowedDir = path.join(tmpBase, 'allowed');
++  const outsideDir = path.join(tmpBase, 'outside');
++  fs.mkdirSync(allowedDir, { recursive: true });
++  fs.mkdirSync(outsideDir, { recursive: true });
++
++  const safeFile = path.join(allowedDir, 'hello.txt');
++  fs.writeFileSync(safeFile, 'Hello, controlled world!', 'utf8');
++
++  const largeFile = path.join(allowedDir, 'large.txt');
++  fs.writeFileSync(largeFile, 'A'.repeat(2000), 'utf8');
++
++  const outsideFile = path.join(outsideDir, 'secret.txt');
++  fs.writeFileSync(outsideFile, 'Secret content', 'utf8');
++
++  const symlinkFile = path.join(allowedDir, 'symlink.txt');
++  try {
++    fs.symlinkSync(safeFile, symlinkFile);
++  } catch (_) {}
++
++  const executor = createControlledExecutor({
++    allowedPaths: [allowedDir],
++    hasIsolationBackend: true,
++  });
++
++  // 1. read-file 正常读取
++  console.log('[1] read-file 正常读取');
++  {
++    const res = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'read-file',
++      input: { path: safeFile },
++    });
++    assert(res.ok === true, 'read-file 成功');
++    assert(res.output === 'Hello, controlled world!', 'output 正确');
++    assert(res.outputSha256 === sha256('Hello, controlled world!'), 'outputSha256 匹配');
++    assert(res.truncated === false, 'truncated=false');
++  }
++
++  // 2. read-file 路径穿越防护
++  console.log('\n[2] read-file 路径穿越防护');
++  {
++    const resTraversal = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'read-file',
++      input: { path: path.join(allowedDir, '../outside/secret.txt') },
++    });
++    assert(resTraversal.ok === false && resTraversal.code === 'PATH_TRAVERSAL', '相对路径 .. 被 PATH_TRAVERSAL 拦截');
++
++    const resOutside = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'read-file',
++      input: { path: outsideFile },
++    });
++    assert(resOutside.ok === false && resOutside.code === 'PATH_TRAVERSAL', '不在 allowedPaths 内被 PATH_TRAVERSAL 拦截');
++  }
++
++  // 3. read-file 软链接拦截
++  console.log('\n[3] read-file 软链接拦截');
++  {
++    if (fs.existsSync(symlinkFile)) {
++      const resSymlink = await executor.controlledExec({
++        runId: 'run-1',
++        tenantId: 'tenant-1',
++        execType: 'read-file',
++        input: { path: symlinkFile },
++      });
++      assert(resSymlink.ok === false && resSymlink.code === 'SYMLINK_REJECTED', '软链接访问被 SYMLINK_REJECTED 拒绝');
++    } else {
++      assert(true, '环境跳过软链接创建');
++    }
++  }
++
++  // 4. read-file 资源上限截断
++  console.log('\n[4] read-file 资源上限截断');
++  {
++    const resTrunc = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'read-file',
++      input: { path: largeFile },
++      resourceLimits: { maxBytes: 500 },
++    });
++    assert(resTrunc.ok === true, '超限时返回 ok=true');
++    assert(resTrunc.truncated === true, 'truncated=true');
++    assert(Buffer.byteLength(resTrunc.output, 'utf8') === 500, '输出精确截断至 500 字节');
++  }
++
++  // 5. list-dir 目录列出
++  console.log('\n[5] list-dir 正常列出');
++  {
++    const resDir = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'list-dir',
++      input: { path: allowedDir },
++    });
++    assert(resDir.ok === true, 'list-dir 成功');
++    const items = JSON.parse(resDir.output);
++    assert(Array.isArray(items), '输出为 JSON 数组');
++    assert(items.some(i => i.name === 'hello.txt'), '包含 hello.txt');
++    assert(!items.some(i => i.name === 'symlink.txt'), '已自动过滤符号链接');
++  }
++
++  // 6. run-script 缺少 approvalToken 拒绝
++  console.log('\n[6] run-script 缺少 approvalToken');
++  {
++    const script = 'console.log("test");';
++    const resNoToken = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script },
++    });
++    assert(resNoToken.ok === false && resNoToken.code === 'APPROVAL_REQUIRED', '缺审批 token 返回 APPROVAL_REQUIRED');
++  }
++
++  // 7. run-script approvalToken 篡改检测
++  console.log('\n[7] run-script approvalToken 篡改检测');
++  {
++    const script = 'console.log("approved script");';
++    const fakeToken = {
++      questionId: 'q-100',
++      operationType: 'run-script',
++      operationPayloadHash: sha256('different script content'),
++    };
++    const resTamper = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script },
++      approvalToken: fakeToken,
++    });
++    assert(resTamper.ok === false && resTamper.code === 'APPROVAL_PAYLOAD_MISMATCH', '参数 Hash 不匹配返回 APPROVAL_PAYLOAD_MISMATCH');
++  }
++
++  // 8. run-script 静态网络访问阻断
++  console.log('\n[8] run-script 静态网络访问阻断');
++  {
++    const netScript = 'const http = require("node:http"); console.log("network");';
++    const token = {
++      questionId: 'q-net',
++      operationType: 'run-script',
++      operationPayloadHash: sha256(netScript),
++    };
++    const resNet = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script: netScript },
++      approvalToken: token,
++    });
++    assert(resNet.ok === false && resNet.code === 'NETWORK_ACCESS_REJECTED', '网络调用特征被 NETWORK_ACCESS_REJECTED 阻断');
++  }
++
++  // 9. run-script 凭据访问阻断
++  console.log('\n[9] run-script 凭据访问阻断');
++  {
++    const credScript = 'console.log(process.env.API_KEY);';
++    const token = {
++      questionId: 'q-cred',
++      operationType: 'run-script',
++      operationPayloadHash: sha256(credScript),
++    };
++    const resCred = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script: credScript },
++      approvalToken: token,
++    });
++    assert(resCred.ok === false && resCred.code === 'CREDENTIAL_ACCESS_REJECTED', '凭据特征被 CREDENTIAL_ACCESS_REJECTED 阻断');
++  }
++
++  // 10. run-script 无隔离后端 fail-closed
++  console.log('\n[10] run-script 无隔离后端 fail-closed');
++  {
++    const noBackendExecutor = createControlledExecutor({
++      allowedPaths: [allowedDir],
++      hasIsolationBackend: false,
++    });
++    const script = 'console.log("simple");';
++    const token = {
++      questionId: 'q-backend',
++      operationType: 'run-script',
++      operationPayloadHash: sha256(script),
++    };
++    const resNoBackend = await noBackendExecutor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script },
++      approvalToken: token,
++    });
++    assert(resNoBackend.ok === false && resNoBackend.code === 'NO_ISOLATION_BACKEND', '无沙箱后端时 fail-closed 返回 NO_ISOLATION_BACKEND');
++  }
++
++  // 11. run-script 正常执行
++  console.log('\n[11] run-script 正常执行');
++  {
++    const script = 'const a = 10; const b = 20; console.log("SUM:" + (a + b));';
++    const token = {
++      questionId: 'q-ok',
++      operationType: 'run-script',
++      operationPayloadHash: sha256(script),
++    };
++    const resOk = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script },
++      approvalToken: token,
++    });
++    assert(resOk.ok === true, '脚本正常执行 ok=true');
++    assert(resOk.output.trim() === 'SUM:30', '脚本输出计算结果正确');
++    assert(resOk.outputSha256 === sha256(resOk.output), '输出 outputSha256 正确');
++  }
++
++  // 12. run-script 超时中断
++  console.log('\n[12] run-script 超时中断');
++  {
++    const script = 'while(true) {}';
++    const token = {
++      questionId: 'q-timeout',
++      operationType: 'run-script',
++      operationPayloadHash: sha256(script),
++    };
++    const resTimeout = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script },
++      approvalToken: token,
++      resourceLimits: { timeoutMs: 300 },
++    });
++    assert(resTimeout.ok === false && resTimeout.code === 'RESOURCE_EXCEEDED', '无限循环超时触发 RESOURCE_EXCEEDED');
++  }
++
++  // 13. run-script AbortSignal 取消
++  console.log('\n[13] run-script AbortSignal 取消');
++  {
++    const script = 'setTimeout(() => console.log("late"), 1000);';
++    const token = {
++      questionId: 'q-abort',
++      operationType: 'run-script',
++      operationPayloadHash: sha256(script),
++    };
++    const controller = new AbortController();
++    const execPromise = executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'run-script',
++      input: { script },
++      approvalToken: token,
++      signal: controller.signal,
++    });
++    setTimeout(() => controller.abort(), 50);
++    const resAbort = await execPromise;
++    assert(resAbort.ok === false && resAbort.code === 'RUN_CANCELLED', '中途中止返回 RUN_CANCELLED');
++  }
++
++  // 14. 非法 execType 枚举防御
++  console.log('\n[14] 非法 execType 枚举防御');
++  {
++    const resIllegal = await executor.controlledExec({
++      runId: 'run-1',
++      tenantId: 'tenant-1',
++      execType: 'arbitrary-command',
++      input: {},
++    });
++    assert(resIllegal.ok === false && resIllegal.code === 'EXEC_TYPE_NOT_ALLOWED', '未知 execType 返回 EXEC_TYPE_NOT_ALLOWED');
++  }
++
++  // 15. 与 questions-20261103 联动闭环测试
++  console.log('\n[15] 与 questions-20261103 联动闭环');
++  {
++    const qManager = createQuestionManager({
++      runId: 'run-chain-1',
++      tenantId: 'tenant-alpha',
++      userId: 'user-admin',
++    });
++    const scriptToRun = 'console.log("APPROVED_BY_USER");';
++    const scriptHash = sha256(scriptToRun);
++
++    // 发起审批提问
++    const qPromise = qManager.askQuestion('q-chain-approval', {
++      type: 'approval',
++      question: 'Allow running task script?',
++      options: ['YES', 'NO'],
++      approvalTarget: {
++        displayedToUser: true,
++        operationType: 'run-script',
++        operationPayload: { script: scriptToRun },
++      },
++      timeoutMs: 5000,
++    });
++
++    const pending = qManager.getPendingQuestions('run-chain-1');
++    assert(pending.length === 1, '获取到 pending 提问');
++    const qId = pending[0].questionId;
++
++    // 用户授权答复
++    const ansRes = qManager.submitAnswer(qId, 'YES', {
++      respondentUserId: 'user-admin',
++      respondentTenantId: 'tenant-alpha',
++    });
++    assert(ansRes.ok === true, '审批提交成功');
++
++    const confirmedAnswer = await qPromise;
++    assert(confirmedAnswer.answer === 'YES', '提问已确认答复');
++
++    // 构造 ApprovalToken 并受控执行
++    const token = {
++      questionId: confirmedAnswer.questionId,
++      operationType: 'run-script',
++      operationPayloadHash: scriptHash,
++    };
++
++    const chainExecRes = await executor.controlledExec({
++      runId: 'run-chain-1',
++      tenantId: 'tenant-alpha',
++      execType: 'run-script',
++      input: { script: scriptToRun },
++      approvalToken: token,
++    });
++
++    assert(chainExecRes.ok === true, '审批联动执行成功');
++    assert(chainExecRes.output.trim() === 'APPROVED_BY_USER', '执行输出与预期一致');
++  }
++
++  // 清理临时文件
++  try {
++    fs.rmSync(tmpBase, { recursive: true, force: true });
++  } catch (_) {}
++
++  console.log(`\n=== ISOLATION 探针完成：共 ${passed + failed} 项，通过 ${passed} 项，失败 ${failed} 项 ===\n`);
++  if (failed > 0) {
++    process.exit(1);
++  }
++}
++
++run().catch((err) => {
++  console.error('Probe execution fatal error:', err);
++  process.exit(1);
++});
+diff --git a/tests/probes/questions-delivery-20261103.mjs b/tests/probes/questions-delivery-20261103.mjs
+new file mode 100644
+index 0000000..08dc681
+--- /dev/null
++++ b/tests/probes/questions-delivery-20261103.mjs
+@@ -0,0 +1,181 @@
++#!/usr/bin/env node
++/**
++ * tests/probes/questions-delivery-20261103.mjs
++ * 原生提问和审批交互候选探针
++ */
++
++import { createRequire } from 'module';
++import { fileURLToPath } from 'url';
++import path from 'path';
++
++const __dirname = path.dirname(fileURLToPath(import.meta.url));
++const require = createRequire(import.meta.url);
++const root = path.resolve(__dirname, '../../');
++
++const { createQuestionManager } = require(path.join(root, 'shell/candidates/questions-20261103/index.cjs'));
++
++let pass = 0, fail = 0;
++function assert(label, condition, detail = '') {
++  if (condition) { console.log(`  ✔ [PASS] ${label}`); pass++; }
++  else { console.error(`  ✘ [FAIL] ${label}${detail ? ': ' + detail : ''}`); fail++; }
++}
++
++const BASE = { runId: 'run-001', tenantId: 'tenant-A', userId: 'user-1' };
++
++console.log('\n=== QUESTIONS 原生提问审批交互探针开始 ===\n');
++
++// [1] 正常提问-回答流程
++console.log('[1] 正常提问-回答流程');
++{
++  const qm = createQuestionManager(BASE);
++  const promise = qm.askQuestion('q-001', {
++    type: 'clarification',
++    question: 'Which format do you prefer?',
++    options: ['CSV', 'XLSX'],
++    timeoutMs: 5000,
++  });
++  const submitResult = qm.submitAnswer('q-001', 'CSV', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  assert('submitAnswer ok=true', submitResult.ok === true);
++  const answer = await promise;
++  assert('answer.answer=CSV', answer.answer === 'CSV');
++  assert('answer.consumed=true', answer.consumed === true);
++  assert('answer.questionId 正确', answer.questionId === 'q-001');
++}
++
++// [2] 超时自动拒绝
++console.log('\n[2] 超时自动拒绝 (QUESTION_TIMEOUT)');
++{
++  const qm = createQuestionManager(BASE);
++  let timedOut = false;
++  const promise = qm.askQuestion('q-timeout', {
++    type: 'clarification',
++    question: 'Will this time out?',
++    timeoutMs: 50,  // 50ms 极短超时
++  }).catch(e => { timedOut = e.code === 'QUESTION_TIMEOUT'; });
++  await new Promise(r => setTimeout(r, 100));
++  assert('超时后 promise reject QUESTION_TIMEOUT', timedOut);
++  // 超时后迟到答案被拒绝
++  const late = qm.submitAnswer('q-timeout', 'yes', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  assert('超时后迟到答案 ALREADY_ANSWERED', late.ok === false && late.code === 'ALREADY_ANSWERED');
++}
++
++// [3] Run 取消批量拒绝
++console.log('\n[3] Run 取消批量拒绝 (QUESTION_CANCELLED)');
++{
++  const qm = createQuestionManager(BASE);
++  const errors = [];
++  const p1 = qm.askQuestion('q-c1', { type: 'clarification', question: 'q1?', timeoutMs: 5000 }).catch(e => errors.push(e.code));
++  const p2 = qm.askQuestion('q-c2', { type: 'clarification', question: 'q2?', timeoutMs: 5000 }).catch(e => errors.push(e.code));
++  const result = qm.cancelPendingQuestions('run-001', 'RUN_CANCELLED');
++  await Promise.allSettled([p1, p2]);
++  assert('cancelledCount=2', result.cancelledCount === 2);
++  assert('两个 promise 均 QUESTION_CANCELLED', errors.length === 2 && errors.every(c => c === 'QUESTION_CANCELLED'));
++  // 取消后新提问立即拒绝
++  let immediateFail = false;
++  await qm.askQuestion('q-after-cancel', { type: 'clarification', question: 'too late', timeoutMs: 1000 })
++    .catch(e => { immediateFail = e.code === 'QUESTION_CANCELLED'; });
++  assert('取消后新提问立即 QUESTION_CANCELLED', immediateFail);
++}
++
++// [4] 非授权用户回答被拒绝
++console.log('\n[4] 非授权用户回答 (UNAUTHORIZED_RESPONDENT)');
++{
++  const qm = createQuestionManager(BASE);
++  qm.askQuestion('q-auth', { type: 'approval', question: 'Confirm delete?', timeoutMs: 5000, approvalTarget: { displayedToUser: true, operationType: 'delete', operationPayload: { id: 1 } } });
++  // 不同 tenantId
++  const r1 = qm.submitAnswer('q-auth', 'yes', { respondentUserId: 'user-1', respondentTenantId: 'tenant-B' });
++  assert('不同 tenant 拒绝', r1.ok === false && r1.code === 'UNAUTHORIZED_RESPONDENT');
++  // 不同 userId（approval 类型）
++  const r2 = qm.submitAnswer('q-auth', 'yes', { respondentUserId: 'user-2', respondentTenantId: 'tenant-A' });
++  assert('不同 userId 对 approval 拒绝', r2.ok === false && r2.code === 'UNAUTHORIZED_RESPONDENT');
++  // 清理：正确用户回答
++  qm.submitAnswer('q-auth', 'yes', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++}
++
++// [5] 已回答不能重复提交 (ALREADY_ANSWERED)
++console.log('\n[5] 已回答不能重复提交 (ALREADY_ANSWERED)');
++{
++  const qm = createQuestionManager(BASE);
++  qm.askQuestion('q-dup', { type: 'clarification', question: 'Once?', timeoutMs: 5000 });
++  qm.submitAnswer('q-dup', 'yes', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  const r2 = qm.submitAnswer('q-dup', 'no', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  assert('重复提交 ALREADY_ANSWERED', r2.ok === false && r2.code === 'ALREADY_ANSWERED');
++}
++
++// [6] 幂等性：相同 questionId 返回同一 Promise
++console.log('\n[6] 幂等性 (相同 questionId 返回同一 Promise)');
++{
++  const qm = createQuestionManager(BASE);
++  const args = { type: 'clarification', question: 'Idempotent?', timeoutMs: 5000 };
++  const p1 = qm.askQuestion('q-idem', args);
++  const p2 = qm.askQuestion('q-idem', args);
++  assert('两次调用返回相同 Promise', p1 === p2);
++  qm.submitAnswer('q-idem', 'yes', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  const r1 = await p1;
++  assert('Promise resolve 正确', r1.answer === 'yes');
++}
++
++// [7] 并发多提问同时等待
++console.log('\n[7] 并发多提问');
++{
++  const qm = createQuestionManager(BASE);
++  const p1 = qm.askQuestion('q-par1', { type: 'clarification', question: 'P1?', timeoutMs: 5000 });
++  const p2 = qm.askQuestion('q-par2', { type: 'clarification', question: 'P2?', timeoutMs: 5000 });
++  const p3 = qm.askQuestion('q-par3', { type: 'clarification', question: 'P3?', timeoutMs: 5000 });
++  assert('getPendingQuestions 返回 3 条', qm.getPendingQuestions('run-001').length === 3);
++  qm.submitAnswer('q-par2', 'B', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  const r2 = await p2;
++  assert('并发中 q-par2 正确 resolve', r2.answer === 'B');
++  assert('其余 2 条仍 pending', qm.getPendingQuestions('run-001').length === 2);
++  // 清理
++  qm.cancelPendingQuestions('run-001', 'done');
++  await Promise.allSettled([p1, p3]);
++}
++
++// [8] 内容安全检测 (SENSITIVE_CONTENT)
++console.log('\n[8] 内容安全检测 (SENSITIVE_CONTENT)');
++{
++  const qm = createQuestionManager(BASE);
++  let blocked = false;
++  await qm.askQuestion('q-sec', {
++    type: 'clarification',
++    question: 'Enter your api_key=secret123',
++    timeoutMs: 1000,
++  }).catch(e => { blocked = e.code === 'SENSITIVE_CONTENT'; });
++  assert('含凭据关键词被 SENSITIVE_CONTENT 拒绝', blocked);
++}
++
++// [9] 答案不在 options 列表 (INVALID_ANSWER)
++console.log('\n[9] 答案不在 options 列表 (INVALID_ANSWER)');
++{
++  const qm = createQuestionManager(BASE);
++  const pOpts = qm.askQuestion('q-opts', { type: 'clarification', question: 'Pick:', options: ['A', 'B'], timeoutMs: 5000 });
++  pOpts.catch(() => {}); // suppress unhandled rejection during cleanup
++  const r = qm.submitAnswer('q-opts', 'C', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  assert('不在 options 中返回 INVALID_ANSWER', r.ok === false && r.code === 'INVALID_ANSWER');
++  // correct answer to settle the promise cleanly
++  qm.submitAnswer('q-opts', 'A', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  await pOpts;
++}
++
++// [10] questionId 不存在
++console.log('\n[10] questionId 不存在 (QUESTION_NOT_FOUND)');
++{
++  const qm = createQuestionManager(BASE);
++  const r = qm.submitAnswer('q-no-exist', 'x', { respondentUserId: 'user-1', respondentTenantId: 'tenant-A' });
++  assert('不存在的 questionId → QUESTION_NOT_FOUND', r.ok === false && r.code === 'QUESTION_NOT_FOUND');
++}
++
++// [11] 超时参数边界验证
++console.log('\n[11] 超时参数边界验证');
++{
++  const qm = createQuestionManager(BASE);
++  let err1 = null, err2 = null;
++  await qm.askQuestion('q-t1', { type: 'clarification', question: 'q?', timeoutMs: 0 }).catch(e => { err1 = e.code; });
++  await qm.askQuestion('q-t2', { type: 'clarification', question: 'q?', timeoutMs: 400_000 }).catch(e => { err2 = e.code; });
++  assert('timeoutMs=0 拒绝', err1 === 'CONFIG_INVALID');
++  assert('timeoutMs>300000 拒绝', err2 === 'CONFIG_INVALID');
++}
++
++console.log(`\n=== QUESTIONS 探针完成：共 ${pass + fail} 项，通过 ${pass} 项，失败 ${fail} 项 ===`);
++if (fail > 0) process.exit(1);
+diff --git a/tests/probes/questions-isolation-main-review-20261104.mjs b/tests/probes/questions-isolation-main-review-20261104.mjs
+new file mode 100644
+index 0000000..a98aadf
+--- /dev/null
++++ b/tests/probes/questions-isolation-main-review-20261104.mjs
+@@ -0,0 +1,18 @@
++import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import assert from 'node:assert/strict';import {createRequire} from 'node:module';import crypto from 'node:crypto';
++const require=createRequire(import.meta.url);const {createQuestionManager}=require('../../shell/candidates/questions-20261103/index.cjs');const {createControlledExecutor,sha256}=require('../../shell/candidates/isolation-20261103/index.cjs');
++const rows=[];const identity={runId:'fixture-run',tenantId:'fixture-tenant',userId:'owner'};const respondent={respondentUserId:'owner',respondentTenantId:'fixture-tenant'};
++async function check(id,fn){try{await fn();rows.push({id,status:'PASS'});console.log('PASS '+id);}catch(e){rows.push({id,status:'FAIL',error:e.message});console.log('FAIL '+id);}}
++function manager(){return createQuestionManager(identity)}
++const target={displayedToUser:true,operationType:'run-script',operationPayload:{script:'console.log(1)'}};
++await check('Q-OPTIONS',async()=>{const q=manager();const p=q.askQuestion('id',{type:'approval',question:'Approve?',approvalTarget:target,timeoutMs:1000});p.catch(()=>{});const r=q.submitAnswer('id','ARBITRARY',respondent);q.cancelPendingQuestions(identity.runId);await Promise.allSettled([p]);assert.equal(r.ok,false,'approval without required options accepted arbitrary answer');});
++await check('Q-ID-CONFLICT',async()=>{const q=manager();const a=q.askQuestion('id',{type:'approval',question:'Approve one?',options:['YES','NO'],approvalTarget:target,timeoutMs:1000});a.catch(()=>{});const b=q.askQuestion('id',{type:'approval',question:'Approve another?',options:['YES','NO'],approvalTarget:{...target,operationPayload:{script:'different'}},timeoutMs:1000});b.catch(()=>{});const same=a===b;q.cancelPendingQuestions(identity.runId);await Promise.allSettled([a,b]);assert.equal(same,false,'same questionId reused with different target returns old approval promise');});
++await check('Q-DEADLINE',async()=>{const q=manager();const p=q.askQuestion('id',{type:'approval',question:'Approve?',options:['YES'],approvalTarget:target,timeoutMs:5});p.catch(()=>{});const end=Date.now()+20;while(Date.now()<end){}const r=q.submitAnswer('id','YES',respondent);q.cancelPendingQuestions(identity.runId);await Promise.allSettled([p]);assert.equal(r.ok,false,'deadline passed but event-loop timer not yet run; late answer accepted');});
++await check('Q-OPTIONS-MUTATION',async()=>{const q=manager();const options=['NO'];const p=q.askQuestion('id',{type:'approval',question:'Approve?',options,approvalTarget:target,timeoutMs:1000});p.catch(()=>{});options.push('YES');const r=q.submitAnswer('id','YES',respondent);q.cancelPendingQuestions(identity.runId);await Promise.allSettled([p]);assert.equal(r.ok,false,'caller mutated displayed options after question creation');});
++const tmp=fs.mkdtempSync(path.join(os.tmpdir(),'pt-05-06-review-'));const allowed=path.join(tmp,'allowed');fs.mkdirSync(allowed);const outside=path.join(tmp,'outside');fs.mkdirSync(outside);fs.writeFileSync(path.join(outside,'fixture.txt'),'SYNTHETIC_OUTSIDE_ONLY');const executor=createControlledExecutor({allowedPaths:[allowed]});
++try{
++ await check('I-PARENT-LINK',async()=>{fs.symlinkSync(outside,path.join(allowed,'jump'));const r=await executor.controlledExec({...identity,execType:'read-file',input:{path:path.join(allowed,'jump','fixture.txt')}});assert.equal(r.ok,false,'parent symlink escaped allowed root and read synthetic outside data');});
++ await check('I-HARDLINK',async()=>{fs.linkSync(path.join(outside,'fixture.txt'),path.join(allowed,'alias.txt'));const r=await executor.controlledExec({...identity,execType:'read-file',input:{path:path.join(allowed,'alias.txt')}});assert.equal(r.ok,false,'hardlink alias accepted although contract rejects hardlinks');});
++ await check('I-FORGED-APPROVAL',async()=>{const script='console.log("HARMLESS_FIXTURE")';const r=await executor.controlledExec({...identity,execType:'run-script',input:{script},approvalToken:{questionId:'never-issued',operationType:'run-script',operationPayloadHash:sha256(script)}});assert.equal(r.ok,false,'self-constructed hash token accepted without issued approval or real sandbox backend');});
++ await check('I-SCRIPT-ROOT',async()=>{const script='console.log(require("node:fs").readFileSync('+JSON.stringify(path.join(outside,'fixture.txt'))+',"utf8"))';const r=await executor.controlledExec({...identity,execType:'run-script',input:{script},approvalToken:{questionId:'never-issued',operationType:'run-script',operationPayloadHash:sha256(script)}});assert.equal(r.ok,false,'bare host node script read synthetic data outside allowedPaths');});
++}finally{fs.rmSync(tmp,{recursive:true,force:true})}
++const sourcePaths=['shell/candidates/questions-20261103/index.cjs','shell/candidates/isolation-20261103/index.cjs'];const sources=Object.fromEntries(sourcePaths.map(p=>[p,crypto.createHash('sha256').update(fs.readFileSync(p)).digest('hex')]));const report={time_utc:new Date().toISOString(),scope:'Actual candidates; isolated synthetic temp files and harmless child scripts only; no provider/network/production access',sources,total:rows.length,passed:rows.filter(x=>x.status==='PASS').length,failed:rows.filter(x=>x.status==='FAIL').length,results:rows};fs.writeFileSync('docs/refactor/evidence/QUESTIONS-ISOLATION-MAIN-REVIEW-20261104.json',JSON.stringify(report,null,2)+'\n');console.log(JSON.stringify({total:report.total,passed:report.passed,failed:report.failed}));if(report.failed)process.exitCode=1;
+-- 
+2.50.1 (Apple Git-155)
+

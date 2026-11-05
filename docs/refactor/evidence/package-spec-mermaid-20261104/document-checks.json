@@ -1,0 +1,611 @@
+{
+  "scope": "documentation checks only",
+  "packages": 25,
+  "user_or_mixed": 17,
+  "backend_or_review": 8,
+  "ac_total": 281,
+  "decisions_total": 99,
+  "checked_markdown_files": 30,
+  "excluded_packages_unchanged": 10,
+  "excluded_checks": [
+    {
+      "path": "docs/refactor/GEMINI-QUESTIONS-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "618572ab0d49f6c64ca013caaa4d087c01dc1c9339c2099d5be35b6a5e4f7a25",
+      "after_sha256": "618572ab0d49f6c64ca013caaa4d087c01dc1c9339c2099d5be35b6a5e4f7a25"
+    },
+    {
+      "path": "docs/refactor/GEMINI-AV-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "af04693c9161f0bfd263b8b7f32c77297962296f37caf96166679eefc7fc75f4",
+      "after_sha256": "af04693c9161f0bfd263b8b7f32c77297962296f37caf96166679eefc7fc75f4"
+    },
+    {
+      "path": "docs/refactor/GEMINI-AUTO-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "98f13fe7e506716909479871c89be8885b93a5f9c452652367662562ceaf94cb",
+      "after_sha256": "98f13fe7e506716909479871c89be8885b93a5f9c452652367662562ceaf94cb"
+    },
+    {
+      "path": "docs/refactor/GEMINI-DOCINPUT-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "345afea4b2bc87de710f150a86a76c3cb18802569484be0318ab3ccfbf23a9a3",
+      "after_sha256": "345afea4b2bc87de710f150a86a76c3cb18802569484be0318ab3ccfbf23a9a3"
+    },
+    {
+      "path": "docs/refactor/GEMINI-ISOLATION-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "dae31e356d223636a3bc5612c0a0a58b7d8757abf4edbf07098d31d7a2d4704e",
+      "after_sha256": "dae31e356d223636a3bc5612c0a0a58b7d8757abf4edbf07098d31d7a2d4704e"
+    },
+    {
+      "path": "docs/refactor/GEMINI-BILLING-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "87c7c9155c13858cf8fcdfceaac2e8195f6eb3a86c21dafdf47fd3e85a4a70ec",
+      "after_sha256": "87c7c9155c13858cf8fcdfceaac2e8195f6eb3a86c21dafdf47fd3e85a4a70ec"
+    },
+    {
+      "path": "docs/refactor/GEMINI-WEB-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "1f53593281cbe523d807768b2c909921099b1e83732224640edb383cda329e91",
+      "after_sha256": "1f53593281cbe523d807768b2c909921099b1e83732224640edb383cda329e91"
+    },
+    {
+      "path": "docs/refactor/GEMINI-DOCOUTPUT-DELIVERY-PACKAGE-20261103.md",
+      "before_sha256": "363f551253257bdeb6eb94b722860112d67a37359f56da8e58527226f20cbb6c",
+      "after_sha256": "363f551253257bdeb6eb94b722860112d67a37359f56da8e58527226f20cbb6c"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-FILEEDIT-PACKAGE-20261103.md",
+      "before_sha256": "065e042390fdf4195d9089716327a2efb33f633fe4563d9051013e89f4791703",
+      "after_sha256": "065e042390fdf4195d9089716327a2efb33f633fe4563d9051013e89f4791703"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-SEEDANCE-PACKAGE-20261103.md",
+      "before_sha256": "d8ebc7aa61e4a5e3c5a9f3b0ed336c18e83699d762198b76113f97f5380351d2",
+      "after_sha256": "d8ebc7aa61e4a5e3c5a9f3b0ed336c18e83699d762198b76113f97f5380351d2"
+    }
+  ],
+  "rendered_svgs_verified": 20,
+  "node_coverage": {
+    "11": {
+      "nodes": 17,
+      "mapped": 17
+    },
+    "12": {
+      "nodes": 17,
+      "mapped": 17
+    },
+    "13": {
+      "nodes": 16,
+      "mapped": 16
+    },
+    "19": {
+      "nodes": 18,
+      "mapped": 18
+    },
+    "20": {
+      "nodes": 15,
+      "mapped": 15
+    },
+    "21": {
+      "nodes": 17,
+      "mapped": 17
+    },
+    "22": {
+      "nodes": 17,
+      "mapped": 17
+    },
+    "23": {
+      "nodes": 17,
+      "mapped": 17
+    },
+    "24": {
+      "nodes": 16,
+      "mapped": 16
+    },
+    "25": {
+      "nodes": 21,
+      "mapped": 21
+    },
+    "26": {
+      "nodes": 21,
+      "mapped": 21
+    },
+    "27": {
+      "nodes": 18,
+      "mapped": 18
+    },
+    "28": {
+      "nodes": 18,
+      "mapped": 18
+    },
+    "29": {
+      "nodes": 18,
+      "mapped": 18
+    },
+    "30": {
+      "nodes": 18,
+      "mapped": 18
+    },
+    "32": {
+      "nodes": 33,
+      "mapped": 33
+    },
+    "35": {
+      "nodes": 22,
+      "mapped": 22
+    }
+  },
+  "errors": [],
+  "packages_details": [
+    {
+      "id": 11,
+      "path": "docs/refactor/REFACTOR-CONTEXT-TOOLS-PACKAGE-20261103.md",
+      "type": "混合型：原生插件＋已有压缩入口交互",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/C",
+        "B/D",
+        "E/F/G",
+        "H/I/J",
+        "K/L/M",
+        "N",
+        "O/P/Q",
+        "P"
+      ],
+      "sha256": "98b03c47830a5e2eb01cb4340fd1eff50c439a1568e03b6efd9e3e363fdc7b2b"
+    },
+    {
+      "id": 12,
+      "path": "docs/refactor/REFACTOR-TASK-UX-PACKAGE-20261103.md",
+      "type": "用户交互型：三种状态独立投影",
+      "diagram": true,
+      "ac_count": 10,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C/D/E/F",
+        "M/N/O/AUTO",
+        "G",
+        "H",
+        "I",
+        "J/K",
+        "L/P"
+      ],
+      "sha256": "ad8a409451afe7e205395c983c987bc7f6b1c6ab39b67cd33a338303298f251b"
+    },
+    {
+      "id": 13,
+      "path": "docs/refactor/REFACTOR-ORCHESTRATION-PACKAGE-20261103.md",
+      "type": "混合型：原生委派＋用户控制与汇报",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B",
+        "C/D/E",
+        "F",
+        "G/H",
+        "G/I",
+        "J",
+        "K/L/M",
+        "N/O/P"
+      ],
+      "sha256": "8aa1dffc4e8795edf5482908400cdf332a49bb5bd5173cd735dee67b4c27d588"
+    },
+    {
+      "id": 14,
+      "path": "docs/refactor/REFACTOR-PRODUCTION-ACCEPTANCE-PACKAGE-20261103.md",
+      "type": "验收型：无新增用户流程",
+      "diagram": false,
+      "ac_count": 11,
+      "decisions": 3,
+      "nodes": [
+        "P1",
+        "P2",
+        "P3",
+        "P4",
+        "P5",
+        "P6",
+        "P7",
+        "P8"
+      ],
+      "sha256": "fecc59248c664bf9322baf2ed9bc28adf72b5b74297d96929b3a14fec86687eb"
+    },
+    {
+      "id": 15,
+      "path": "docs/refactor/REFACTOR-RESILIENCE-PACKAGE-20261103.md",
+      "type": "验收型：累计产品故障矩阵",
+      "diagram": false,
+      "ac_count": 11,
+      "decisions": 3,
+      "nodes": [
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R7",
+        "R8"
+      ],
+      "sha256": "f322624248c7cb45e391cb29e04530aa011778e0243f967169b003071b5fc31d"
+    },
+    {
+      "id": 16,
+      "path": "docs/refactor/REFACTOR-CI-PERFORMANCE-PACKAGE-20261103.md",
+      "type": "后端/工程型：无新增用户分支",
+      "diagram": false,
+      "ac_count": 10,
+      "decisions": 3,
+      "nodes": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5",
+        "C6",
+        "C7"
+      ],
+      "sha256": "fb6d83bbccd723f7c3931a7624bc7e1046537ba495d057a144dc1c18fc776504"
+    },
+    {
+      "id": 17,
+      "path": "docs/refactor/REFACTOR-GOVERNANCE-PACKAGE-20261103.md",
+      "type": "治理型：无新增用户流程",
+      "diagram": false,
+      "ac_count": 18,
+      "decisions": 3,
+      "nodes": [
+        "G1",
+        "G2",
+        "G3",
+        "G4",
+        "G5",
+        "G6",
+        "G7"
+      ],
+      "sha256": "371ed92919eeffbff41bccffcf184d24900d955e3de144928d1afa6496339d92"
+    },
+    {
+      "id": 18,
+      "path": "docs/refactor/REFACTOR-OPS-RECOVERY-PACKAGE-20261103.md",
+      "type": "运维型：无新增终端用户分支",
+      "diagram": false,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "O1",
+        "O2",
+        "O3",
+        "O4",
+        "O5",
+        "O6",
+        "O7",
+        "O8"
+      ],
+      "sha256": "56760e2fc4fdd8def6c267a3d4968c14a285c497696115b98744a8893875c032"
+    },
+    {
+      "id": 19,
+      "path": "docs/refactor/PRODUCT-PROJECT-PACKAGE-20261103.md",
+      "type": "用户交互型：项目容器与资料范围",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C/D",
+        "F/G",
+        "E/H/I/J",
+        "K/L/M",
+        "N/O/P",
+        "Q",
+        "R/J",
+        "K"
+      ],
+      "sha256": "3232825b893ea62295e83b2b40491003c684828a2cd10d97ed7918ca25ea0ea2"
+    },
+    {
+      "id": 20,
+      "path": "docs/refactor/PRODUCT-PLAN-PACKAGE-20261103.md",
+      "type": "用户交互型：执行前控制面",
+      "diagram": true,
+      "ac_count": 10,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C",
+        "D",
+        "E/F",
+        "G/H/I",
+        "J/K",
+        "L/M/N",
+        "O"
+      ],
+      "sha256": "8c04fdbbecb9a163cf0603a910ff6f309a5675f9ab0acf2a4f9081530950bbea"
+    },
+    {
+      "id": 21,
+      "path": "docs/refactor/PRODUCT-PROGRESS-PACKAGE-20261103.md",
+      "type": "用户交互型：活动Run安全控制",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C",
+        "D/E",
+        "D/F",
+        "H/I/J/K",
+        "M/N/O/P",
+        "O/L",
+        "Q",
+        "G"
+      ],
+      "sha256": "92bd65ae57735f6cd6a0cdee3a861d35d247acd32a98350171e3ea061c0d6315"
+    },
+    {
+      "id": 22,
+      "path": "docs/refactor/PRODUCT-PREVIEW-PACKAGE-20261103.md",
+      "type": "用户交互型：多格式成果与版本",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C",
+        "D/E/F",
+        "G/H",
+        "I/J",
+        "K/L/M",
+        "N/O",
+        "P",
+        "Q"
+      ],
+      "sha256": "eadd69c97e6598a5eed764905e6c6ec4c2454002570a256cff60e0786275b78f"
+    },
+    {
+      "id": 23,
+      "path": "docs/refactor/PRODUCT-HISTORY-PACKAGE-20261103.md",
+      "type": "用户交互型：可追溯检索与安全分叉",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C/D",
+        "E/F/G",
+        "H/I/J",
+        "K/L",
+        "M",
+        "N",
+        "O/P",
+        "Q"
+      ],
+      "sha256": "4e52b05699a515d3056d49c84a8fe01d2b07a8e4f01d49df85f1c78a1c5b3f6f"
+    },
+    {
+      "id": 24,
+      "path": "docs/refactor/PRODUCT-TEMPLATE-PACKAGE-20261103.md",
+      "type": "用户交互型：固定模板、版本与有效设置",
+      "diagram": true,
+      "ac_count": 10,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C",
+        "E/F/G",
+        "D/H/I",
+        "J",
+        "K",
+        "L/M",
+        "N/O/P"
+      ],
+      "sha256": "0821a93808cf4149148da1990a34e259223251a52bc0bf65d92e8c8b3369c0f6"
+    },
+    {
+      "id": 25,
+      "path": "docs/refactor/PRODUCT-CONNECTORS-PACKAGE-20261103.md",
+      "type": "用户交互型：授权跳转与资源选择",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C",
+        "D/E/F/G",
+        "H",
+        "I/J/K/L",
+        "M/N/O/P",
+        "Q",
+        "R",
+        "S/T/U"
+      ],
+      "sha256": "5112d6fc9d63120d717b63a5cf9ed4c5ce380560a8aa295d798434de40670bca"
+    },
+    {
+      "id": 26,
+      "path": "docs/refactor/PRODUCT-AUTOMATION-PACKAGE-20261103.md",
+      "type": "用户交互型：持久规则与无人值守边界",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C",
+        "D/E",
+        "F/G/H",
+        "I/J",
+        "K/L/M",
+        "N/O/P",
+        "Q/R/S",
+        "T/U"
+      ],
+      "sha256": "74d8047a21258ff514f99348c32cdc0e124a233d2a877dfdb23256bc62d30d46"
+    },
+    {
+      "id": 27,
+      "path": "docs/refactor/PRODUCT-BATCH-PACKAGE-20261103.md",
+      "type": "用户交互型：逐项账本与部分结果",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B",
+        "C/D",
+        "E/F",
+        "G",
+        "H/I/J",
+        "K/L/M/N",
+        "O/P",
+        "Q/R"
+      ],
+      "sha256": "dd0a05ac7a78adfe0ad982cb6fde84c43021d690573ee623953ef9df07e11b49"
+    },
+    {
+      "id": 28,
+      "path": "docs/refactor/PRODUCT-COLLAB-PACKAGE-20261103.md",
+      "type": "用户交互型：资源授权和撤销",
+      "diagram": true,
+      "ac_count": 10,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C",
+        "D/E/F",
+        "G/H/I",
+        "J/K/L",
+        "M/N/O/P",
+        "Q/R",
+        "J"
+      ],
+      "sha256": "aa52053c2ec24df28621b6ccd5573e003acd60f7d5b10b9c915a518f00d7a863"
+    },
+    {
+      "id": 29,
+      "path": "docs/refactor/PRODUCT-INBOX-PACKAGE-20261103.md",
+      "type": "用户交互型：站内事件到任务定位",
+      "diagram": true,
+      "ac_count": 10,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C/D",
+        "E",
+        "F/G",
+        "H/I/K",
+        "J/L/M/N",
+        "O",
+        "P/Q/R"
+      ],
+      "sha256": "75f560641e35ecd1d553faa157e9528f213a4ffcd293900be6512ce67a76fba0"
+    },
+    {
+      "id": 30,
+      "path": "docs/refactor/PRODUCT-MEMORY-UI-PACKAGE-20261103.md",
+      "type": "用户交互型：可见来源、范围与撤销",
+      "diagram": true,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "A/B/C/D/E",
+        "F",
+        "G/H/I/J/K",
+        "L/M",
+        "N",
+        "O/P",
+        "Q",
+        "R"
+      ],
+      "sha256": "038d3cf1ff21857d310d3f85dca886509ec26ce236777a7ba5487d9e1ad5ea03"
+    },
+    {
+      "id": 31,
+      "path": "docs/refactor/PRODUCT-PROVIDERS-PACKAGE-20261103.md",
+      "type": "后端型：typed facade与渐进兼容适配",
+      "diagram": false,
+      "ac_count": 11,
+      "decisions": 4,
+      "nodes": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8"
+      ],
+      "sha256": "231843ce16005f0fa54048b2d2fb33e39030371095e11736aa3958a3a8674c12"
+    },
+    {
+      "id": 32,
+      "path": "docs/refactor/PRODUCT-LOCAL-PACKAGE-20261103.md",
+      "type": "用户交互型：设备配对、目录授权与可见执行",
+      "diagram": true,
+      "ac_count": 14,
+      "decisions": 5,
+      "nodes": [
+        "A/B/C/D/PAIR",
+        "E/F/G/H",
+        "TRUST/NET/OFFLINE/RECONNECT/VERIFIED/H",
+        "REPAIR",
+        "ROOT/ROOTBLOCK/I/J",
+        "K/L",
+        "M/N",
+        "O/P",
+        "Q/S/T/U",
+        "R",
+        "R/V",
+        "W/X",
+        "D/H"
+      ],
+      "sha256": "96d718e4a12f61babf430305e61cd8a74b4f0f396d03a893323c07f028350220"
+    },
+    {
+      "id": 33,
+      "path": "docs/refactor/PRODUCT-CAPACITY-PACKAGE-20261103.md",
+      "type": "后端/资源型：测量、服务限额与申请",
+      "diagram": false,
+      "ac_count": 10,
+      "decisions": 4,
+      "nodes": [
+        "K1",
+        "K2",
+        "K3",
+        "K4",
+        "K5",
+        "K6",
+        "K7"
+      ],
+      "sha256": "5433b14502a2b6d67dde58838baaf3528b99904787eb43a324fd41f398fac268"
+    },
+    {
+      "id": 34,
+      "path": "docs/refactor/PRODUCT-PT-CAPABILITIES-PACKAGE-20261103.md",
+      "type": "调查/契约型：无新增用户流程",
+      "diagram": false,
+      "ac_count": 10,
+      "decisions": 4,
+      "nodes": [
+        "V1",
+        "V2",
+        "V3",
+        "V4",
+        "V5",
+        "V6",
+        "V7"
+      ],
+      "sha256": "52619c36d2712e0cc79ad146a82e8abb2a5097974cc44ae40305405960e41dc4"
+    },
+    {
+      "id": 35,
+      "path": "docs/refactor/PRODUCT-PRODUCTION-PACKAGE-20261103.md",
+      "type": "混合型：四条后端治理链＋受限管理控制台",
+      "diagram": true,
+      "ac_count": 15,
+      "decisions": 6,
+      "nodes": [
+        "A/B/C",
+        "D/E",
+        "F",
+        "G/H/I",
+        "J/M",
+        "K/L",
+        "N",
+        "O/U",
+        "P",
+        "Q",
+        "O/R/S/T",
+        "V"
+      ],
+      "sha256": "793e60ff13f25fa3bf22335be5a7cd13fbc13de416f8fc46cf7ceec644489c20"
+    }
+  ]
+}

@@ -1,0 +1,74 @@
+模型切换（B3）回归：
+
+[1] loadModels：AUTO 置顶 + 能力/runtime状态显式
+  ok   渲染出 9 个选项（AUTO + 8 个模型）
+  ok   第一个是 AUTO
+  ok   AUTO 文案含「智能选模型」
+  ok   AUTO 默认选中
+  ok   对话模型不带不可聊天后缀
+  ok   视频模型标不支持聊天
+  ok   视频模型标了类型
+  ok   图片模型标了类型
+  ok   语音模型标了类型
+  ok   chat:null 显示能力未确认且禁用
+  ok   未适配模型标状态并禁用
+  ok   已获手动资格的适配模型可首调
+  ok   removed 模型标下架并禁用
+  ok   modelCaps 记了 8 个模型
+  ok   modelCaps 里 seedance 不可聊
+  ok   modelCaps 里对话模型可聊
+  ok   Key缺失诊断明确且不暴露凭据
+  ok   目录内部错误显示安全诊断码
+  ok   目录状态unknown仍阻止请求并指向目录排障
+
+[2] currentModelChat 四种情况
+  ok   AUTO -> 可聊
+  ok   已验证且可用的对话模型 -> 可聊
+  ok   视频模型 -> 不可聊
+  ok   语音模型 -> 不可聊
+  ok   chat:null -> 不可执行
+  ok   服务端准许手动首调的模型 -> 可聊
+  ok   目录中查不到的模型 fail-closed
+  ok   modelKindLabel
+
+[3] runChat 守卫：选中不可聊天模型时不发请求
+  ok   不可聊天模型：没有发出 /api/chat
+  ok   给出了明确不可执行提示
+  ok   能力未知/运行时未验证/下架模型均不发 chat
+  ok   已获手动首调资格的模型发出一次 /api/chat
+  ok   对话模型正常放行（发了 /api/chat）
+  ok   AUTO 正常放行
+
+[4] 切换模型时的提示与回退
+  ok   选择生成类模型 -> 提示不可执行
+  ok   无效模型选择未发送持久化请求
+  ok   无效模型选择恢复到 AUTO
+  ok   切回对话模型 -> 清掉提示
+
+[5] AUTO 无候选展示服务端错误
+  ok   AUTO 无候选呈现服务端原始错误
+  ok   AUTO 错误后仍保持 AUTO
+
+[6] 对话模型请求与异步回包隔离
+  ok   模型未加载期间禁止发送
+  ok   GET携带所属对话ID
+  ok   A迟到响应不覆盖B模型
+  ok   POST绑定发起时的对话ID（success）
+  ok   模型选择未持久化前禁止发送（success）
+  ok   A迟到success不污染B选择或提示
+  ok   POST绑定发起时的对话ID（failure）
+  ok   模型选择未持久化前禁止发送（failure）
+  ok   A迟到failure不污染B选择或提示
+  ok   同步失败明确进入可重试状态
+  ok   发送可恢复目录但不会自动提交付费聊天
+
+[7] 原生元数据推理档位与保存/回包隔离
+  ok   仅显示原生档位并恢复已存偏好
+  ok   档位保存绑定当前会话与模型
+  ok   档位未保存前阻止发送
+  ok   档位保存期间保留未发送文本
+  ok   保存成功后采用已确认档位
+  ok   保存失败保留已接受档位
+  ok   旧会话元数据晚到不污染新会话
+
+模型切换（B3）回归：57 通过 / 57 项

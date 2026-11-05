@@ -1,6 +1,8 @@
 # Gemini任务包：模型文档产物与中文PDF｜2026-11-03
 
-基线：`f4a3d39e9454a13f37d39ec84d01ae0b625162d0`（源码仍会前进；交付报告必须记录实际base和文件SHA）。状态：READY_TO_FORWARD，文档创建不表示已派送。目标是实现可集成闭环，不接受仅调查报告替代功能。
+> 实施门禁：以[DSH最大化复用原则](PRODUCT-ROADMAP-AND-RESOURCES-20261103.md#首要原则最大化复用dsh)为准。先交需求与锁定DSH原生/插件/UI/协议的复用矩阵；优先配置、直接复用和必要接线，主审确认具体缺口后才补最小宿主实现。此包不要求另造原生已有机制；已分配包在交卷/主审时补此矩阵，不覆盖执行者已有工作。
+
+基线：`f4a3d39e9454a13f37d39ec84d01ae0b625162d0`（源码仍会前进；交付报告必须记录实际base和文件SHA）。状态：ASSIGNED（2026-11-03用户确认已分配）；执行者、实际交付与验收进度待回执，不代表完成。状态统一维护于 [完整重构主台账](REFACTOR-MASTER-TRACKER-20261103.md)。目标是实现可集成闭环，不接受仅调查报告替代功能。
 
 边界：只新增 `shell/candidates/docoutput-20261103/`、`tests/probes/docoutput-delivery-20261103.mjs`、`docs/refactor/evidence/GEMINI-DOCOUTPUT-DELIVERY-20261103.md`；本任务包仅追加交付记录。禁止编辑server、persistent-runner、tenant、public、共享迁移、package/lock、发布归档、其他候选、`tests/e2e/`和OAuth文档。需要接入共享文件时，提交逐项接线说明和补丁文件在独占目录，由主Agent集成。依赖新增只能给版本/许可/安装及锁定方案，不擅自修改共享依赖。不得存凭据、付费调用、部署、merge、push或覆盖他人改动。
 
@@ -13,3 +15,9 @@
 先读：shell/exports/portable-xlsx-candidate.cjs、conversation-docx.cjs、document-export-worker.cjs、runtime/artifacts.cjs。
 
 必须覆盖：真实中文PDF渲染及文字提取，DOCX/XLSX独立反读，版本/Run/租户绑定，公式/HTML注入、坏schema、大小上限、失败无半成品；不是只做字符串快照。
+
+## PT依赖、Plan B与进度影响
+| PT依赖/需求编号 | Plan B | 进度/验收影响 |
+|---|---|---|
+| PT-03工具调用及文本输出 | 选已授权兼容模型；复用现有writer | writer/下载可继续；模型主动生成链需真实模型验收 |
+依据：[PT接口规格v1.1第15节](PT-API-REQUIREMENTS-20261104.md)。PT未接受建议接口形态时先映射既有协议；遵循DSH最大复用原则。上述Plan B为规划候选，不表示已验证或获准额外模型/资源/供应商调用；原范围未满足仍标未完成，变更需用户确认。签署协议仅已签署/未签署，无有效期/续签；资产启用及凭据/缓存/资源有效期分别处理。

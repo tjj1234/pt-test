@@ -1,0 +1,53 @@
+{
+  "time_utc": "2026-11-04T08:54:55.207Z",
+  "scope": "Actual candidates; isolated synthetic temp files and harmless child scripts only; no provider/network/production access",
+  "sources": {
+    "shell/candidates/questions-20261103/index.cjs": "5ee8b08735b4c7726c161199949f85ab57d2057a7fdc83fd226b796e2052a5ea",
+    "shell/candidates/isolation-20261103/index.cjs": "37c9622bdefb2a0bb56eb6b9120e7f7732b993b483b1bc3f018b029e112f77ef"
+  },
+  "total": 8,
+  "passed": 0,
+  "failed": 8,
+  "results": [
+    {
+      "id": "Q-OPTIONS",
+      "status": "FAIL",
+      "error": "approval without required options accepted arbitrary answer\n\ntrue !== false\n"
+    },
+    {
+      "id": "Q-ID-CONFLICT",
+      "status": "FAIL",
+      "error": "same questionId reused with different target returns old approval promise\n\ntrue !== false\n"
+    },
+    {
+      "id": "Q-DEADLINE",
+      "status": "FAIL",
+      "error": "deadline passed but event-loop timer not yet run; late answer accepted\n\ntrue !== false\n"
+    },
+    {
+      "id": "Q-OPTIONS-MUTATION",
+      "status": "FAIL",
+      "error": "caller mutated displayed options after question creation\n\ntrue !== false\n"
+    },
+    {
+      "id": "I-PARENT-LINK",
+      "status": "FAIL",
+      "error": "parent symlink escaped allowed root and read synthetic outside data\n\ntrue !== false\n"
+    },
+    {
+      "id": "I-HARDLINK",
+      "status": "FAIL",
+      "error": "hardlink alias accepted although contract rejects hardlinks\n\ntrue !== false\n"
+    },
+    {
+      "id": "I-FORGED-APPROVAL",
+      "status": "FAIL",
+      "error": "self-constructed hash token accepted without issued approval or real sandbox backend\n\ntrue !== false\n"
+    },
+    {
+      "id": "I-SCRIPT-ROOT",
+      "status": "FAIL",
+      "error": "bare host node script read synthetic data outside allowedPaths\n\ntrue !== false\n"
+    }
+  ]
+}

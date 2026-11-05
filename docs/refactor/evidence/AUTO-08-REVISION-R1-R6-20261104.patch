@@ -1,0 +1,584 @@
+From 0c8841cfb1a658d7d4a7d118584fca7dc3e6e1f2 Mon Sep 17 00:00:00 2001
+From: mmdn-codex <mmdn814@gmail.com>
+Date: Wed, 4 Nov 2026 17:25:27 +0900
+Subject: [PATCH] fix(auto-08): resolve R1-R6 review defects in isolated fix
+ branch
+
+---
+ shell/candidates/auto-20261103/CONTRACT.md    |  86 +++++++
+ shell/candidates/auto-20261103/index.cjs      | 215 ++++++++++++++++++
+ tests/probes/auto-08-main-review-20261104.mjs |  44 ++++
+ tests/probes/auto-delivery-20261103.mjs       | 195 ++++++++++++++++
+ 4 files changed, 540 insertions(+)
+ create mode 100644 shell/candidates/auto-20261103/CONTRACT.md
+ create mode 100644 shell/candidates/auto-20261103/index.cjs
+ create mode 100644 tests/probes/auto-08-main-review-20261104.mjs
+ create mode 100644 tests/probes/auto-delivery-20261103.mjs
+
+diff --git a/shell/candidates/auto-20261103/CONTRACT.md b/shell/candidates/auto-20261103/CONTRACT.md
+new file mode 100644
+index 0000000..e4e03ad
+--- /dev/null
++++ b/shell/candidates/auto-20261103/CONTRACT.md
+@@ -0,0 +1,86 @@
++# CONTRACT: 配置化任务模型路由 (auto-20261103)
++修订版本：`2026-11-04-revision-1`（基于主审 AUTO-08-MAIN-REVIEW 闭合 R1-R6）
++基线: `f4a3d39e9454a13f37d39ec84d01ae0b625162d0`
++
++## 输入 Schema
++
++```typescript
++interface TaskRouteConfig {
++  routes: RouteEntry[];        // 有序路由规则列表
++  version: string;             // 配置版本号，用于 pin，深拷贝绑定
++}
++
++interface RouteEntry {
++  taskType: string;            // 任务类型，对应 capabilities.cjs TASKS
++  candidates: string[];        // 有序首选模型 ID 列表（按优先级降序）
++  fallback?: string[];         // 后备模型 ID 列表（全路由去重，严禁与 candidates 重复）
++  pinVersion?: string;         // 模型版本 pin（非空字符串）
++}
++
++interface SelectInput {
++  taskType: string;
++  eligibilityResults: EligibilityResult[];  // 来自现有门禁的结果，不自行验证
++  selection?: { mode: 'auto' | 'manual'; modelId?: string }; // 严格枚举
++  dispatchState?: 'pre-dispatch' | 'dispatched';  // 严格枚举，后备仅限 pre-dispatch
++}
++
++interface EligibilityResult {
++  modelId: string;
++  eligible: boolean;
++  reason?: string;             // 不可用原因（若含 PAYMENT_UNKNOWN / UNKNOWN_PAYMENT_RESULT 则终止整个路由）
++}
++```
++
++## 输出 Schema
++
++```typescript
++interface SelectSuccessResult {
++  ok: true;
++  modelId: string;
++  taskType: string;
++  mode: 'auto' | 'manual';
++  source: 'primary' | 'fallback' | 'manual';
++  configVersion: string;
++  pinVersion?: string;
++}
++
++interface SelectErrorResult {
++  ok: false;
++  code: ErrorCode;
++  detail?: string;
++}
++
++type SelectResult = SelectSuccessResult | SelectErrorResult;
++```
++
++## 错误码
++
++| 错误码 | 含义 |
++|--------|------|
++| `CONFIG_INVALID` | 配置 schema 不合法（缺字段、重复 taskType、空候选列表、非法枚举等）|
++| `TASK_NOT_CONFIGURED` | 请求的 taskType 在配置中没有路由规则 |
++| `MISSING_ELIGIBLE_MODEL` | 所有候选（含后备）均不可用 |
++| `MANUAL_MODEL_NOT_IN_CONFIG` | 手动选择的模型不在配置候选列表中 |
++| `FALLBACK_AFTER_DISPATCH` | 在已 dispatch 后尝试改选或切换模型（严格禁止） |
++| `UNKNOWN_PAYMENT_RESULT` | 执行或付费结果未知，立即终止整个选择，绝不切换模型重提 |
++| `DUPLICATE_CANDIDATE` | 候选列表中有重复模型 ID（包含 candidates 内部、fallback 内部及跨集合重复） |
++
++## 约束 (R1-R6)
++
++1. **R1 未知付费结果立即停止**：显式区分调用前资格拒绝与已有执行结果未知。遇到 UNKNOWN_PAYMENT_RESULT 或 PAYMENT_UNKNOWN 立即终止并返回 UNKNOWN_PAYMENT_RESULT，绝不跳过该模型选次优或 fallback。
++2. **R2 统一状态门禁**：在任何选择分支之前执行统一 dispatchState 检查。`dispatched` 状态下严禁改选模型（无论 primary、fallback 还是 manual 均返回安全拒绝）。
++3. **R3 严格枚举校验**：非 `pre-dispatch`/`dispatched` 状态与非 `auto`/`manual` 模式返回 `CONFIG_INVALID`，不默认为安全状态。
++4. **R4 候选全量去重**：验证整条路由的候选集合，禁止 fallback 自身重复以及 fallback 与 primary 重复，违者返回 `DUPLICATE_CANDIDATE`。
++5. **R5 严格版本 pin**：拒绝空/全空白 pinVersion；`selectModel` 成功结果中透传绑定的 pinVersion。
++6. **R6 配置快照隔离**：router 创建时通过深拷贝冻结快照，杜绝外部对象未发布修改导致版本漂移。
++7. **多阶段路由**：`BLOCKED_MULTI_STAGE` - 未实现，不得声称支持。
++
++## 挂载接口
++
++```javascript
++// 主线接缝（由主 Agent 集成）
++const { createTaskRouter, validateRouteConfig } = require('./shell/candidates/auto-20261103/index.cjs');
++const router = createTaskRouter(config);
++// 在 task-router.cjs 调用链之后，将 eligibilityResults 传入选择器
++const result = router.selectModel(taskType, eligibilityResults, { dispatchState: 'pre-dispatch' });
++```
+diff --git a/shell/candidates/auto-20261103/index.cjs b/shell/candidates/auto-20261103/index.cjs
+new file mode 100644
+index 0000000..d408f9f
+--- /dev/null
++++ b/shell/candidates/auto-20261103/index.cjs
+@@ -0,0 +1,215 @@
++'use strict';
++
++/**
++ * shell/candidates/auto-20261103/index.cjs
++ * 配置化任务模型路由候选 (Revision 20261104: R1-R6)
++ * 基线: f4a3d39e9454a13f37d39ec84d01ae0b625162d0
++ *
++ * 核心安全门禁与约束：
++ * - R1: 显式区分调用前资格拒绝与执行结果未知。遇到 UNKNOWN_PAYMENT_RESULT 或 PAYMENT_UNKNOWN 立即终止并返回 UNKNOWN_PAYMENT_RESULT，严禁跳过或 fallback
++ * - R2: 在任何选择分支之前执行统一 dispatchState 检查，dispatched 状态下禁止重新选择（无论 primary、fallback 还是 manual）
++ * - R3: 严格校验枚举。dispatchState 仅限 'pre-dispatch' | 'dispatched'；selection.mode 仅限 'auto' | 'manual'，非法显式输入返回 CONFIG_INVALID
++ * - R4: 全路由候选去重，禁止 fallback 自身重复以及 fallback 与 candidates 交集重复，违者返回 DUPLICATE_CANDIDATE
++ * - R5: pinVersion 校验：必须为非空非全空白字符串，拒绝空/空白 pin
++ * - R6: 配置快照深度隔离（Object.freeze + 深拷贝），外部对象突变不影响 router.configVersion 与选择结果
++ */
++
++const ALLOWED_TASK_TYPES = ['textChat', 'imageUnderstanding', 'audioUnderstanding', 'videoUnderstanding', 'codeExecution'];
++const ALLOWED_DISPATCH_STATES = new Set(['pre-dispatch', 'dispatched']);
++const ALLOWED_SELECTION_MODES = new Set(['auto', 'manual']);
++const UNKNOWN_PAYMENT_PATTERNS = /PAYMENT_UNKNOWN|UNKNOWN_PAYMENT_RESULT/i;
++
++/**
++ * 验证路由配置 schema，返回错误列表（空数组表示合法）
++ * @param {object} config
++ * @returns {string[]}
++ */
++function validateRouteConfig(config) {
++  const errors = [];
++  if (!config || typeof config !== 'object' || Array.isArray(config)) {
++    errors.push('CONFIG_INVALID: root must be an object');
++    return errors;
++  }
++  if (typeof config.version !== 'string' || !config.version.trim()) {
++    errors.push('CONFIG_INVALID: missing or empty "version" field');
++  }
++  if (!Array.isArray(config.routes)) {
++    errors.push('CONFIG_INVALID: "routes" must be an array');
++    return errors;
++  }
++  const seenTaskTypes = new Set();
++  for (let i = 0; i < config.routes.length; i++) {
++    const route = config.routes[i];
++    const prefix = `routes[${i}]`;
++    if (!route || typeof route !== 'object') { errors.push(`${prefix}: must be an object`); continue; }
++    if (typeof route.taskType !== 'string' || !route.taskType.trim()) {
++      errors.push(`${prefix}: missing "taskType"`);
++    } else {
++      if (seenTaskTypes.has(route.taskType)) errors.push(`${prefix}: duplicate taskType "${route.taskType}" (CONFIG_INVALID)`);
++      seenTaskTypes.add(route.taskType);
++    }
++
++    const allRouteCandidates = new Set();
++
++    if (!Array.isArray(route.candidates) || route.candidates.length === 0) {
++      errors.push(`${prefix}: "candidates" must be a non-empty array`);
++    } else {
++      const seenCandidates = new Set();
++      for (const id of route.candidates) {
++        if (typeof id !== 'string' || !id.trim()) { errors.push(`${prefix}: candidate id must be non-empty string`); continue; }
++        if (seenCandidates.has(id)) errors.push(`${prefix}: DUPLICATE_CANDIDATE "${id}"`);
++        seenCandidates.add(id);
++        allRouteCandidates.add(id);
++      }
++    }
++
++    if (route.fallback !== undefined) {
++      if (!Array.isArray(route.fallback)) {
++        errors.push(`${prefix}: "fallback" must be an array if present`);
++      } else {
++        const seenFallback = new Set();
++        for (const id of route.fallback) {
++          if (typeof id !== 'string' || !id.trim()) {
++            errors.push(`${prefix}: fallback id must be non-empty string`);
++            continue;
++          }
++          if (seenFallback.has(id)) {
++            errors.push(`${prefix}: DUPLICATE_CANDIDATE in fallback "${id}"`);
++          }
++          if (allRouteCandidates.has(id)) {
++            errors.push(`${prefix}: DUPLICATE_CANDIDATE between primary and fallback "${id}"`);
++          }
++          seenFallback.add(id);
++        }
++      }
++    }
++
++    if (route.pinVersion !== undefined) {
++      if (typeof route.pinVersion !== 'string' || !route.pinVersion.trim()) {
++        errors.push(`${prefix}: "pinVersion" must be a non-empty string if present (CONFIG_INVALID)`);
++      }
++    }
++  }
++  return errors;
++}
++
++/**
++ * 创建任务路由器
++ * @param {object} config - RouteConfig
++ * @returns {{ selectModel, validateConfig, configVersion }}
++ */
++function createTaskRouter(config) {
++  const configErrors = validateRouteConfig(config);
++  if (configErrors.length > 0) {
++    throw Object.assign(new Error('Route config invalid: ' + configErrors[0]), {
++      code: 'CONFIG_INVALID',
++      errors: configErrors,
++    });
++  }
++
++  // R6: 深拷贝防御外部突变
++  const frozenConfig = JSON.parse(JSON.stringify(config));
++  const boundVersion = frozenConfig.version;
++
++  // Build lookup map: taskType -> RouteEntry
++  const routeMap = new Map();
++  for (const route of frozenConfig.routes) {
++    routeMap.set(route.taskType, route);
++  }
++
++  /**
++   * 根据配置与资格结果选模型
++   * @param {string} taskType
++   * @param {Array<{modelId:string, eligible:boolean, reason?:string}>} eligibilityResults
++   * @param {{ selection?: {mode:'auto'|'manual', modelId?:string}, dispatchState?: string }} options
++   * @returns {{ ok:true, modelId, taskType, mode, source, configVersion, pinVersion? } | { ok:false, code, detail }}
++   */
++  function selectModel(taskType, eligibilityResults, options = {}) {
++    const fail = (code, detail) => ({ ok: false, code, detail: detail || null });
++
++    if (typeof taskType !== 'string' || !taskType.trim()) return fail('CONFIG_INVALID', 'taskType must be non-empty string');
++    if (!routeMap.has(taskType)) return fail('TASK_NOT_CONFIGURED', `no route for taskType "${taskType}"`);
++    if (!Array.isArray(eligibilityResults)) return fail('CONFIG_INVALID', 'eligibilityResults must be an array');
++
++    const route = routeMap.get(taskType);
++
++    // R3: 校验 dispatchState 枚举
++    const dispatchState = options.dispatchState || 'pre-dispatch';
++    if (!ALLOWED_DISPATCH_STATES.has(dispatchState)) {
++      return fail('CONFIG_INVALID', `invalid dispatchState "${dispatchState}"`);
++    }
++
++    // R3: 校验 selection.mode 枚举
++    const selection = options.selection || { mode: 'auto' };
++    if (!ALLOWED_SELECTION_MODES.has(selection.mode)) {
++      return fail('CONFIG_INVALID', `invalid selection.mode "${selection.mode}"`);
++    }
++
++    // R1: 检查是否存在未知执行/付费结果
++    for (const r of eligibilityResults) {
++      if (r && r.reason && UNKNOWN_PAYMENT_PATTERNS.test(r.reason)) {
++        return fail('UNKNOWN_PAYMENT_RESULT', `unknown payment or execution result for model "${r.modelId}", halting selection`);
++      }
++    }
++
++    // R2: 统一状态门禁。已已发送（dispatched）状态下严禁改选或重选模型
++    if (dispatchState === 'dispatched') {
++      return fail('FALLBACK_AFTER_DISPATCH', 'cannot reselect or change model after dispatch has occurred');
++    }
++
++    // 仅收集 eligible === true 且无未知付费风险的模型
++    const eligibleSet = new Set();
++    for (const r of eligibilityResults) {
++      if (r && typeof r.modelId === 'string' && r.eligible === true) {
++        eligibleSet.add(r.modelId);
++      }
++    }
++
++    // Manual override mode
++    if (selection.mode === 'manual') {
++      if (typeof selection.modelId !== 'string' || !selection.modelId.trim()) {
++        return fail('CONFIG_INVALID', 'manual mode requires modelId');
++      }
++      const allConfigured = [...route.candidates, ...(route.fallback || [])];
++      if (!allConfigured.includes(selection.modelId)) {
++        return fail('MANUAL_MODEL_NOT_IN_CONFIG', `"${selection.modelId}" not in config for taskType "${taskType}"`);
++      }
++      if (!eligibleSet.has(selection.modelId)) {
++        return fail('MISSING_ELIGIBLE_MODEL', `manual model "${selection.modelId}" not eligible`);
++      }
++      const res = { ok: true, modelId: selection.modelId, taskType, mode: 'manual', source: 'manual', configVersion: boundVersion };
++      if (route.pinVersion) res.pinVersion = route.pinVersion;
++      return res;
++    }
++
++    // Auto mode: primary candidates
++    for (const modelId of route.candidates) {
++      if (eligibleSet.has(modelId)) {
++        const res = { ok: true, modelId, taskType, mode: 'auto', source: 'primary', configVersion: boundVersion };
++        if (route.pinVersion) res.pinVersion = route.pinVersion;
++        return res;
++      }
++    }
++
++    // Fallback: only allowed pre-dispatch
++    if (route.fallback && route.fallback.length > 0) {
++      for (const modelId of route.fallback) {
++        if (eligibleSet.has(modelId)) {
++          const res = { ok: true, modelId, taskType, mode: 'auto', source: 'fallback', configVersion: boundVersion };
++          if (route.pinVersion) res.pinVersion = route.pinVersion;
++          return res;
++        }
++      }
++    }
++
++    return fail('MISSING_ELIGIBLE_MODEL', `no eligible model for taskType "${taskType}"`);
++  }
++
++  return {
++    selectModel,
++    validateConfig: () => validateRouteConfig(frozenConfig),
++    configVersion: boundVersion,
++  };
++}
++
++module.exports = { createTaskRouter, validateRouteConfig };
+diff --git a/tests/probes/auto-08-main-review-20261104.mjs b/tests/probes/auto-08-main-review-20261104.mjs
+new file mode 100644
+index 0000000..f281acc
+--- /dev/null
++++ b/tests/probes/auto-08-main-review-20261104.mjs
+@@ -0,0 +1,44 @@
++#!/usr/bin/env node
++// Independent acceptance probe: calls original 08 implementation; makes no network/provider requests.
++// Known unsafe results remain FAIL and set a nonzero exit code. This is not a patched router.
++import assert from 'node:assert/strict';
++import { createRequire } from 'node:module';
++import { fileURLToPath } from 'node:url';
++import path from 'node:path';
++import fs from 'node:fs';
++import crypto from 'node:crypto';
++import { spawnSync } from 'node:child_process';
++const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
++const require=createRequire(import.meta.url);
++const {createTaskRouter,validateRouteConfig}=require(path.join(root,'shell/candidates/auto-20261103/index.cjs'));
++const fixture=()=>({version:'review-1',routes:[{taskType:'textChat',candidates:['model-a','model-b'],fallback:['model-c']}]});
++const eligible=()=>['model-a','model-b','model-c'].map(modelId=>({modelId,eligible:true}));
++const sha=p=>crypto.createHash('sha256').update(fs.readFileSync(path.join(root,p))).digest('hex');
++const protectedPaths=['docs/refactor/GEMINI-AUTO-DELIVERY-PACKAGE-20261103.md','shell/candidates/auto-20261103/index.cjs','shell/candidates/auto-20261103/CONTRACT.md','tests/probes/auto-delivery-20261103.mjs'];
++const before=Object.fromEntries(protectedPaths.map(p=>[p,sha(p)]));
++const results=[];
++function check(id,group,label,fn){let actual;try{actual=fn();results.push({id,group,label,status:'PASS',actual});console.log(`PASS ${id} ${label}`);}catch(e){results.push({id,group,label,status:'FAIL',actual:e.actual??null,expected:e.expected??null,error:e.message});console.log(`FAIL ${id} ${label}`);}}
++const rejected=r=>assert.equal(r.ok,false,JSON.stringify(r));
++check('CTRL-01','control','原正常pre-dispatch选择首选',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',eligible());assert.equal(r.modelId,'model-a');return r;});
++check('CTRL-02','control','原pre-dispatch资格预筛可选fallback',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',[{modelId:'model-c',eligible:true}],{dispatchState:'pre-dispatch'});assert.equal(r.modelId,'model-c');return r;});
++check('CTRL-03','control','原dispatched后的fallback分支确实被拦',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',[{modelId:'model-c',eligible:true}],{dispatchState:'dispatched'});assert.equal(r.code,'FALLBACK_AFTER_DISPATCH');return r;});
++check('CTRL-04','control','所有资格false时不选模型',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',eligible().map(x=>({...x,eligible:false})));rejected(r);return r;});
++check('R1-01','R1','PAYMENT_UNKNOWN不能被跳过后选其他primary',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',[{modelId:'model-a',eligible:true,reason:'PAYMENT_UNKNOWN'},{modelId:'model-b',eligible:true}],{dispatchState:'pre-dispatch'});assert.equal(r.code,'UNKNOWN_PAYMENT_RESULT',JSON.stringify(r));return r;});
++check('R1-02','R1','显式UNKNOWN_PAYMENT_RESULT不能变成fallback',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',[{modelId:'model-a',eligible:false,reason:'UNKNOWN_PAYMENT_RESULT'},{modelId:'model-c',eligible:true}],{dispatchState:'pre-dispatch'});assert.equal(r.code,'UNKNOWN_PAYMENT_RESULT',JSON.stringify(r));return r;});
++check('R2-01','R2','dispatched不能改选第二个primary',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',[{modelId:'model-a',eligible:false},{modelId:'model-b',eligible:true}],{dispatchState:'dispatched'});rejected(r);return r;});
++check('R2-02','R2','dispatched不能改选manual模型',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',eligible(),{dispatchState:'dispatched',selection:{mode:'manual',modelId:'model-b'}});rejected(r);return r;});
++check('R3-01','R3','未知dispatchState不能视为pre-dispatch',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',[{modelId:'model-c',eligible:true}],{dispatchState:'unknown'});assert.equal(r.code,'CONFIG_INVALID',JSON.stringify(r));return r;});
++check('R3-02','R3','非法selection.mode不能默认为auto',()=>{const r=createTaskRouter(fixture()).selectModel('textChat',eligible(),{selection:{mode:'unrecognized'}});assert.equal(r.code,'CONFIG_INVALID',JSON.stringify(r));return r;});
++check('R4-01','R4','重复fallback应被严格配置校验拒绝',()=>{const c=fixture();c.routes[0].fallback=['model-c','model-c'];const e=validateRouteConfig(c);assert.ok(e.some(x=>x.includes('DUPLICATE_CANDIDATE')),JSON.stringify(e));return e;});
++check('R4-02','R4','primary与fallback重复模型应拒绝',()=>{const c=fixture();c.routes[0].fallback=['model-a'];const e=validateRouteConfig(c);assert.ok(e.some(x=>x.includes('DUPLICATE_CANDIDATE')),JSON.stringify(e));return e;});
++check('R5-01','R5','空pinVersion不能被当有效版本pin',()=>{const c=fixture();c.routes[0].pinVersion='';const e=validateRouteConfig(c);assert.ok(e.length>0,JSON.stringify(e));return e;});
++check('R6-01','R6','外部config突变不能使router与选择结果版本不同',()=>{const c=fixture();const router=createTaskRouter(c);c.version='mutated-unpublished';const r=router.selectModel('textChat',eligible());assert.equal(r.configVersion,router.configVersion,JSON.stringify({routerVersion:router.configVersion,result:r}));return r;});
++const original=spawnSync(process.execPath,['tests/probes/auto-delivery-20261103.mjs'],{cwd:root,encoding:'utf8',timeout:30000});
++const originalSummary=(original.stdout||'').match(/共 (\d+) 项，通过 (\d+) 项，失败 (\d+) 项/);
++const originalResult={command:'node tests/probes/auto-delivery-20261103.mjs',exit_code:original.status,error:original.error?.message??null,total:originalSummary?Number(originalSummary[1]):null,passed:originalSummary?Number(originalSummary[2]):null,failed:originalSummary?Number(originalSummary[3]):null};
++const unchanged=protectedPaths.every(p=>sha(p)===before[p]);
++const report={time_utc:new Date().toISOString(),scope:'Independent original 08 selection/config behavior review only; no runtime integration, network, PT calls or deployment',node:process.version,protected_sha256:before,protected_unchanged:unchanged,original_probe:originalResult,total:results.length,passed:results.filter(x=>x.status==='PASS').length,failed:results.filter(x=>x.status==='FAIL').length,results};
++const index=process.argv.indexOf('--report');
++if(index!==-1){assert.ok(process.argv[index+1],'--report requires path');const p=path.resolve(root,process.argv[index+1]);fs.mkdirSync(path.dirname(p),{recursive:true});fs.writeFileSync(p,JSON.stringify(report,null,2)+'\n');}
++console.log(JSON.stringify({original_probe:originalResult,review_total:report.total,review_passed:report.passed,review_failed:report.failed,protected_unchanged:unchanged}));
++if(report.failed||original.status!==0||!unchanged)process.exitCode=1;
+diff --git a/tests/probes/auto-delivery-20261103.mjs b/tests/probes/auto-delivery-20261103.mjs
+new file mode 100644
+index 0000000..9d6ed0f
+--- /dev/null
++++ b/tests/probes/auto-delivery-20261103.mjs
+@@ -0,0 +1,195 @@
++#!/usr/bin/env node
++/**
++ * tests/probes/auto-delivery-20261103.mjs
++ * 配置化任务模型路由候选探针
++ */
++
++import { createRequire } from 'module';
++import { fileURLToPath } from 'url';
++import path from 'path';
++
++const __dirname = path.dirname(fileURLToPath(import.meta.url));
++const require = createRequire(import.meta.url);
++const root = path.resolve(__dirname, '../../');
++
++const { createTaskRouter, validateRouteConfig } = require(path.join(root, 'shell/candidates/auto-20261103/index.cjs'));
++
++let pass = 0, fail = 0;
++const results = [];
++
++function assert(label, condition, detail = '') {
++  if (condition) {
++    console.log(`  ✔ [PASS] ${label}`);
++    pass++;
++    results.push({ label, ok: true });
++  } else {
++    console.error(`  ✘ [FAIL] ${label}${detail ? ': ' + detail : ''}`);
++    fail++;
++    results.push({ label, ok: false, detail });
++  }
++}
++
++// ---- Fixture config --------------------------------------------------------
++const config = {
++  version: '1.0.0',
++  routes: [
++    {
++      taskType: 'textChat',
++      candidates: ['model-a', 'model-b'],
++      fallback: ['model-c'],
++    },
++    {
++      taskType: 'imageUnderstanding',
++      candidates: ['model-vision'],
++    },
++  ],
++};
++
++const eligAll = [
++  { modelId: 'model-a', eligible: true },
++  { modelId: 'model-b', eligible: true },
++  { modelId: 'model-c', eligible: true },
++  { modelId: 'model-vision', eligible: true },
++];
++
++console.log('\n=== AUTO 配置化模型路由探针开始 ===\n');
++
++// [1] 正常路由 - 首选有资格选首选
++console.log('[1] 正常路由 (首选 model-a 有资格)');
++{
++  const router = createTaskRouter(config);
++  const r = router.selectModel('textChat', eligAll, { dispatchState: 'pre-dispatch' });
++  assert('ok=true', r.ok === true);
++  assert('选中 model-a (首选)', r.modelId === 'model-a');
++  assert('source=primary', r.source === 'primary');
++  assert('configVersion 正确', r.configVersion === '1.0.0');
++}
++
++// [2] 后备 - 首选无资格，选后备
++console.log('\n[2] 后备路由 (model-a/b 无资格，model-c 有资格)');
++{
++  const router = createTaskRouter(config);
++  const elig = [{ modelId: 'model-c', eligible: true }];
++  const r = router.selectModel('textChat', elig, { dispatchState: 'pre-dispatch' });
++  assert('ok=true', r.ok === true);
++  assert('选中后备 model-c', r.modelId === 'model-c');
++  assert('source=fallback', r.source === 'fallback');
++}
++
++// [3] 无资格 - 所有模型均无资格
++console.log('\n[3] 无资格失败 (MISSING_ELIGIBLE_MODEL)');
++{
++  const router = createTaskRouter(config);
++  const r = router.selectModel('textChat', [], { dispatchState: 'pre-dispatch' });
++  assert('ok=false', r.ok === false);
++  assert('code=MISSING_ELIGIBLE_MODEL', r.code === 'MISSING_ELIGIBLE_MODEL');
++}
++
++// [4] dispatch 后禁止切换后备
++console.log('\n[4] dispatch 后禁止切换后备 (FALLBACK_AFTER_DISPATCH)');
++{
++  const router = createTaskRouter(config);
++  const elig = [{ modelId: 'model-c', eligible: true }];
++  const r = router.selectModel('textChat', elig, { dispatchState: 'dispatched' });
++  assert('ok=false', r.ok === false);
++  assert('code=FALLBACK_AFTER_DISPATCH', r.code === 'FALLBACK_AFTER_DISPATCH');
++}
++
++// [5] taskType 未配置
++console.log('\n[5] 未配置的 taskType (TASK_NOT_CONFIGURED)');
++{
++  const router = createTaskRouter(config);
++  const r = router.selectModel('codeExecution', eligAll);
++  assert('ok=false', r.ok === false);
++  assert('code=TASK_NOT_CONFIGURED', r.code === 'TASK_NOT_CONFIGURED');
++}
++
++// [6] 手动选择 - 在配置候选列表中且有资格
++console.log('\n[6] 手动选择 model-b (有资格且在配置中)');
++{
++  const router = createTaskRouter(config);
++  const r = router.selectModel('textChat', eligAll, { selection: { mode: 'manual', modelId: 'model-b' } });
++  assert('ok=true', r.ok === true);
++  assert('选中 model-b', r.modelId === 'model-b');
++  assert('source=manual', r.source === 'manual');
++  assert('mode=manual', r.mode === 'manual');
++}
++
++// [7] 手动选择 - 模型不在配置中
++console.log('\n[7] 手动选择不在配置中的模型');
++{
++  const router = createTaskRouter(config);
++  const r = router.selectModel('textChat', eligAll, { selection: { mode: 'manual', modelId: 'unknown-model' } });
++  assert('ok=false', r.ok === false);
++  assert('code=MANUAL_MODEL_NOT_IN_CONFIG', r.code === 'MANUAL_MODEL_NOT_IN_CONFIG');
++}
++
++// [8] 稳定性 - 相同输入多次调用相同输出
++console.log('\n[8] 稳定性 (相同输入 → 相同输出)');
++{
++  const router = createTaskRouter(config);
++  const results2 = [];
++  for (let i = 0; i < 5; i++) {
++    const r = router.selectModel('textChat', eligAll, { dispatchState: 'pre-dispatch' });
++    results2.push(r.modelId);
++  }
++  assert('5次调用均选 model-a', results2.every(id => id === 'model-a'));
++}
++
++// [9] 配置验证 - 重复 taskType
++console.log('\n[9] 配置验证 - 重复 taskType');
++{
++  const errors = validateRouteConfig({
++    version: '1.0',
++    routes: [
++      { taskType: 'textChat', candidates: ['model-a'] },
++      { taskType: 'textChat', candidates: ['model-b'] },
++    ],
++  });
++  assert('检测到重复 taskType', errors.some(e => e.includes('duplicate taskType')));
++}
++
++// [10] 配置验证 - 重复候选 ID
++console.log('\n[10] 配置验证 - 重复候选 ID (DUPLICATE_CANDIDATE)');
++{
++  const errors = validateRouteConfig({
++    version: '1.0',
++    routes: [{ taskType: 'textChat', candidates: ['model-a', 'model-a'] }],
++  });
++  assert('检测到 DUPLICATE_CANDIDATE', errors.some(e => e.includes('DUPLICATE_CANDIDATE')));
++}
++
++// [11] 配置验证 - 空候选列表
++console.log('\n[11] 配置验证 - 空候选列表');
++{
++  const errors = validateRouteConfig({
++    version: '1.0',
++    routes: [{ taskType: 'textChat', candidates: [] }],
++  });
++  assert('检测到空候选列表错误', errors.length > 0);
++}
++
++// [12] 未知付费结果终止选择 (R1 契约：遇到未知结果严禁切模型重提)
++console.log('\n[12] 未知付费结果终止选择 (UNKNOWN_PAYMENT_RESULT)');
++{
++  const router = createTaskRouter(config);
++  // model-a 标记有 PAYMENT_UNKNOWN reason，应立即终止并返回 UNKNOWN_PAYMENT_RESULT
++  const elig = [
++    { modelId: 'model-a', eligible: true, reason: 'PAYMENT_UNKNOWN' },
++    { modelId: 'model-b', eligible: true },
++  ];
++  const r = router.selectModel('textChat', elig, { dispatchState: 'pre-dispatch' });
++  assert('ok=false', r.ok === false);
++  assert('code=UNKNOWN_PAYMENT_RESULT', r.code === 'UNKNOWN_PAYMENT_RESULT');
++}
++
++// [13] 非法配置 - createTaskRouter 应抛出
++console.log('\n[13] 非法配置 createTaskRouter 应抛出');
++{
++  let threw = false;
++  try { createTaskRouter({ version: '', routes: [] }); } catch (e) { threw = e.code === 'CONFIG_INVALID'; }
++  assert('非法配置抛出 CONFIG_INVALID', threw);
++}
++
++console.log(`\n=== AUTO 探针完成：共 ${pass + fail} 项，通过 ${pass} 项，失败 ${fail} 项 ===`);
++if (fail > 0) process.exit(1);
+-- 
+2.50.1 (Apple Git-155)
+

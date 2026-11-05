@@ -1,6 +1,8 @@
 # Gemini任务包：受控执行与审批绑定｜2026-11-03
 
-基线：`f4a3d39e9454a13f37d39ec84d01ae0b625162d0`（源码仍会前进；交付报告必须记录实际base和文件SHA）。状态：READY_TO_FORWARD，文档创建不表示已派送。目标是实现可集成闭环，不接受仅调查报告替代功能。
+> 实施门禁：以[DSH最大化复用原则](PRODUCT-ROADMAP-AND-RESOURCES-20261103.md#首要原则最大化复用dsh)为准。先交需求与锁定DSH原生/插件/UI/协议的复用矩阵；优先配置、直接复用和必要接线，主审确认具体缺口后才补最小宿主实现。此包不要求另造原生已有机制；已分配包在交卷/主审时补此矩阵，不覆盖执行者已有工作。
+
+基线：`f4a3d39e9454a13f37d39ec84d01ae0b625162d0`（源码仍会前进；交付报告必须记录实际base和文件SHA）。状态：ASSIGNED（2026-11-03用户确认已分配）；执行者、实际交付与验收进度待回执，不代表完成。状态统一维护于 [完整重构主台账](REFACTOR-MASTER-TRACKER-20261103.md)。目标是实现可集成闭环，不接受仅调查报告替代功能。
 
 边界：只新增 `shell/candidates/isolation-20261103/`、`tests/probes/isolation-delivery-20261103.mjs`、`docs/refactor/evidence/GEMINI-ISOLATION-DELIVERY-20261103.md`；本任务包仅追加交付记录。禁止编辑server、persistent-runner、tenant、public、共享迁移、package/lock、发布归档、其他候选、`tests/e2e/`和OAuth文档。需要接入共享文件时，提交逐项接线说明和补丁文件在独占目录，由主Agent集成。依赖新增只能给版本/许可/安装及锁定方案，不擅自修改共享依赖。不得存凭据、付费调用、部署、merge、push或覆盖他人改动。
 
@@ -13,3 +15,9 @@
 先读：shell/tasks/host-tool-handler.cjs、shell/runtime/artifacts.cjs、shell/tasks/budget.cjs。
 
 必须覆盖：真实无害执行fixture；越目录、网络、凭据继承、资源超限、取消后进程树、输出软链/硬链拒绝；无可用隔离后端必须关闭，不能退回裸宿主执行。
+
+## PT依赖、Plan B与进度影响
+| PT依赖/需求编号 | Plan B | 进度/验收影响 |
+|---|---|---|
+| 无新增PT硬依赖 | 复用DSH执行工具+OS隔离，确定性fixture | 执行隔离独立推进；不可用后端保持关闭 |
+依据：[PT接口规格v1.1第15节](PT-API-REQUIREMENTS-20261104.md)。PT未接受建议接口形态时先映射既有协议；遵循DSH最大复用原则。上述Plan B为规划候选，不表示已验证或获准额外模型/资源/供应商调用；原范围未满足仍标未完成，变更需用户确认。签署协议仅已签署/未签署，无有效期/续签；资产启用及凭据/缓存/资源有效期分别处理。

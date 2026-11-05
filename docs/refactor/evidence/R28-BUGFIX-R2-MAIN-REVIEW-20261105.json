@@ -1,0 +1,28 @@
+{
+  "candidate": "/private/tmp/r28-review-20261105",
+  "head": "1e677a3ccae540e500830edfa6c5b7240749a87e",
+  "source_sha256": "0b0a303efa73206ce4a762fe74a6270a047b70cfbc4440e572dd227e6a0e1780",
+  "app_sha256": "e040441f31f4c2916fd424405fb42422e2c67c89df5f7d082110d2dd4af56c31",
+  "time_utc": "2026-11-05T02:35:34.844Z",
+  "scope": "Source-bound isolated original block execution + real temp files only. Not HTTP/UI E2E; no actual user data, network or PT calls.",
+  "total": 3,
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "id": "BR-HTML-01",
+      "label": "两次HTML产物不得覆盖先前历史文件",
+      "status": "PASS"
+    },
+    {
+      "id": "BR-HTML-02",
+      "label": "HTML落盘不得跟随已有symlink写出授权目录",
+      "status": "PASS"
+    },
+    {
+      "id": "BR-STREAM-01",
+      "label": "旧对话已有assistant时仍保留本轮错误前增量",
+      "status": "PASS"
+    }
+  ]
+}

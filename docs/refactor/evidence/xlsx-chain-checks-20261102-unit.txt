@@ -1,0 +1,12 @@
+✔ Portable XLSX - Valid multi-sheet generation and round-trip readback via existing office parser (6.765625ms)
+✔ Portable XLSX - Reject-before-Scan: arrays, bounds, sheet names, and control characters (0.362666ms)
+✔ Portable XLSX - Formula injection defense and no guessing string numbers (1.147208ms)
+✔ Portable XLSX - Custom limits and resource ceiling boundaries (0.082625ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 52.506916

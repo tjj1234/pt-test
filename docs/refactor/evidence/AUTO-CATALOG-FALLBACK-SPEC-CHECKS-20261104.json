@@ -1,0 +1,32 @@
+{
+  "08_delivery": "author delivered, integration pending; original reported tests not rerun",
+  "protected_files": {
+    "docs/refactor/GEMINI-AUTO-DELIVERY-PACKAGE-20261103.md": {
+      "sha256": "98f13fe7e506716909479871c89be8885b93a5f9c452652367662562ceaf94cb",
+      "unchanged": true
+    },
+    "shell/candidates/auto-20261103/CONTRACT.md": {
+      "sha256": "1e2ebfe0efad5cecb20ecff151bc891aaeed738dfe6eb70ceba39377a0e9df2f",
+      "unchanged": true
+    },
+    "shell/candidates/auto-20261103/index.cjs": {
+      "sha256": "d8875ac8a9fd2ee2427b81edc633a53b24a15b5a39c7c940f1798bfc9591fea9",
+      "unchanged": true
+    },
+    "tests/probes/auto-delivery-20261103.mjs": {
+      "sha256": "795b2074afb736797f33d03724f758afaba480f1c16394494324ffe1026d5002",
+      "unchanged": true
+    }
+  },
+  "supplemental_acceptance_ids": [
+    "AF-01",
+    "AF-02",
+    "AF-03",
+    "AF-04",
+    "AF-05",
+    "AF-06",
+    "AF-07"
+  ],
+  "errors": [],
+  "scope": "documentation only; no PT calls, runtime changes, scheduler activation or deployment"
+}

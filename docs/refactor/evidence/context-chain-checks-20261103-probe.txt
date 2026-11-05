@@ -1,0 +1,26 @@
+=== Context R4 准入反例闭环与真实原生压缩探针开始 ===
+
+[1/6] 验证候选模块在生成 profile 临时目录的可移植加载能力...
+  ✔ 临时生成 profile 目录加载与导出函数校验成功
+
+[2/6] 搭建本地 HTTP/SSE 替身服务，监听真实 wireRequests...
+
+[3/6] 构建原生 Provider 与 PiAiAdapter...
+
+[4/6] 验证真实 command-compact 公开入口在受控维护 Run 下调度...
+  ✔ /compact 命令公开入口调用成功: No compactable history yet. (commandId: cmd-c00a34dc-1)
+
+[5/6] 执行普通对话与真实原生压缩触发序列...
+  ✔ Chat 请求成功：1 次本地 HTTP 调用，预算计数 1，消费 1 次凭证
+  ✔ 原生 Compaction 成功：触发 BasicCompactionEngine -> ctx.llm.stream -> HTTP 替身，预算计数 2
+    生成的摘要文本: "This is an established checkpoint consolidating earlier project tasks and tenant rules."
+
+[6/6] 验证 5 项 Controlled Dispatch 穿透反例全部闭环阻断（零网络外发）...
+  ✔ 反例 1 闭环：chat-ticket-without-active-run 阻断 (RUN_NOT_BOUND)
+  ✔ 反例 2 闭环：chat-ticket-old-run-client-overrides-active-run 阻断 (TICKET_RUN_MISMATCH)
+  ✔ 反例 3 闭环：auxiliary-missing-required-intent-recorder 阻断 (MISSING_INTENT_RECORDER)
+  ✔ 反例 4 闭环：auxiliary-canceled-while-awaiting-intent 阻断 (RUN_CANCELLED)
+  ✔ 反例 5 闭环：auxiliary-canceled-after-stream-created-before-consume 阻断 (RUN_CANCELLED)
+  ✔ 本地替身请求计数严格维持为 2，反例测试零网络泄露！
+
+=== Context R4 探针全部通过 (ALL PASS) ===

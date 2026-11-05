@@ -1,0 +1,28 @@
+{
+  "candidate": "/private/tmp/pt-fix-batch4",
+  "head": "da4fe91520f1156a859fac691900713275eb0529",
+  "source_sha256": "ed21e04e7161d3ba35bca158089af848c0560c55bb023ce36e23001f169cd207",
+  "app_sha256": "defd07748092909e0762b51e7053f618673e26890eae1c864e6518324e8159b1",
+  "time_utc": "2026-11-04T09:25:10.696Z",
+  "scope": "Source-bound isolated original block execution + real temp files only. Not HTTP/UI E2E; no actual user data, network or PT calls.",
+  "total": 3,
+  "passed": 3,
+  "failed": 0,
+  "results": [
+    {
+      "id": "BR-HTML-01",
+      "label": "两次HTML产物不得覆盖先前历史文件",
+      "status": "PASS"
+    },
+    {
+      "id": "BR-HTML-02",
+      "label": "HTML落盘不得跟随已有symlink写出授权目录",
+      "status": "PASS"
+    },
+    {
+      "id": "BR-STREAM-01",
+      "label": "旧对话已有assistant时仍保留本轮错误前增量",
+      "status": "PASS"
+    }
+  ]
+}

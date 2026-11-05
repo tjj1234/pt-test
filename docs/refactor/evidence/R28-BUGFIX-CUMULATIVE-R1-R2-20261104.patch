@@ -1,0 +1,123 @@
+diff --git a/shell/public/app.js b/shell/public/app.js
+index 63b6bdc..ff1a63d 100644
+--- a/shell/public/app.js
++++ b/shell/public/app.js
+@@ -1299,7 +1299,12 @@ async function runChat(payload) {
+               if (Array.isArray(obj.messages)) {
+                 renderChat(obj.messages);
+                 restoreManualCheckHistory();
+-                if (acc && !obj.messages.some(m => m.role === "assistant")) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
++                const lastUserIdx = obj.messages.map(m => m.role).lastIndexOf("user");
++                const turnAssistant = lastUserIdx >= 0
++                  ? obj.messages.slice(lastUserIdx + 1).filter(m => m.role === "assistant").pop()
++                  : obj.messages.filter(m => m.role === "assistant").pop();
++                const accSaved = Boolean(acc && turnAssistant && turnAssistant.text && turnAssistant.text.includes(acc.trim()));
++                if (acc && !accSaved) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                 if (obj.error) bubbleSys(obj.error);
+               } else {
+                 if (acc) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+@@ -1357,7 +1362,12 @@ async function runChat(payload) {
+                       if (viewing()) {
+                         ++conversationLoadSequence;
+                         renderChat(messages);
+-                        if (acc && !messages.some(m => m.role === "assistant")) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
++                        const lastUserIdx = messages.map(m => m.role).lastIndexOf("user");
++                        const turnAssistant = lastUserIdx >= 0
++                          ? messages.slice(lastUserIdx + 1).filter(m => m.role === "assistant").pop()
++                          : messages.filter(m => m.role === "assistant").pop();
++                        const accSaved = Boolean(acc && turnAssistant && turnAssistant.text && turnAssistant.text.includes(acc.trim()));
++                        if (acc && !accSaved) renderMessage({ role: "assistant", text: acc, ts: Date.now() });
+                         restoreManualCheckHistory();
+                       }
+                     }
+diff --git a/shell/server.cjs b/shell/server.cjs
+index bcc3c3c..afbbd6e 100644
+--- a/shell/server.cjs
++++ b/shell/server.cjs
+@@ -1394,15 +1394,77 @@ async function handleChat(req, res, me, body, taskRun = null) {
+   if (htmlBlockMatch && (!r.artifacts || !r.artifacts.some(a => a && a.rel && a.rel.endsWith(".html")))) {
+     try {
+       const tenantWs = tenantMod.getTenantWorkspace ? tenantMod.getTenantWorkspace(me.tenant.id) : path.join(RUNTIME, "workspaces", me.tenant.id);
+-      fs.mkdirSync(tenantWs, { recursive: true });
+-      const htmlRel = "report.html";
+-      const htmlAbs = path.join(tenantWs, htmlRel);
+-      fs.writeFileSync(htmlAbs, htmlBlockMatch[1].trim(), "utf8");
+-      const stat = fs.statSync(htmlAbs);
+-      const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: "report.html", size: stat.size, mtime: stat.mtimeMs });
+-      if (art) {
+-        hostArtifacts.set(art.rel, art);
+-        sse({ artifact: art });
++      let wsStat;
++      try {
++        wsStat = fs.lstatSync(tenantWs);
++      } catch (e) {
++        if (e && e.code === "ENOENT") {
++          fs.mkdirSync(tenantWs, { recursive: true });
++          wsStat = fs.lstatSync(tenantWs);
++        } else {
++          throw e;
++        }
++      }
++      if (!wsStat || wsStat.isSymbolicLink() || !wsStat.isDirectory()) {
++        throw new Error("tenant workspace is not a safe directory");
++      }
++      const dirFlags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
++      const dirFd = fs.openSync(tenantWs, dirFlags);
++      try {
++        const htmlContent = htmlBlockMatch[1].trim();
++        let written = false;
++        let seq = 1;
++        while (!written && seq <= 1000) {
++          const htmlRel = seq === 1 ? "report.html" : "report_" + seq + ".html";
++          const htmlAbs = path.join(tenantWs, htmlRel);
++          let exists = false;
++          try {
++            fs.lstatSync(htmlAbs);
++            exists = true;
++          } catch (e) {
++            if (e && e.code !== "ENOENT") throw e;
++          }
++          if (exists) {
++            seq++;
++            continue;
++          }
++
++          let fd;
++          try {
++            fd = fs.openSync(htmlAbs, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
++          } catch (openErr) {
++            if (openErr && (openErr.code === "EEXIST" || openErr.code === "EINVAL")) {
++              seq++;
++              continue;
++            }
++            throw openErr;
++          }
++
++          try {
++            fs.writeFileSync(fd, htmlContent, "utf8");
++            if (typeof fs.fsyncSync === "function") fs.fsyncSync(fd);
++          } catch (writeErr) {
++            try { fs.closeSync(fd); } catch (_) {}
++            try { fs.unlinkSync(htmlAbs); } catch (_) {}
++            throw writeErr;
++          }
++          fs.closeSync(fd);
++
++          const stat = fs.statSync(htmlAbs);
++          if (!stat.isFile() || (typeof stat.nlink === "number" && stat.nlink !== 1)) {
++            try { fs.unlinkSync(htmlAbs); } catch (_) {}
++            throw new Error("artifact must be regular file with nlink=1");
++          }
++
++          const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: htmlRel, size: stat.size, mtime: stat.mtimeMs });
++          if (art) {
++            hostArtifacts.set(art.rel, art);
++            sse({ artifact: art });
++          }
++          written = true;
++        }
++      } finally {
++        try { fs.closeSync(dirFd); } catch (_) {}
+       }
+     } catch (e) {
+       log.warn("html_artifact_materialize_failed", { error: e && e.message ? e.message : String(e) });

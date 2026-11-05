@@ -1,0 +1,39 @@
+{
+  "time_utc": "2026-11-04T09:34:15.152Z",
+  "candidate": "/private/tmp/pt-fix-05-06",
+  "scope": "Actual candidates; synthetic data and harmless local child only, no PT/network/production access",
+  "sources": {
+    "questions": "23550fa7c6aee56d9f5b4861ba680be883f1d100a1fe373f4f3d1a9f05598323",
+    "isolation": "a2b6e8a4788fb8007a8d5463be2c7f26c1c5b3497a9ca648f0d5dcaa4601d011"
+  },
+  "total": 5,
+  "passed": 0,
+  "failed": 5,
+  "results": [
+    {
+      "id": "QR-DENIAL-NOT-APPROVAL",
+      "status": "FAIL",
+      "error": "first option NO issued an approvalToken\n+ actual - expected\n\n+ {\n+   approvedAt: 1793784855129,\n+   operationPayloadHash: '0a286891c11c056e1ab5bfc25bf5d6b2f5b06d38eac10944f678fd8a2e70c393',\n+   operationType: 'run-script',\n+   questionId: 'q-2b0687e0-e7c4-4e77-aae9-2589a7649afe',\n+   runId: 'run-fixture',\n+   tenantId: 'tenant-fixture'\n+ }\n- null\n"
+    },
+    {
+      "id": "QR-CANCEL-REVOKES-ISSUED",
+      "status": "FAIL",
+      "error": "approved but unconsumed token still usable after Run cancelled\n\ntrue !== false\n"
+    },
+    {
+      "id": "QR-TOKEN-IMMUTABLE",
+      "status": "FAIL",
+      "error": "mutating returned token also mutated authority stored record\n\ntrue !== false\n"
+    },
+    {
+      "id": "QR-TOKEN-SCOPE",
+      "status": "FAIL",
+      "error": "verifier ignored changed run/tenant scope\n\ntrue !== false\n"
+    },
+    {
+      "id": "IR-ARBITRARY-FORGED-ID",
+      "status": "FAIL",
+      "error": "changing forged questionId bypassed authority check and bare host script read outside allowedPaths\n\ntrue !== false\n"
+    }
+  ]
+}

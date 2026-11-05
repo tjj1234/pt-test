@@ -1,0 +1,19 @@
+{
+  "time_utc": "2026-11-04T10:01:17.527Z",
+  "candidate": "/private/tmp/pt-fix-batch4",
+  "source_sha256": "0b0a303efa73206ce4a762fe74a6270a047b70cfbc4440e572dd227e6a0e1780",
+  "scope": "Source-bound isolated blocks, synthetic file tree and rendering recorder; not HTTP/browser E2E or production exploit evidence",
+  "results": [
+    {
+      "id": "BR-HTML-ANCESTOR",
+      "status": "PASS"
+    },
+    {
+      "id": "BR-STREAM-ERROR-ASSISTANT",
+      "status": "PASS"
+    }
+  ],
+  "total": 2,
+  "passed": 2,
+  "failed": 0
+}

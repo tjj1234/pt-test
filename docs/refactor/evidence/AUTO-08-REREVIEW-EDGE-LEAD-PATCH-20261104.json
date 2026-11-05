@@ -1,0 +1,157 @@
+{
+  "time_utc": "2026-11-04T08:38:16.793Z",
+  "candidate_root": "/private/tmp/pt-auto08-lead-r3-jgmei48y",
+  "source_sha256": "775121cbf9edc7d085d6c97c4268dd5bc912d72626fe26ce8d25405f54cf5547",
+  "scope": "Pure selector boundary tests only; no runtime integration, PT/network calls or deployment",
+  "total": 14,
+  "passed": 14,
+  "failed": 0,
+  "results": [
+    {
+      "id": "R3-DISPATCH-empty",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "invalid dispatchState \"\""
+      }
+    },
+    {
+      "id": "R3-SELECTION-empty",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "selection must be an object"
+      }
+    },
+    {
+      "id": "R3-DISPATCH-null",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "invalid dispatchState \"null\""
+      }
+    },
+    {
+      "id": "R3-SELECTION-null",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "selection must be an object"
+      }
+    },
+    {
+      "id": "R3-DISPATCH-false",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "invalid dispatchState \"false\""
+      }
+    },
+    {
+      "id": "R3-SELECTION-false",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "selection must be an object"
+      }
+    },
+    {
+      "id": "R3-DISPATCH-zero",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "invalid dispatchState \"0\""
+      }
+    },
+    {
+      "id": "R3-SELECTION-zero",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "selection must be an object"
+      }
+    },
+    {
+      "id": "R3-OPTIONS-null",
+      "status": "PASS",
+      "result": {
+        "ok": false,
+        "code": "CONFIG_INVALID",
+        "detail": "options must be an object"
+      }
+    },
+    {
+      "id": "PIN-RETURN-primary",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "a",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "primary",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "PIN-RETURN-fallback",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "c",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "fallback",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "PIN-RETURN-manual",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "b",
+        "taskType": "textChat",
+        "mode": "manual",
+        "source": "manual",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "SNAPSHOT-ARRAY-AND-PIN",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "a",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "primary",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "DEFAULT-OMITTED-VALID",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "a",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "primary",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    }
+  ]
+}

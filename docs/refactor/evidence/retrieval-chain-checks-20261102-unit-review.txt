@@ -1,23 +1,23 @@
-✔ durable attachment snapshots bind tenant-local regular file bytes and fail closed (69.472542ms)
-✔ confirmed CSV selection is canonical and bound to captured attachment bytes (7.014833ms)
-✔ conversation model preference persists, isolates users, and snapshots atomically (9577.496417ms)
-✔ Source Retrieval - buildSourceIndex 输入门禁与前置拦截 (Reject-before-Scan) (2.51625ms)
-✔ Source Retrieval - 跨租户强隔离与相同 documentId 防越权 (1.756625ms)
-✔ Source Retrieval - 篡改检测 (Tamper Detection) 与哈希自洽性 (1.606166ms)
-✔ Source Retrieval - 动态失效守卫：删除、旧SHA换版、旧版本拒绝与v2重导生效 (0.394542ms)
-✔ Source Retrieval - 多格式定位器保真度 (DOCX不冒充页码, XLSX保留sheet/cell, PPTX保留slide) (0.24125ms)
-✔ Source Retrieval - 确定性词法检索、中文支持与防 ReDoS 正则灾难 (0.235083ms)
-✔ retrieval rejects incomplete source authority and forged derived fields (1.419583ms)
-✔ retrieval rejects oversized containers before enumeration and invalid result limits (0.187334ms)
-✔ retrieval requires real structural locators and excludes foreign IDs from response audit (0.120416ms)
-[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/source-store-SbSRD1/key
+✔ durable attachment snapshots bind tenant-local regular file bytes and fail closed (43.546ms)
+✔ confirmed CSV selection is canonical and bound to captured attachment bytes (8.940542ms)
+✔ conversation model preference persists, isolates users, and snapshots atomically (2477.2305ms)
+✔ Source Retrieval - buildSourceIndex 输入门禁与前置拦截 (Reject-before-Scan) (1.714583ms)
+✔ Source Retrieval - 跨租户强隔离与相同 documentId 防越权 (0.77825ms)
+✔ Source Retrieval - 篡改检测 (Tamper Detection) 与哈希自洽性 (0.246792ms)
+✔ Source Retrieval - 动态失效守卫：删除、旧SHA换版、旧版本拒绝与v2重导生效 (1.19775ms)
+✔ Source Retrieval - 多格式定位器保真度 (DOCX不冒充页码, XLSX保留sheet/cell, PPTX保留slide) (0.312416ms)
+✔ Source Retrieval - 确定性词法检索、中文支持与防 ReDoS 正则灾难 (0.576042ms)
+✔ retrieval rejects incomplete source authority and forged derived fields (1.439333ms)
+✔ retrieval rejects oversized containers before enumeration and invalid result limits (0.173541ms)
+✔ retrieval requires real structural locators and excludes foreign IDs from response audit (0.109667ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/source-store-LrjG91/key
 B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
-✔ source revocation remains fail-closed across cleanup failure, retry and database reopen (11971.93725ms)
-✔ storage defaults to the same complete migration source as product auth (1.437167ms)
-✔ migration 020 preserves old totals and classifies prior rows without recomputing (9772.796292ms)
-[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-Q31r4F/master.key
+✔ source revocation remains fail-closed across cleanup failure, retry and database reopen (2680.154042ms)
+✔ storage defaults to the same complete migration source as product auth (0.69025ms)
+✔ migration 020 preserves old totals and classifies prior rows without recomputing (2498.765917ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-MBDpo2/master.key
 B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
-✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (4449.065083ms)
+✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (950.1125ms)
 ℹ tests 16
 ℹ suites 0
 ℹ pass 16
@@ -25,4 +25,4 @@ B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 14385.136709
+ℹ duration_ms 3523.221792

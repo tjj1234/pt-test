@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "chain": "xlsx",
+  "status": "MECHANICAL_PASS",
+  "acceptanceDecision": "MAIN_AGENT_REQUIRED",
+  "scope": "local-controlled-fixtures; no paid provider or target deployment",
+  "baseCommit": "3e379fd3ab08aa5829191d1536cab8cb653657dd",
+  "generatedAt": "2026-11-03T02:19:33.419Z",
+  "sources": {
+    "scripts/northstar-chain-checks.mjs": "297671f3fd9afa88a5cca49445ba28e4d4086480b4718ed49be28b8724971526",
+    "shell/attachments/source-store.cjs": "03dcf706ea1d6ccfc9ac95359c3ec568e21e77917867f31023032b39a0d28686",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/db-migrations/027_native_context_session.sql": "92ad6cdab29af8b41754dd02916ad1c2376a59d405aa34a0974aa1efc6bb88cb",
+    "shell/exports/conversation-docx.cjs": "8f334a1f94850a1a19cc5046b09ebe46afcb4c2728adb171861005b39c8b9af5",
+    "shell/exports/document-export-worker.cjs": "bde0f2bf94cc724759714682ded4dc001021deba041e2733fffcaa0421d2ff30",
+    "shell/exports/portable-xlsx-candidate.cjs": "3190dcdadff89bf10688b34982a246517360b7aa6e921c696a851e77d69a3905",
+    "shell/memory/provenance-store.cjs": "c5ed87bddefcf11c238f8fc2e6ba453f9bdb4ab7e5b5c7c7c86d5a5180f45134",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+    "shell/persistent-runner.mjs": "1ea1be28eec0e4747918afa0be7d87e0dd4d3dbbd83822cb7c4aa5f00c43c43b",
+    "shell/public/app.js": "f76c542576b74ed462fff94d55c96f0b1c58dee584e9bdc3d4522e79fea10889",
+    "shell/runtime/artifacts.cjs": "a5267f689379ac1b7fc3e50fede44e7aa2948d58081284b686ac44ddd951c76f",
+    "shell/runtime/csv-run-artifact.cjs": "83c9439a02fd7f0a401f22abdc960406ab29b695bf8dcca538d267b2077a1a1f",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "546a1409bb6dfb574ecb9c0a71482a52714e58ed40d3909b1f2f74dd0b75a701",
+    "shell/runtime/run-budget-csv.json": "9f5419dfad11192227620e080cbafc20bc7075294ff00d9b19f85b78bd6c6db9",
+    "shell/runtime/run-budget-media.json": "29771b1acb1eac781d551745e063a86172abcca4d758f72cff50793be60b4287",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/server.cjs": "4afed94234b89890954e3325c7c1ae01ebbe871c621518c6605e01df52f9b104",
+    "shell/tasks/csv-run-handler.cjs": "bbf6b2d9e41bee43cf84125db6137e19970a8148a7bef583c1030ec75431a337",
+    "shell/tasks/csv-tool-definition.cjs": "06243b7ce10a44302020dad4eba5c8517d6e646d60d811fba4246ccb7aec4be4",
+    "tests/probes/portable-xlsx-candidate-probe.mjs": "7c0493db81361c67e8c39bbd43e180e82c812c7180584fec4a540605eed532aa",
+    "tests/probes/xlsx-browser-driver-20261102.js": "4bec652184a0470487da02d3194e1c701436766a94d162a73d401198bd76a6dd",
+    "tests/regression/artifacts-test.mjs": "476d1931a80d3a3d9909afc49439ff6adc6f2f851a97d4d025611d11e787bacf",
+    "tests/regression/conversation-docx-export-test.mjs": "5a6820a982e1db2941cef78394ae826cb9479f0f384b36bddd005a87d7ebdfeb",
+    "tests/regression/csv-xlsx-export-test.mjs": "8c84c277ba8f4474c253ad3743eecc332a655519423333bd6afb3af9fa7c9621",
+    "tests/regression/f2-csv-http-sdk-integration-test.mjs": "338a3517fd06b17608832a54ca126c707cb330c6ff890f13b8776f7e9a46dbc0",
+    "tests/regression/f2-csv-run-artifact-test.mjs": "e49e781d64b1f2866de1776a31f662e52440c8852502b234ac30f290f7778eed",
+    "tests/regression/f2-csv-run-handler-test.mjs": "7727ac017389de20ee1b833abc1131ab635e222a6fae5b1e200c31859b2e9b71",
+    "tests/regression/office-http-sdk-integration-test.mjs": "7133c2b87d7ffe41a3c5ef4606c598252e4f18c2eb36e0ffc4f53fcbf862bda9",
+    "tests/regression/portable-xlsx-candidate-test.mjs": "b7f422b68917687ce4eb74a123f2fbc8c42c2ee91e1e88b9266bf54e0ae73bfd",
+    "tests/regression/portable-xlsx-main-review-test.mjs": "8ae5269121b5d9dd3fbb9d43bd7bf2ea63e18f8b1f6cc081256a9ead4aebec82",
+    "tests/regression/ui-artifact-preview-test.mjs": "c065c4daaa625bf24a2de3df211f0426c5d57176d0826352100f05f77e040fe3",
+    "tests/regression/xlsx-http-sdk-integration-test.mjs": "5a65b2423740acf0e837908511ddfb049f684d7a76599b492a320f69175d78f0"
+  },
+  "sourceDrift": [],
+  "checks": [
+    {
+      "id": "probe",
+      "command": [
+        "node",
+        "tests/probes/portable-xlsx-candidate-probe.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 105,
+      "log": "docs/refactor/evidence/xlsx-chain-checks-20261103-probe.txt",
+      "logSha256": "259edf7ac36ebcfb13f18c50433bdb262276275a8ff0515342f8093cc67c0dd0"
+    },
+    {
+      "id": "unit-review",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/portable-xlsx-candidate-test.mjs",
+        "tests/regression/portable-xlsx-main-review-test.mjs",
+        "tests/regression/csv-xlsx-export-test.mjs",
+        "tests/regression/conversation-docx-export-test.mjs",
+        "tests/regression/f2-csv-run-handler-test.mjs",
+        "tests/regression/f2-csv-run-artifact-test.mjs",
+        "tests/regression/artifacts-test.mjs",
+        "tests/regression/ui-artifact-preview-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 6133,
+      "log": "docs/refactor/evidence/xlsx-chain-checks-20261103-unit-review.txt",
+      "logSha256": "734c29ea53fe2ef453ed320ab26c73b377743d0a50dd6de01aa25e25ed05892e"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/xlsx-http-sdk-integration-test.mjs",
+        "tests/regression/f2-csv-http-sdk-integration-test.mjs",
+        "tests/regression/office-http-sdk-integration-test.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 7073,
+      "log": "docs/refactor/evidence/xlsx-chain-checks-20261103-http-sdk.txt",
+      "logSha256": "8d1c3e8fb55251e733b7a8d92f187985242da220f50365122b5e54609f6a1f6f"
+    }
+  ]
+}

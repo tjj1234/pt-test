@@ -1,0 +1,9 @@
+{
+  "base_commit": "0c8841cfb1a658d7d4a7d118584fca7dc3e6e1f2",
+  "overlay_root": "/private/tmp/pt-auto08-lead-r3-jgmei48y",
+  "patch_path": "docs/refactor/evidence/AUTO-08-LEAD-R3-FALSY-GUARD-20261104.patch",
+  "base_source_sha256": "a138f98ba63e40317cff7e0fe5c496f3c62f224820cdd0a48e43bf17cbd3f73c",
+  "patched_source_sha256": "775121cbf9edc7d085d6c97c4268dd5bc912d72626fe26ce8d25405f54cf5547",
+  "patch_sha256": "e178d60ee25db3c4d94417fd80b2c4dc6ff9f0e564cad525693c7c42ef3b00bc",
+  "note": "Isolated temporary source overlay; author branch and shared original files unchanged; not a merged Git candidate"
+}

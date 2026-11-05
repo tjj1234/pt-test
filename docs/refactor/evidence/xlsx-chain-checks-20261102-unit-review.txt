@@ -93,19 +93,19 @@
   ok   无 workspace 也不炸
 
 产出文件（artifact）回归：76 通过 / 76 项
-✔ tests/regression/artifacts-test.mjs (97.716958ms)
-✔ conversation Word export round-trips Chinese/literals and does not embed attachment contents (193.548625ms)
-✔ invalid XML, oversized conversations, cancelled and expired exports fail with safe errors (37.90575ms)
-✔ CSV analysis workbook uses bounded worker, preserves literal data and cancels safely (136.470583ms)
-✔ F2 Run CSV artifact is atomically published under tenant and run ownership (19.290875ms)
-✔ F2 parent Run accepts only current captured CSV and explicit selector (22.175875ms)
-✔ Portable XLSX - Valid multi-sheet generation and round-trip readback via existing office parser (20.344041ms)
-✔ Portable XLSX - Reject-before-Scan: arrays, bounds, sheet names, and control characters (0.441708ms)
-✔ Portable XLSX - Formula injection defense and no guessing string numbers (1.291292ms)
-✔ Portable XLSX - Custom limits and resource ceiling boundaries (0.0905ms)
-✔ XLSX rejects invalid resource limits and XML-invalid sheet names (0.7345ms)
-✔ XLSX enforces aggregate text budget before reading following cells (0.13975ms)
-✔ XLSX cannot load a same-name dependency from hostile cwd or NODE_PATH (41.967083ms)
+✔ tests/regression/artifacts-test.mjs (61.561708ms)
+✔ conversation Word export round-trips Chinese/literals and does not embed attachment contents (132.254083ms)
+✔ invalid XML, oversized conversations, cancelled and expired exports fail with safe errors (29.464958ms)
+✔ CSV analysis workbook uses bounded worker, preserves literal data and cancels safely (105.953125ms)
+✔ F2 Run CSV artifact is atomically published under tenant and run ownership (20.036125ms)
+✔ F2 parent Run accepts only current captured CSV and explicit selector (36.082416ms)
+✔ Portable XLSX - Valid multi-sheet generation and round-trip readback via existing office parser (12.546375ms)
+✔ Portable XLSX - Reject-before-Scan: arrays, bounds, sheet names, and control characters (0.398084ms)
+✔ Portable XLSX - Formula injection defense and no guessing string numbers (4.209084ms)
+✔ Portable XLSX - Custom limits and resource ceiling boundaries (0.341709ms)
+✔ XLSX rejects invalid resource limits and XML-invalid sheet names (2.632084ms)
+✔ XLSX enforces aggregate text budget before reading following cells (0.38975ms)
+✔ XLSX cannot load a same-name dependency from hostile cwd or NODE_PATH (48.65125ms)
 产出预览面板回归：
 
 [1] escapeHtml / safeHref
@@ -185,7 +185,7 @@
   ok   关闭后清空列表
 
 产出预览面板回归：64 通过 / 64 项
-✔ tests/regression/ui-artifact-preview-test.mjs (6114.102834ms)
+✔ tests/regression/ui-artifact-preview-test.mjs (6050.681542ms)
 ℹ tests 14
 ℹ suites 0
 ℹ pass 14
@@ -193,4 +193,4 @@
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 6130.4415
+ℹ duration_ms 6064.805584

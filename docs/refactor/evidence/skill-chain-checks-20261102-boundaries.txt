@@ -1,0 +1,20 @@
+✔ native DSH web_search honors explicit Run admission and warm policy revocation (238.675209ms)
+✔ published provider uses native registry and filesystem parser with exact Run scope, immutable hash and cancellation (51.5985ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/skill-store-xW5qvT/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ publication pins immutable versions, isolates owners and survives failed disable cleanup/reopen (1844.783917ms)
+✔ durable Skill pin is immutable, hash checked and bound to explicit selection across replay (1.903291ms)
+✔ storage defaults to the same complete migration source as product auth (1.315959ms)
+✔ migration 020 preserves old totals and classifies prior rows without recomputing (1749.063ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-storage-upgrade-CHl4b6/master.key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ real legacy PGlite upgrades preserve assets, revoke password sessions and reopen idempotently (995.518625ms)
+ℹ tests 7
+ℹ suites 0
+ℹ pass 7
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2809.212417

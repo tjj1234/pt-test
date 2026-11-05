@@ -1,0 +1,196 @@
+{
+  "generated_utc": "2026-11-04T07:30:20.577Z",
+  "renderer": "Mermaid via Puppeteer + headless Chrome",
+  "toolVersions": {
+    "mermaid": "12.3.0",
+    "puppeteer": "24.37.5",
+    "chrome": "Chrome/156.0.8078.80"
+  },
+  "renderer_sha256": "dbc09d14f1256bec8ea67ed662d2ef8c280811ca84c9aa3efb01391b5b480d1c",
+  "scope": "Documentation syntax/render verification only; no product implementation or acceptance test",
+  "total": 20,
+  "passed": 20,
+  "failed": 0,
+  "results": [
+    {
+      "source": "docs/refactor/REFACTOR-CONTEXT-TOOLS-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "98b03c47830a5e2eb01cb4340fd1eff50c439a1568e03b6efd9e3e363fdc7b2b",
+      "diagram_sha256": "7603f4fde22c25c748f8ce493ea8a315a7b143e9d81c91666cbd2bc576a759f9",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/REFACTOR-CONTEXT-TOOLS-PACKAGE-20261103-1.svg",
+      "bytes": 33163
+    },
+    {
+      "source": "docs/refactor/REFACTOR-TASK-UX-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "ad8a409451afe7e205395c983c987bc7f6b1c6ab39b67cd33a338303298f251b",
+      "diagram_sha256": "19b6412ebe689c18a85b8c3ede56d9236241cadf6c59dfcbfc456f715e59094f",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/REFACTOR-TASK-UX-PACKAGE-20261103-1.svg",
+      "bytes": 36500
+    },
+    {
+      "source": "docs/refactor/REFACTOR-ORCHESTRATION-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "8aa1dffc4e8795edf5482908400cdf332a49bb5bd5173cd735dee67b4c27d588",
+      "diagram_sha256": "8fc8ef31003d4f95a7453ab21a5b5e9bebba9dc1e4253170a7a5ad5c1d4fa72b",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/REFACTOR-ORCHESTRATION-PACKAGE-20261103-1.svg",
+      "bytes": 35646
+    },
+    {
+      "source": "docs/refactor/PRODUCT-PROJECT-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "3232825b893ea62295e83b2b40491003c684828a2cd10d97ed7918ca25ea0ea2",
+      "diagram_sha256": "11c69a8eb011c6e7a54db534bd60b234bba54c41dc4ae0ec56c04829e7b6702f",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-PROJECT-PACKAGE-20261103-1.svg",
+      "bytes": 43322
+    },
+    {
+      "source": "docs/refactor/PRODUCT-PLAN-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "8c04fdbbecb9a163cf0603a910ff6f309a5675f9ab0acf2a4f9081530950bbea",
+      "diagram_sha256": "51cec524077616b3e2269ab966c2a46ce3545084bb95cd5fd7653e3a809bbb58",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-PLAN-PACKAGE-20261103-1.svg",
+      "bytes": 35177
+    },
+    {
+      "source": "docs/refactor/PRODUCT-PROGRESS-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "92bd65ae57735f6cd6a0cdee3a861d35d247acd32a98350171e3ea061c0d6315",
+      "diagram_sha256": "df99f2ec3896b75e9a4158d91dd24d561447d53923baf8037adbfe045ce80409",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-PROGRESS-PACKAGE-20261103-1.svg",
+      "bytes": 38613
+    },
+    {
+      "source": "docs/refactor/PRODUCT-PREVIEW-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "eadd69c97e6598a5eed764905e6c6ec4c2454002570a256cff60e0786275b78f",
+      "diagram_sha256": "d6afaba7a9afef85463e698c15cf6ff187a341c85105436d61a35dbaba552d80",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-PREVIEW-PACKAGE-20261103-1.svg",
+      "bytes": 40761
+    },
+    {
+      "source": "docs/refactor/PRODUCT-HISTORY-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "4e52b05699a515d3056d49c84a8fe01d2b07a8e4f01d49df85f1c78a1c5b3f6f",
+      "diagram_sha256": "176b06f79ad82f4586fc8f68c81a2b4fcb1f5cc665329febdb90cda91bc4a0eb",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-HISTORY-PACKAGE-20261103-1.svg",
+      "bytes": 34012
+    },
+    {
+      "source": "docs/refactor/PRODUCT-TEMPLATE-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "0821a93808cf4149148da1990a34e259223251a52bc0bf65d92e8c8b3369c0f6",
+      "diagram_sha256": "90e4f4a19a798ec258a043113c039b671ddfc24779a221500d41fdef3a1d3ba1",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-TEMPLATE-PACKAGE-20261103-1.svg",
+      "bytes": 34692
+    },
+    {
+      "source": "docs/refactor/PRODUCT-CONNECTORS-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "5112d6fc9d63120d717b63a5cf9ed4c5ce380560a8aa295d798434de40670bca",
+      "diagram_sha256": "e47d50633b12a88a484faee83a125682452a839f2936bd3c99c8a910cb8732e2",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-CONNECTORS-PACKAGE-20261103-1.svg",
+      "bytes": 45778
+    },
+    {
+      "source": "docs/refactor/PRODUCT-AUTOMATION-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "74d8047a21258ff514f99348c32cdc0e124a233d2a877dfdb23256bc62d30d46",
+      "diagram_sha256": "97c496374db1933e61ed0432eb04ea2cb5db80e8627e07014efd8a200112a42d",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-AUTOMATION-PACKAGE-20261103-1.svg",
+      "bytes": 42124
+    },
+    {
+      "source": "docs/refactor/PRODUCT-BATCH-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "dd0a05ac7a78adfe0ad982cb6fde84c43021d690573ee623953ef9df07e11b49",
+      "diagram_sha256": "afaca9ffe3e95a02a128070013c1eb36b6a489fb679e572ab25cfae85e67759b",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-BATCH-PACKAGE-20261103-1.svg",
+      "bytes": 35886
+    },
+    {
+      "source": "docs/refactor/PRODUCT-COLLAB-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "aa52053c2ec24df28621b6ccd5573e003acd60f7d5b10b9c915a518f00d7a863",
+      "diagram_sha256": "7f1c15528509bb7f0381b9351ef1cf9a3523b5ac83477a5ec9bff416614c5035",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-COLLAB-PACKAGE-20261103-1.svg",
+      "bytes": 35424
+    },
+    {
+      "source": "docs/refactor/PRODUCT-INBOX-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "75f560641e35ecd1d553faa157e9528f213a4ffcd293900be6512ce67a76fba0",
+      "diagram_sha256": "7d58afcb7b61b83880d8ff4237d1f5816247d2a8aa1eff8975db2008e2bb279a",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-INBOX-PACKAGE-20261103-1.svg",
+      "bytes": 36186
+    },
+    {
+      "source": "docs/refactor/PRODUCT-MEMORY-UI-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "038d3cf1ff21857d310d3f85dca886509ec26ce236777a7ba5487d9e1ad5ea03",
+      "diagram_sha256": "d97dc67793d30b7ba925eba3a8f4144f8139c3087ff346c243a5ebc5781d3ec1",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-MEMORY-UI-PACKAGE-20261103-1.svg",
+      "bytes": 34533
+    },
+    {
+      "source": "docs/refactor/PRODUCT-LOCAL-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "96d718e4a12f61babf430305e61cd8a74b4f0f396d03a893323c07f028350220",
+      "diagram_sha256": "d15dd2c04a77a21bf8f0a332dc464efdef1ae7d527fe5bb72397b4bd92bba55a",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-LOCAL-PACKAGE-20261103-1.svg",
+      "bytes": 74816
+    },
+    {
+      "source": "docs/refactor/PRODUCT-PRODUCTION-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "793e60ff13f25fa3bf22335be5a7cd13fbc13de416f8fc46cf7ceec644489c20",
+      "diagram_sha256": "9b2ecd0f900248a393059310e5f0916240c992903a84d741d81043cbcc1d23f0",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/PRODUCT-PRODUCTION-PACKAGE-20261103-1.svg",
+      "bytes": 42182
+    },
+    {
+      "source": "docs/refactor/REFACTOR-FILEEDIT-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "065e042390fdf4195d9089716327a2efb33f633fe4563d9051013e89f4791703",
+      "diagram_sha256": "e65ee486e1da1abbbcbb3da3f94a5cbd6c88ce2b38463088cb51beb480ef0ee9",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/REFACTOR-FILEEDIT-PACKAGE-20261103-1.svg",
+      "bytes": 74978
+    },
+    {
+      "source": "docs/refactor/REFACTOR-SEEDANCE-PACKAGE-20261103.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "d8ebc7aa61e4a5e3c5a9f3b0ed336c18e83699d762198b76113f97f5380351d2",
+      "diagram_sha256": "25dc0b70f3e819b1b8ed8bb2287aa1f4669945e5a2776f65b2113023d04278ce",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/REFACTOR-SEEDANCE-PACKAGE-20261103-1.svg",
+      "bytes": 97989
+    },
+    {
+      "source": "docs/refactor/ENGINEERING-DELIVERY-WORKFLOW.md",
+      "diagram": 1,
+      "status": "PASS",
+      "source_sha256": "5ec28103754cc441eda9e7913d330a98fc09fc735ae08ceedb1dde39f9d91152",
+      "diagram_sha256": "9e2411d11d3d3e65e034f7b84ec7f64e2dee7b6634fe931bb9248cddf3943ba7",
+      "svg": "docs/refactor/evidence/package-spec-mermaid-20261104/ENGINEERING-DELIVERY-WORKFLOW-1.svg",
+      "bytes": 23144
+    }
+  ]
+}

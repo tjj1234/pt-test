@@ -1,0 +1,19 @@
+{
+  "commit": "1e677a3ccae540e500830edfa6c5b7240749a87e",
+  "source_sha256": "0b0a303efa73206ce4a762fe74a6270a047b70cfbc4440e572dd227e6a0e1780",
+  "scope": "Actual source block; synthetic static ancestor and deterministic replacement at directory-open boundary; not remote exploit or browser E2E",
+  "results": [
+    {
+      "id": "R2-PARENT-OF-TENANT-LINK",
+      "status": "FAIL",
+      "error": "ancestor symlink redirected HTML creation outside trusted tree\n\n1 !== 0\n"
+    },
+    {
+      "id": "R2-DIRECTORY-FD-NOT-USED",
+      "status": "FAIL",
+      "error": "directory FD was opened but subsequent absolute-path creation followed replaced tenant symlink\n\n1 !== 0\n"
+    }
+  ],
+  "passed": 0,
+  "failed": 2
+}

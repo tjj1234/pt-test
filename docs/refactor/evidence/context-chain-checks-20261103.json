@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "chain": "context",
+  "status": "MECHANICAL_PASS",
+  "acceptanceDecision": "MAIN_AGENT_REQUIRED",
+  "scope": "local-controlled-fixtures; no paid provider or target deployment",
+  "baseCommit": "3e379fd3ab08aa5829191d1536cab8cb653657dd",
+  "generatedAt": "2026-11-03T02:12:29.623Z",
+  "sources": {
+    "scripts/northstar-chain-checks.mjs": "297671f3fd9afa88a5cca49445ba28e4d4086480b4718ed49be28b8724971526",
+    "shell/attachments/source-store.cjs": "03dcf706ea1d6ccfc9ac95359c3ec568e21e77917867f31023032b39a0d28686",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/db-migrations/027_native_context_session.sql": "92ad6cdab29af8b41754dd02916ad1c2376a59d405aa34a0974aa1efc6bb88cb",
+    "shell/memory/provenance-store.cjs": "c5ed87bddefcf11c238f8fc2e6ba453f9bdb4ab7e5b5c7c7c86d5a5180f45134",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+    "shell/persistent-runner.mjs": "1ea1be28eec0e4747918afa0be7d87e0dd4d3dbbd83822cb7c4aa5f00c43c43b",
+    "shell/public/app.js": "f76c542576b74ed462fff94d55c96f0b1c58dee584e9bdc3d4522e79fea10889",
+    "shell/runtime/dsh-adapter.cjs": "71a893813b91c85dc5eeefa1165f91f71e33d603a5419a0384695c97859d70a7",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "546a1409bb6dfb574ecb9c0a71482a52714e58ed40d3909b1f2f74dd0b75a701",
+    "shell/runtime/run-budget-csv.json": "9f5419dfad11192227620e080cbafc20bc7075294ff00d9b19f85b78bd6c6db9",
+    "shell/runtime/run-budget-media.json": "29771b1acb1eac781d551745e063a86172abcca4d758f72cff50793be60b4287",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/runtime/usage.cjs": "a218309c3ed3e1c72a8ff29a7b9cd5ea5f394716371230260d2dc526bfaf5338",
+    "shell/server.cjs": "4afed94234b89890954e3325c7c1ae01ebbe871c621518c6605e01df52f9b104",
+    "shell/tasks/run-budget-event.cjs": "4141a18fa9422ded3314576a0f61b54a5c62077e17c9aeb30ff71f4c206397ba",
+    "shell/tenant.cjs": "98c4a9a6459575ccce1fb9b94acb436b380fa7f13424696242febd2181a8ba28",
+    "shell/usage/model-intent-handler.cjs": "9c907d9b3e4bec54b9bc2f262820a55555636bfb15b5712cecf582a8cf4d5a1c",
+    "tests/probes/context-admission-main-review-20261102.mjs": "c770a191edc8c655b5fdf50ff5383f387b54be488182d9bec0ea283cc262e96c",
+    "tests/probes/context-browser-driver-20261102.js": "3bfdec76dad50b1c3ff2e7a8e55ac3a7935b46d6aa5e4bffd41c1e8ce60bc3a9",
+    "tests/probes/dsh-native-context-r4-probe.mjs": "a963706ad044b7a3316966c78118e1f7d2e5a66245e267661e1447147830b6f6",
+    "tests/regression/context-http-sdk-integration-test.mjs": "53777af8ba3d26db74e6f8e5e197720a6a4f077b12252c0e05ed30e5ae89fe21",
+    "tests/regression/dsh-model-info-rpc-test.mjs": "d69b15be0923768e7d79056064498bdc640931ef431aa7b5f93c2994ce7242f0",
+    "tests/regression/dsh-native-context-r4-test.mjs": "1880c3d45b05a12999c8bd9844fe24f31f0060ce48dcdd3c73d73b20a7713bcd",
+    "tests/regression/f1-budget-policy-change-test.mjs": "beb847a1401bde22acc44a357edb452d9e10955b93e8eca63af8fa1262be5939",
+    "tests/regression/f1-managed-media-http-sdk-test.mjs": "186b980ce0a325a1369c2ae7bea8ad42d4c40ef42c3e76099f8102053ac4c2df",
+    "tests/regression/native-tool-run-gate-sdk-test.mjs": "85be0b683d50879e95b85326f83373bce3e9e382d2f99241bdfd28847eb8a407",
+    "tests/regression/persistent-runner-real-sdk-rpc-probe.mjs": "97d60108fdfd3cd4c30f96d70aeb7a30b389e799acae817d5364ee0f8a561fb9",
+    "tests/regression/profile-dependencies-test.mjs": "dc85ebfe0911e5f86fdd8697ed5202cb21593d420b100aaa85fbc2cb0040d7c1",
+    "tests/regression/profile-lifecycle-test.mjs": "31f38377889995aa36111712bb1b98bd025e2d8e9764929f5e73f5a5fd57080c",
+    "tests/regression/reasoning-native-runner-test.mjs": "17e28f2f384eb25730d572132d979dcd4df412055ca6f10a580af760cf4776a5",
+    "tests/regression/run-budget-event-test.mjs": "2db5b530a909c1575279629559f5465322dcef7d13909641847a4d77d4d75de4",
+    "tests/regression/storage-upgrade-test.mjs": "7b9e11f0ed4da5db886c738e8862d8ea9198e9b38d0c6eb40310713db4729ef1",
+    "tests/regression/usage-dsh-sdk-shape-test.mjs": "90ab68a0abd39c34d229a7a5444f35f85d79f7a887c242921d9d44cf8b45226c"
+  },
+  "sourceDrift": [],
+  "checks": [
+    {
+      "id": "main-regressions",
+      "command": [
+        "node",
+        "tests/probes/context-admission-main-review-20261102.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 30,
+      "log": "docs/refactor/evidence/context-chain-checks-20261103-main-regressions.txt",
+      "logSha256": "a8354dc45320bc3b41933d103017d90fac28285890908e9197fd7282a260a777"
+    },
+    {
+      "id": "probe",
+      "command": [
+        "node",
+        "tests/probes/dsh-native-context-r4-probe.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 437,
+      "log": "docs/refactor/evidence/context-chain-checks-20261103-probe.txt",
+      "logSha256": "c05c7133928f10de65bd871013934d3fcd4b7a2b437df36ea648350a6daa065c"
+    },
+    {
+      "id": "unit-review",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/dsh-native-context-r4-test.mjs",
+        "tests/regression/usage-dsh-sdk-shape-test.mjs",
+        "tests/regression/f1-budget-policy-change-test.mjs",
+        "tests/regression/profile-lifecycle-test.mjs",
+        "tests/regression/profile-dependencies-test.mjs",
+        "tests/regression/native-tool-run-gate-sdk-test.mjs",
+        "tests/regression/persistent-runner-real-sdk-rpc-probe.mjs",
+        "tests/regression/reasoning-native-runner-test.mjs",
+        "tests/regression/dsh-model-info-rpc-test.mjs",
+        "tests/regression/run-budget-event-test.mjs",
+        "tests/regression/storage-upgrade-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 3943,
+      "log": "docs/refactor/evidence/context-chain-checks-20261103-unit-review.txt",
+      "logSha256": "cadaf333bce5151ae23b699f5ae17ab1e4b597e8f3664351e6606e2fb69778b6"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/context-http-sdk-integration-test.mjs",
+        "tests/regression/f1-managed-media-http-sdk-test.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 8870,
+      "log": "docs/refactor/evidence/context-chain-checks-20261103-http-sdk.txt",
+      "logSha256": "c06ca436521f1cf84e495433997eb4613d9b7f08ec37d421db810210c6228374"
+    }
+  ]
+}

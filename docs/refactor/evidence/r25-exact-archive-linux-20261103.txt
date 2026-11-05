@@ -1,0 +1,358 @@
+Get:1 http://deb.debian.org/debian bookworm InRelease [151 kB]
+Get:2 http://deb.debian.org/debian bookworm-updates InRelease [55.4 kB]
+Get:3 http://deb.debian.org/debian-security bookworm-security InRelease [34.8 kB]
+Get:4 http://deb.debian.org/debian bookworm/main amd64 Packages [8790 kB]
+Get:5 http://deb.debian.org/debian bookworm-updates/main amd64 Packages [6924 B]
+Get:6 http://deb.debian.org/debian-security bookworm-security/main amd64 Packages [360 kB]
+Fetched 9398 kB in 24s (385 kB/s)
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+The following additional packages will be installed:
+  libexpat1 libgssapi-krb5-2 libk5crypto3 libkeyutils1 libkrb5-3
+  libkrb5support0 libncursesw6 libnsl2 libpython3-stdlib libpython3.11-minimal
+  libpython3.11-stdlib libreadline8 libsqlite3-0 libssl3 libtirpc-common
+  libtirpc3 media-types python3-minimal python3.11 python3.11-minimal
+  readline-common
+Suggested packages:
+  krb5-doc krb5-user python3-doc python3-tk python3-venv python3.11-venv
+  python3.11-doc binutils binfmt-support readline-doc
+Recommended packages:
+  krb5-locales libgpm2 ca-certificates
+The following NEW packages will be installed:
+  libexpat1 libgssapi-krb5-2 libk5crypto3 libkeyutils1 libkrb5-3
+  libkrb5support0 libncursesw6 libnsl2 libpython3-stdlib libpython3.11-minimal
+  libpython3.11-stdlib libreadline8 libsqlite3-0 libssl3 libtirpc-common
+  libtirpc3 media-types python3 python3-minimal python3.11 python3.11-minimal
+  readline-common
+0 upgraded, 22 newly installed, 0 to remove and 1 not upgraded.
+Need to get 9420 kB of archives.
+After this operation, 33.5 MB of additional disk space will be used.
+Get:1 http://deb.debian.org/debian-security bookworm-security/main amd64 libssl3 amd64 3.0.22-1~deb12u2 [2040 kB]
+Get:2 http://deb.debian.org/debian-security bookworm-security/main amd64 libpython3.11-minimal amd64 3.11.2-6+deb12u9 [821 kB]
+Get:3 http://deb.debian.org/debian-security bookworm-security/main amd64 libexpat1 amd64 2.5.0-1+deb12u5 [108 kB]
+Get:4 http://deb.debian.org/debian-security bookworm-security/main amd64 python3.11-minimal amd64 3.11.2-6+deb12u9 [2055 kB]
+Get:5 http://deb.debian.org/debian bookworm/main amd64 python3-minimal amd64 3.11.2-1+b1 [26.3 kB]
+Get:6 http://deb.debian.org/debian bookworm/main amd64 media-types all 10.0.0 [26.1 kB]
+Get:7 http://deb.debian.org/debian bookworm/main amd64 libncursesw6 amd64 6.4-4 [134 kB]
+Get:8 http://deb.debian.org/debian bookworm/main amd64 libkrb5support0 amd64 1.20.1-2+deb12u5 [33.2 kB]
+Get:9 http://deb.debian.org/debian bookworm/main amd64 libk5crypto3 amd64 1.20.1-2+deb12u5 [79.7 kB]
+Get:10 http://deb.debian.org/debian bookworm/main amd64 libkeyutils1 amd64 1.6.3-2 [8808 B]
+Get:11 http://deb.debian.org/debian bookworm/main amd64 libkrb5-3 amd64 1.20.1-2+deb12u5 [332 kB]
+Get:12 http://deb.debian.org/debian bookworm/main amd64 libgssapi-krb5-2 amd64 1.20.1-2+deb12u5 [135 kB]
+Get:13 http://deb.debian.org/debian bookworm/main amd64 libtirpc-common all 1.3.3+ds-1 [14.0 kB]
+Get:14 http://deb.debian.org/debian bookworm/main amd64 libtirpc3 amd64 1.3.3+ds-1 [85.2 kB]
+Get:15 http://deb.debian.org/debian bookworm/main amd64 libnsl2 amd64 1.3.0-2 [39.5 kB]
+Get:16 http://deb.debian.org/debian bookworm/main amd64 readline-common all 8.2-1.3 [69.0 kB]
+Get:17 http://deb.debian.org/debian bookworm/main amd64 libreadline8 amd64 8.2-1.3 [166 kB]
+Get:18 http://deb.debian.org/debian bookworm/main amd64 libsqlite3-0 amd64 3.40.1-2+deb12u2 [839 kB]
+Get:19 http://deb.debian.org/debian-security bookworm-security/main amd64 libpython3.11-stdlib amd64 3.11.2-6+deb12u9 [1798 kB]
+Get:20 http://deb.debian.org/debian-security bookworm-security/main amd64 python3.11 amd64 3.11.2-6+deb12u9 [575 kB]
+Get:21 http://deb.debian.org/debian bookworm/main amd64 libpython3-stdlib amd64 3.11.2-1+b1 [9312 B]
+Get:22 http://deb.debian.org/debian bookworm/main amd64 python3 amd64 3.11.2-1+b1 [26.3 kB]
+debconf: delaying package configuration, since apt-utils is not installed
+Fetched 9420 kB in 46s (204 kB/s)
+Selecting previously unselected package libssl3:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 6096 files and directories currently installed.)
+Preparing to unpack .../libssl3_3.0.22-1~deb12u2_amd64.deb ...
+Unpacking libssl3:amd64 (3.0.22-1~deb12u2) ...
+Selecting previously unselected package libpython3.11-minimal:amd64.
+Preparing to unpack .../libpython3.11-minimal_3.11.2-6+deb12u9_amd64.deb ...
+Unpacking libpython3.11-minimal:amd64 (3.11.2-6+deb12u9) ...
+Selecting previously unselected package libexpat1:amd64.
+Preparing to unpack .../libexpat1_2.5.0-1+deb12u5_amd64.deb ...
+Unpacking libexpat1:amd64 (2.5.0-1+deb12u5) ...
+Selecting previously unselected package python3.11-minimal.
+Preparing to unpack .../python3.11-minimal_3.11.2-6+deb12u9_amd64.deb ...
+Unpacking python3.11-minimal (3.11.2-6+deb12u9) ...
+Setting up libssl3:amd64 (3.0.22-1~deb12u2) ...
+Setting up libpython3.11-minimal:amd64 (3.11.2-6+deb12u9) ...
+Setting up libexpat1:amd64 (2.5.0-1+deb12u5) ...
+Setting up python3.11-minimal (3.11.2-6+deb12u9) ...
+Selecting previously unselected package python3-minimal.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 6424 files and directories currently installed.)
+Preparing to unpack .../00-python3-minimal_3.11.2-1+b1_amd64.deb ...
+Unpacking python3-minimal (3.11.2-1+b1) ...
+Selecting previously unselected package media-types.
+Preparing to unpack .../01-media-types_10.0.0_all.deb ...
+Unpacking media-types (10.0.0) ...
+Selecting previously unselected package libncursesw6:amd64.
+Preparing to unpack .../02-libncursesw6_6.4-4_amd64.deb ...
+Unpacking libncursesw6:amd64 (6.4-4) ...
+Selecting previously unselected package libkrb5support0:amd64.
+Preparing to unpack .../03-libkrb5support0_1.20.1-2+deb12u5_amd64.deb ...
+Unpacking libkrb5support0:amd64 (1.20.1-2+deb12u5) ...
+Selecting previously unselected package libk5crypto3:amd64.
+Preparing to unpack .../04-libk5crypto3_1.20.1-2+deb12u5_amd64.deb ...
+Unpacking libk5crypto3:amd64 (1.20.1-2+deb12u5) ...
+Selecting previously unselected package libkeyutils1:amd64.
+Preparing to unpack .../05-libkeyutils1_1.6.3-2_amd64.deb ...
+Unpacking libkeyutils1:amd64 (1.6.3-2) ...
+Selecting previously unselected package libkrb5-3:amd64.
+Preparing to unpack .../06-libkrb5-3_1.20.1-2+deb12u5_amd64.deb ...
+Unpacking libkrb5-3:amd64 (1.20.1-2+deb12u5) ...
+Selecting previously unselected package libgssapi-krb5-2:amd64.
+Preparing to unpack .../07-libgssapi-krb5-2_1.20.1-2+deb12u5_amd64.deb ...
+Unpacking libgssapi-krb5-2:amd64 (1.20.1-2+deb12u5) ...
+Selecting previously unselected package libtirpc-common.
+Preparing to unpack .../08-libtirpc-common_1.3.3+ds-1_all.deb ...
+Unpacking libtirpc-common (1.3.3+ds-1) ...
+Selecting previously unselected package libtirpc3:amd64.
+Preparing to unpack .../09-libtirpc3_1.3.3+ds-1_amd64.deb ...
+Unpacking libtirpc3:amd64 (1.3.3+ds-1) ...
+Selecting previously unselected package libnsl2:amd64.
+Preparing to unpack .../10-libnsl2_1.3.0-2_amd64.deb ...
+Unpacking libnsl2:amd64 (1.3.0-2) ...
+Selecting previously unselected package readline-common.
+Preparing to unpack .../11-readline-common_8.2-1.3_all.deb ...
+Unpacking readline-common (8.2-1.3) ...
+Selecting previously unselected package libreadline8:amd64.
+Preparing to unpack .../12-libreadline8_8.2-1.3_amd64.deb ...
+Unpacking libreadline8:amd64 (8.2-1.3) ...
+Selecting previously unselected package libsqlite3-0:amd64.
+Preparing to unpack .../13-libsqlite3-0_3.40.1-2+deb12u2_amd64.deb ...
+Unpacking libsqlite3-0:amd64 (3.40.1-2+deb12u2) ...
+Selecting previously unselected package libpython3.11-stdlib:amd64.
+Preparing to unpack .../14-libpython3.11-stdlib_3.11.2-6+deb12u9_amd64.deb ...
+Unpacking libpython3.11-stdlib:amd64 (3.11.2-6+deb12u9) ...
+Selecting previously unselected package python3.11.
+Preparing to unpack .../15-python3.11_3.11.2-6+deb12u9_amd64.deb ...
+Unpacking python3.11 (3.11.2-6+deb12u9) ...
+Selecting previously unselected package libpython3-stdlib:amd64.
+Preparing to unpack .../16-libpython3-stdlib_3.11.2-1+b1_amd64.deb ...
+Unpacking libpython3-stdlib:amd64 (3.11.2-1+b1) ...
+Setting up python3-minimal (3.11.2-1+b1) ...
+Selecting previously unselected package python3.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 6932 files and directories currently installed.)
+Preparing to unpack .../python3_3.11.2-1+b1_amd64.deb ...
+Unpacking python3 (3.11.2-1+b1) ...
+Setting up media-types (10.0.0) ...
+Setting up libkeyutils1:amd64 (1.6.3-2) ...
+Setting up libtirpc-common (1.3.3+ds-1) ...
+Setting up libsqlite3-0:amd64 (3.40.1-2+deb12u2) ...
+Setting up libkrb5support0:amd64 (1.20.1-2+deb12u5) ...
+Setting up libncursesw6:amd64 (6.4-4) ...
+Setting up libk5crypto3:amd64 (1.20.1-2+deb12u5) ...
+Setting up libkrb5-3:amd64 (1.20.1-2+deb12u5) ...
+Setting up readline-common (8.2-1.3) ...
+Setting up libreadline8:amd64 (8.2-1.3) ...
+Setting up libgssapi-krb5-2:amd64 (1.20.1-2+deb12u5) ...
+Setting up libtirpc3:amd64 (1.3.3+ds-1) ...
+Setting up libnsl2:amd64 (1.3.0-2) ...
+Setting up libpython3.11-stdlib:amd64 (3.11.2-6+deb12u9) ...
+Setting up libpython3-stdlib:amd64 (3.11.2-1+b1) ...
+Setting up python3.11 (3.11.2-6+deb12u9) ...
+Setting up python3 (3.11.2-1+b1) ...
+running python rtupdate hooks for python3.11...
+running python post-rtupdate hooks for python3.11...
+Processing triggers for libc-bin (2.36-9+deb12u14) ...
+{
+  "result": "PASS",
+  "target": {
+    "platform": "linux",
+    "arch": "x64",
+    "gate": "enforced"
+  },
+  "packageCount": 495,
+  "fileCount": 31007,
+  "arborist": "8.0.5",
+  "packageLockSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+  "generatedWithNode": "v22.23.4",
+  "checkedWithNode": "v22.23.4"
+}
+TAP version 13
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-zFlyZ6/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: native Context automatic and manual compaction persist and resume across Shell restart
+ok 1 - native Context automatic and manual compaction persist and resume across Shell restart
+  ---
+  duration_ms: 14245.870756
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/f1-managed-http-sdk-5Vv2qt/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: same HTTP server and actual locked SDK authorize, generate, host and reopen four media types
+ok 2 - same HTTP server and actual locked SDK authorize, generate, host and reopen four media types
+  ---
+  duration_ms: 9860.851297
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/f2-http-sdk-cRS5Tj/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: offline HTTP csv Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+ok 3 - offline HTTP csv Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+  ---
+  duration_ms: 6822.342128
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/memory-provenance-aT630Z/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: memory host confirmation scope source lifecycle and failed cleanup survive database reopen
+ok 4 - memory host confirmation scope source lifecycle and failed cleanup survive database reopen
+  ---
+  duration_ms: 3838.303293
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/native-image-http-PmKD4J/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: HTTP verified upload reaches native DSH images, survives cold replay, and rejects changed/cross-tenant bytes
+ok 5 - HTTP verified upload reaches native DSH images, survives cold replay, and rejects changed/cross-tenant bytes
+  ---
+  duration_ms: 9598.73242
+  type: 'test'
+  ...
+# Subtest: native DSH web_search honors explicit Run admission and warm policy revocation
+ok 6 - native DSH web_search honors explicit Run admission and warm policy revocation
+  ---
+  duration_ms: 799.640709
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/office-http-sdk-ktzhfK/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: same-version Office upload reaches native DSH, completes its Run, exports Word and reopens history
+ok 7 - same-version Office upload reaches native DSH, completes its Run, exports Word and reopens history
+  ---
+  duration_ms: 7708.135545
+  type: 'test'
+  ...
+# Subtest: PT key probe distinguishes invalid key, insufficient balance and forbidden without exposing upstream body
+ok 8 - PT key probe distinguishes invalid key, insufficient balance and forbidden without exposing upstream body
+  ---
+  duration_ms: 57.179584
+  type: 'test'
+  ...
+# Subtest: PT media status, legacy compatibility and Seedance wire checks run offline
+ok 9 - PT media status, legacy compatibility and Seedance wire checks run offline
+  ---
+  duration_ms: 403.267875
+  type: 'test'
+  ...
+# Subtest: media POST 401 is classified without leaking body or retry
+ok 10 - media POST 401 is classified without leaking body or retry
+  ---
+  duration_ms: 68.732791
+  type: 'test'
+  ...
+# Subtest: media GET 401 keeps one submission and hides body
+ok 11 - media GET 401 keeps one submission and hides body
+  ---
+  duration_ms: 6.188792
+  type: 'test'
+  ...
+# Subtest: media POST 402 is classified without leaking body or retry
+ok 12 - media POST 402 is classified without leaking body or retry
+  ---
+  duration_ms: 1.101625
+  type: 'test'
+  ...
+# Subtest: media GET 402 keeps one submission and hides body
+ok 13 - media GET 402 keeps one submission and hides body
+  ---
+  duration_ms: 1.260041
+  type: 'test'
+  ...
+# Subtest: media POST 403 is classified without leaking body or retry
+ok 14 - media POST 403 is classified without leaking body or retry
+  ---
+  duration_ms: 0.456625
+  type: 'test'
+  ...
+# Subtest: media GET 403 keeps one submission and hides body
+ok 15 - media GET 403 keeps one submission and hides body
+  ---
+  duration_ms: 1.202541
+  type: 'test'
+  ...
+# Subtest: published provider uses native registry and filesystem parser with exact Run scope, immutable hash and cancellation
+ok 16 - published provider uses native registry and filesystem parser with exact Run scope, immutable hash and cancellation
+  ---
+  duration_ms: 401.177459
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-iIoCB8/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: reasoning metadata and preference reach durable Runs, native requests and reopened history
+ok 17 - reasoning metadata and preference reach durable Runs, native requests and reopened history
+  ---
+  duration_ms: 8041.483212
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-qUS0KB/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: published Skill passes owned HTTP publication, durable Run pins and native skill loading
+ok 18 - published Skill passes owned HTTP publication, durable Run pins and native skill loading
+  ---
+  duration_ms: 9467.70067
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/skill-store-WX86Cq/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: publication pins immutable versions, isolates owners and survives failed disable cleanup/reopen
+ok 19 - publication pins immutable versions, isolates owners and survives failed disable cleanup/reopen
+  ---
+  duration_ms: 5419.888503
+  type: 'test'
+  ...
+# Subtest: durable Skill pin is immutable, hash checked and bound to explicit selection across replay
+ok 20 - durable Skill pin is immutable, hash checked and bound to explicit selection across replay
+  ---
+  duration_ms: 17.209459
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/source-http-sdk-D7yYLa/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: source search citations and revocation traverse durable Runs, native SDK and cold history
+ok 21 - source search citations and revocation traverse durable Runs, native SDK and cold history
+  ---
+  duration_ms: 13302.78434
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/f2-http-sdk-p4ZsmX/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: offline HTTP xlsx Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+ok 22 - offline HTTP xlsx Run traverses tenant/adapter/SDK, downloads and reopens its artifact
+  ---
+  duration_ms: 11796.77813
+  type: 'test'
+  ...
+1..22
+# tests 22
+# suites 0
+# pass 22
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 108845.299258
+TAP version 13
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/source-http-sdk-ornVeG/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: source search citations and revocation traverse durable Runs, native SDK and cold history
+ok 1 - source search citations and revocation traverse durable Runs, native SDK and cold history
+  ---
+  duration_ms: 10120.616297
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10985.090755
+{"status":"R25_EXACT_ARCHIVE_LINUX_PASS","jointTests":22,"memoryTests":1}

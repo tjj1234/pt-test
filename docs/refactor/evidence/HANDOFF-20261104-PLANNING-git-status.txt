@@ -1,0 +1,98 @@
+Snapshot UTC 2026-11-04T03:16:09.465996+00:00
+No fetch or remote live verification. Other sessions may mutate workspace.
+## feature/northstar-integration-20261102...origin/feature/northstar-integration-20261102
+ M docs/refactor/GEMINI-AUTO-DELIVERY-PACKAGE-20261103.md
+ M docs/refactor/GEMINI-AV-DELIVERY-PACKAGE-20261103.md
+ M docs/refactor/GEMINI-BILLING-DELIVERY-PACKAGE-20261103.md
+ M docs/refactor/GEMINI-DELIVERY-BATCH-20261103.md
+ M docs/refactor/GEMINI-DOCINPUT-DELIVERY-PACKAGE-20261103.md
+ M docs/refactor/GEMINI-DOCOUTPUT-DELIVERY-PACKAGE-20261103.md
+ M docs/refactor/GEMINI-ISOLATION-DELIVERY-PACKAGE-20261103.md
+ M docs/refactor/GEMINI-QUESTIONS-DELIVERY-PACKAGE-20261103.md
+ M docs/refactor/GEMINI-WEB-DELIVERY-PACKAGE-20261103.md
+?? .playwright-cli/
+?? API接口文档(资产库状态&消费记录&余额&账单).md
+?? "Claude outputs/E2E测试用例-新Agent完整提示词-20261102.md"
+?? "Claude outputs/PT会议-改进建议与接口需求-20261104.md"
+?? "Claude outputs/PT接口变更-Codex必须知道的知识-20261103.md"
+?? "PT接口变更汇总 —— Codex需要立刻知道的内容"
+?? docs/refactor/DEVELOPER-ONBOARDING.md
+?? docs/refactor/ENGINEERING-DELIVERY-WORKFLOW.md
+?? docs/refactor/HANDOFF-20261104-PLANNING-AND-DELIVERY.md
+?? docs/refactor/PRODUCT-AUTOMATION-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-BATCH-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-CAPACITY-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-COLLAB-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-CONNECTORS-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-HISTORY-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-INBOX-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-LOCAL-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-MEMORY-UI-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-PLAN-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-PREVIEW-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-PRODUCTION-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-PROGRESS-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-PROJECT-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-PROVIDERS-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-PT-CAPABILITIES-PACKAGE-20261103.md
+?? docs/refactor/PRODUCT-ROADMAP-AND-RESOURCES-20261103.md
+?? docs/refactor/PRODUCT-TEMPLATE-PACKAGE-20261103.md
+?? docs/refactor/PT-API-REQUIREMENTS-20261104.md
+?? docs/refactor/PT-API接口需求规格(PT文档格式版)-20261104.md
+?? docs/refactor/REFACTOR-CI-PERFORMANCE-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-CONTEXT-TOOLS-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-FILEEDIT-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-GOVERNANCE-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-MASTER-TRACKER-20261103.md
+?? docs/refactor/REFACTOR-OPS-RECOVERY-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-ORCHESTRATION-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-PRODUCTION-ACCEPTANCE-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-RESILIENCE-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-SEEDANCE-PACKAGE-20261103.md
+?? docs/refactor/REFACTOR-TASK-UX-PACKAGE-20261103.md
+?? docs/refactor/SEEDANCE-用户旅程与决策树-20261104.md
+?? docs/refactor/evidence/GEMINI-AUTO-DELIVERY-20261103.md
+?? docs/refactor/evidence/context-chain-checks-20261103-http-sdk.txt
+?? docs/refactor/evidence/context-chain-checks-20261103-main-regressions.txt
+?? docs/refactor/evidence/context-chain-checks-20261103-probe.txt
+?? docs/refactor/evidence/context-chain-checks-20261103-unit-review.txt
+?? docs/refactor/evidence/context-chain-checks-20261103.json
+?? docs/refactor/evidence/r25-exact-archive-linux-20261103.txt
+?? docs/refactor/evidence/r25-full-regression-20261103.txt
+?? docs/refactor/evidence/r26-exact-archive-linux-20261103.txt
+?? docs/refactor/evidence/r26-full-regression-20261103.txt
+?? docs/refactor/evidence/r27-exact-archive-linux-20261103.txt
+?? docs/refactor/evidence/r27-full-regression-20261103.txt
+?? docs/refactor/evidence/reasoning-chain-checks-20261103-boundaries.txt
+?? docs/refactor/evidence/reasoning-chain-checks-20261103-http-sdk.txt
+?? docs/refactor/evidence/reasoning-chain-checks-20261103-ui.txt
+?? docs/refactor/evidence/reasoning-chain-checks-20261103.json
+?? docs/refactor/evidence/reasoning-ui-current-20261102.txt
+?? docs/refactor/evidence/retrieval-chain-checks-20261103-http-sdk.txt
+?? docs/refactor/evidence/retrieval-chain-checks-20261103-probe.txt
+?? docs/refactor/evidence/retrieval-chain-checks-20261103-unit-review.txt
+?? docs/refactor/evidence/retrieval-chain-checks-20261103.json
+?? docs/refactor/evidence/skill-chain-checks-20261103-boundaries.txt
+?? docs/refactor/evidence/skill-chain-checks-20261103-http-sdk.txt
+?? docs/refactor/evidence/skill-chain-checks-20261103.json
+?? docs/refactor/evidence/xlsx-chain-checks-20261102-unit.txt
+?? docs/refactor/evidence/xlsx-chain-checks-20261103-http-sdk.txt
+?? docs/refactor/evidence/xlsx-chain-checks-20261103-probe.txt
+?? docs/refactor/evidence/xlsx-chain-checks-20261103-unit-review.txt
+?? docs/refactor/evidence/xlsx-chain-checks-20261103.json
+?? scripts/__pycache__/
+?? shell/candidates/
+?? shell/media/__pycache__/
+?? shell/media/vendor/powertokens_video/__pycache__/
+?? tests/e2e/
+?? tests/probes/auto-delivery-20261103.mjs
+?? tests/probes/questions-delivery-20261103.mjs
+?? tests/regression/__pycache__/
+?? 模型能力汇总-websearch与思考模式(1).md
+?? 运维回复26113.md
+
+bbd9997 (HEAD -> feature/northstar-integration-20261102, origin/feature/northstar-integration-20261102) docs: save r28 online state and next-session handoff
+db2449e docs: preserve redacted raw r28 deployment receipts
+8ecfc4f docs: record r28 production deployment and online feature scope
+062fe47 release: deliver scoped r28 package with exact Linux and browser acceptance
+3deac76 fix: complete standard media host admission and production status split

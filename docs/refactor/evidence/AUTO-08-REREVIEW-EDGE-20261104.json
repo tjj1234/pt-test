@@ -1,0 +1,121 @@
+{
+  "time_utc": "2026-11-04T08:37:19.160Z",
+  "candidate_root": "/private/tmp/pt-fix-auto-08",
+  "source_sha256": "a138f98ba63e40317cff7e0fe5c496f3c62f224820cdd0a48e43bf17cbd3f73c",
+  "scope": "Pure selector boundary tests only; no runtime integration, PT/network calls or deployment",
+  "total": 14,
+  "passed": 5,
+  "failed": 9,
+  "results": [
+    {
+      "id": "R3-DISPATCH-empty",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"c\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"fallback\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-SELECTION-empty",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"a\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-DISPATCH-null",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"c\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"fallback\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-SELECTION-null",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"a\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-DISPATCH-false",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"c\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"fallback\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-SELECTION-false",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"a\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-DISPATCH-zero",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"c\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"fallback\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-SELECTION-zero",
+      "status": "FAIL",
+      "error": "{\"ok\":true,\"modelId\":\"a\",\"taskType\":\"textChat\",\"mode\":\"auto\",\"source\":\"primary\",\"configVersion\":\"edge-review-v1\",\"pinVersion\":\"revision-locked\"}\n+ actual - expected\n\n+ undefined\n- 'CONFIG_INVALID'\n"
+    },
+    {
+      "id": "R3-OPTIONS-null",
+      "status": "FAIL",
+      "error": "Cannot read properties of null (reading 'dispatchState')"
+    },
+    {
+      "id": "PIN-RETURN-primary",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "a",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "primary",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "PIN-RETURN-fallback",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "c",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "fallback",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "PIN-RETURN-manual",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "b",
+        "taskType": "textChat",
+        "mode": "manual",
+        "source": "manual",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "SNAPSHOT-ARRAY-AND-PIN",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "a",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "primary",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    },
+    {
+      "id": "DEFAULT-OMITTED-VALID",
+      "status": "PASS",
+      "result": {
+        "ok": true,
+        "modelId": "a",
+        "taskType": "textChat",
+        "mode": "auto",
+        "source": "primary",
+        "configVersion": "edge-review-v1",
+        "pinVersion": "revision-locked"
+      }
+    }
+  ]
+}

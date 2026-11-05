@@ -1,0 +1,31 @@
+{
+  "candidate": "/private/tmp/pt-fix-batch4",
+  "head": "d37c7f4c38a0ab6db584a421b30fb7f04d051ca2",
+  "source_sha256": "3afea20c7043ee55ce8feac7ec05aa13a442d1a3944e4754c144f9b214595ea2",
+  "app_sha256": "85a12c124ad595c162fde8b87bcf916965a9c042bb49fd7c820a5558891e5ffb",
+  "time_utc": "2026-11-04T08:14:26.391Z",
+  "scope": "Source-bound isolated original block execution + real temp files only. Not HTTP/UI E2E; no actual user data, network or PT calls.",
+  "total": 3,
+  "passed": 0,
+  "failed": 3,
+  "results": [
+    {
+      "id": "BR-HTML-01",
+      "label": "两次HTML产物不得覆盖先前历史文件",
+      "status": "FAIL",
+      "error": "second run overwrote the first run report.html; both emitted same URL\n+ actual - expected\n\n+ '<!DOCTYPE html><html><body>SECOND_RESULT</body></html>'\n- '<!DOCTYPE html><html><body>FIRST_RESULT</body></html>'\n"
+    },
+    {
+      "id": "BR-HTML-02",
+      "label": "HTML落盘不得跟随已有symlink写出授权目录",
+      "status": "FAIL",
+      "error": "writeFileSync followed report.html symlink outside tenant fixture\n+ actual - expected\n\n+ '<!DOCTYPE html><html><body>UNAUTHORIZED_REPLACEMENT</body></html>'\n- 'ORIGINAL_OUTSIDE'\n"
+    },
+    {
+      "id": "BR-STREAM-01",
+      "label": "旧对话已有assistant时仍保留本轮错误前增量",
+      "status": "FAIL",
+      "error": "existing old assistant makes some(role=assistant) true; current partial is dropped"
+    }
+  ]
+}

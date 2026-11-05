@@ -1,0 +1,45 @@
+{
+  "time_utc": "2026-11-04T09:22:57.775Z",
+  "scope": "Actual candidates; isolated synthetic temp files and harmless child scripts only; no provider/network/production access",
+  "sources": {
+    "shell/candidates/questions-20261103/index.cjs": "23550fa7c6aee56d9f5b4861ba680be883f1d100a1fe373f4f3d1a9f05598323",
+    "shell/candidates/isolation-20261103/index.cjs": "a2b6e8a4788fb8007a8d5463be2c7f26c1c5b3497a9ca648f0d5dcaa4601d011"
+  },
+  "total": 8,
+  "passed": 8,
+  "failed": 0,
+  "results": [
+    {
+      "id": "Q-OPTIONS",
+      "status": "PASS"
+    },
+    {
+      "id": "Q-ID-CONFLICT",
+      "status": "PASS"
+    },
+    {
+      "id": "Q-DEADLINE",
+      "status": "PASS"
+    },
+    {
+      "id": "Q-OPTIONS-MUTATION",
+      "status": "PASS"
+    },
+    {
+      "id": "I-PARENT-LINK",
+      "status": "PASS"
+    },
+    {
+      "id": "I-HARDLINK",
+      "status": "PASS"
+    },
+    {
+      "id": "I-FORGED-APPROVAL",
+      "status": "PASS"
+    },
+    {
+      "id": "I-SCRIPT-ROOT",
+      "status": "PASS"
+    }
+  ]
+}

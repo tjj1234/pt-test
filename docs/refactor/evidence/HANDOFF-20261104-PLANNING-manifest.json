@@ -1,0 +1,213 @@
+{
+  "snapshot_utc": "2026-11-04T03:16:09.466931+00:00",
+  "head": "bbd9997d1e19920dc1c850c31ec6c71dbc5994d1",
+  "package_count": 35,
+  "note": "File hashes at snapshot only; no source integration, test rerun, commit or deployment claimed.",
+  "files": [
+    {
+      "path": "docs/refactor/DEVELOPER-ONBOARDING.md",
+      "bytes": 7229,
+      "sha256": "41be511e763657697a5dc167baa6cba4379b5b3c9fcc611f0a6d85bf6a59f1b3"
+    },
+    {
+      "path": "docs/refactor/ENGINEERING-DELIVERY-WORKFLOW.md",
+      "bytes": 6942,
+      "sha256": "ca96e48a5bbd5cc90798e22dffa7dabb0ef32943c4d34fa161c3723b771cfb76"
+    },
+    {
+      "path": "docs/refactor/GEMINI-AUTO-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3866,
+      "sha256": "98f13fe7e506716909479871c89be8885b93a5f9c452652367662562ceaf94cb"
+    },
+    {
+      "path": "docs/refactor/GEMINI-AV-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3851,
+      "sha256": "af04693c9161f0bfd263b8b7f32c77297962296f37caf96166679eefc7fc75f4"
+    },
+    {
+      "path": "docs/refactor/GEMINI-BILLING-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3920,
+      "sha256": "87c7c9155c13858cf8fcdfceaac2e8195f6eb3a86c21dafdf47fd3e85a4a70ec"
+    },
+    {
+      "path": "docs/refactor/GEMINI-DOCINPUT-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3837,
+      "sha256": "345afea4b2bc87de710f150a86a76c3cb18802569484be0318ab3ccfbf23a9a3"
+    },
+    {
+      "path": "docs/refactor/GEMINI-DOCOUTPUT-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3777,
+      "sha256": "363f551253257bdeb6eb94b722860112d67a37359f56da8e58527226f20cbb6c"
+    },
+    {
+      "path": "docs/refactor/GEMINI-ISOLATION-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3744,
+      "sha256": "dae31e356d223636a3bc5612c0a0a58b7d8757abf4edbf07098d31d7a2d4704e"
+    },
+    {
+      "path": "docs/refactor/GEMINI-QUESTIONS-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3792,
+      "sha256": "618572ab0d49f6c64ca013caaa4d087c01dc1c9339c2099d5be35b6a5e4f7a25"
+    },
+    {
+      "path": "docs/refactor/GEMINI-WEB-DELIVERY-PACKAGE-20261103.md",
+      "bytes": 3805,
+      "sha256": "1f53593281cbe523d807768b2c909921099b1e83732224640edb383cda329e91"
+    },
+    {
+      "path": "docs/refactor/HANDOFF-20261104-PLANNING-AND-DELIVERY.md",
+      "bytes": 24411,
+      "sha256": "5f7b44996f9be5c60da661a2e32a622497c39db6df024a4f2b2571197a4f5b1c"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-AUTOMATION-PACKAGE-20261103.md",
+      "bytes": 3913,
+      "sha256": "50f806c7ef65dbc6a5666c5b486501cd8e191bc4d218dbe07176c91bf1fd4808"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-BATCH-PACKAGE-20261103.md",
+      "bytes": 3878,
+      "sha256": "ab795f598c7154b8ccfcd442e92dc6562a017bf7a9d3d384eef4530aa46e4aa7"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-CAPACITY-PACKAGE-20261103.md",
+      "bytes": 4004,
+      "sha256": "2e82076a9c8152e665310fce12e5a2c4fc6a71e1bbd4a8b3858592ebbfe11c34"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-COLLAB-PACKAGE-20261103.md",
+      "bytes": 3864,
+      "sha256": "7f520638c207d0a1f5fb10a4ca57977f68f748aadb66b01cca7ecd605c7c3ebc"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-CONNECTORS-PACKAGE-20261103.md",
+      "bytes": 3911,
+      "sha256": "cd9f49a9ee464d2576d9465355741080b5cc17a6e31fc878055ee69cce1e9037"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-HISTORY-PACKAGE-20261103.md",
+      "bytes": 3922,
+      "sha256": "28c7761e14a673fa7b4c2e5737ca76a531962666f6b35812b1d2e13fc4aeb2a9"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-INBOX-PACKAGE-20261103.md",
+      "bytes": 3828,
+      "sha256": "f794ac8a122985d56a0f1ce8d115457f2c4b1fc222688b9bb7c47bd67687c4a9"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-LOCAL-PACKAGE-20261103.md",
+      "bytes": 4068,
+      "sha256": "fe5fb7c20d9725810a86a0dcc8e78151ff546fdacb09c9b02525b94e42ba62c4"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-MEMORY-UI-PACKAGE-20261103.md",
+      "bytes": 3933,
+      "sha256": "bd1f6cf8fb49c1e37a9460ae5c3a523c7fdf1f6284d13cad53a5dee0a760011b"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-PLAN-PACKAGE-20261103.md",
+      "bytes": 3881,
+      "sha256": "b312b4f6b62480a00632cee490c267a2afa319338e38931788100930dc31f8ee"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-PREVIEW-PACKAGE-20261103.md",
+      "bytes": 3863,
+      "sha256": "92f40019a5f6fc057f1f12985d4f9f8286812a9f005364839697ef3afca2f93e"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-PRODUCTION-PACKAGE-20261103.md",
+      "bytes": 4002,
+      "sha256": "35bd608fe978bacbf39859b8255901b9c20d9f406ec0e57fdd794abdfff21783"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-PROGRESS-PACKAGE-20261103.md",
+      "bytes": 3897,
+      "sha256": "fa9a6a429b0a9ee28ffc2f1668557e47ffd3f639121f9b4ed694a30721adae50"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-PROJECT-PACKAGE-20261103.md",
+      "bytes": 3867,
+      "sha256": "989b7b98b76db0b29e17c05218d90d7fe17b7e3811a19d93c653d1f0e8ee14a8"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-PROVIDERS-PACKAGE-20261103.md",
+      "bytes": 4013,
+      "sha256": "fdd3a4edc723bbccb7307d58442603c58cd1a43ef8cf702d8359b17a948b906a"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-PT-CAPABILITIES-PACKAGE-20261103.md",
+      "bytes": 4032,
+      "sha256": "28a85515cb88b54ee2459628ab3b1d4042e7ac2698c2451b475f57f3d39b261a"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-ROADMAP-AND-RESOURCES-20261103.md",
+      "bytes": 32138,
+      "sha256": "5a293df74fe8040f472d5758016a8ce170ba2816d7483703a7cf80cf353637ed"
+    },
+    {
+      "path": "docs/refactor/PRODUCT-TEMPLATE-PACKAGE-20261103.md",
+      "bytes": 3895,
+      "sha256": "c130879d91b118d1fcbe1f87f3fd18200e3cf96cef97aa325b0a09704c7a5417"
+    },
+    {
+      "path": "docs/refactor/PT-API-REQUIREMENTS-20261104.md",
+      "bytes": 29323,
+      "sha256": "eaac40dd5fe744dfd5a729cc6c8373ee2087ff591e321cd09002a1acdcbf3f56"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-CI-PERFORMANCE-PACKAGE-20261103.md",
+      "bytes": 3914,
+      "sha256": "a8941bcc2cabea26ea604604f31dad0c6060f9fff1115f86cb6c3827789d2e74"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-CONTEXT-TOOLS-PACKAGE-20261103.md",
+      "bytes": 3974,
+      "sha256": "5374a44a8e9ed8c6850427af02feb32990aea006172b0abe8823885c89beb493"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-FILEEDIT-PACKAGE-20261103.md",
+      "bytes": 18770,
+      "sha256": "23fa130faff1266e29db297b5d9f45d3bc4635f0c4630c5e768abec86748d1a1"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-GOVERNANCE-PACKAGE-20261103.md",
+      "bytes": 4118,
+      "sha256": "abeca620bb3edb4fee507c452fb3f38640da701756005ed9d7bb7663c750f4e4"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-MASTER-TRACKER-20261103.md",
+      "bytes": 19606,
+      "sha256": "fbe51c7541faa6db4aa1722e2fd1f56e52cdc933eb466c01100ec123143bd283"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-OPS-RECOVERY-PACKAGE-20261103.md",
+      "bytes": 4047,
+      "sha256": "96d0ddbabe2b01377c303d7edeaa51b5f4752d3f3e04e9e090e238402c85ce31"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-ORCHESTRATION-PACKAGE-20261103.md",
+      "bytes": 4111,
+      "sha256": "eab82579e6a6f2d4092d9174764438363084bda4342646e383fdf187e237def4"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-PRODUCTION-ACCEPTANCE-PACKAGE-20261103.md",
+      "bytes": 4135,
+      "sha256": "dc39a1ce6bad07f0e5deaa0ffaf0b0ceec28bc5fbcf63482958c802cf9e050de"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-RESILIENCE-PACKAGE-20261103.md",
+      "bytes": 4031,
+      "sha256": "84cab586caf48a76393325f91f9cb982af86015a39cb7dc9a4d75f40b66f986c"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-SEEDANCE-PACKAGE-20261103.md",
+      "bytes": 4049,
+      "sha256": "74604e3a5b1f7451ef3fdbda1498387dfbca82230fe05c3db17cb801fef72a50"
+    },
+    {
+      "path": "docs/refactor/REFACTOR-TASK-UX-PACKAGE-20261103.md",
+      "bytes": 3931,
+      "sha256": "1bd2bb20979fcaf4da6c3d4f05972fa397d06de1cb7d4bc1ffd4b2a0ebc0632a"
+    }
+  ]
+}

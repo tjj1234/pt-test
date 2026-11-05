@@ -1,0 +1,24 @@
+--- a/shell/candidates/auto-20261103/index.cjs
++++ b/shell/candidates/auto-20261103/index.cjs
+@@ -134,13 +134,19 @@
+     const route = routeMap.get(taskType);
+ 
+     // R3: 校验 dispatchState 枚举
+-    const dispatchState = options.dispatchState || 'pre-dispatch';
++    if (!options || typeof options !== 'object' || Array.isArray(options)) {
++      return fail('CONFIG_INVALID', 'options must be an object');
++    }
++    const dispatchState = options.dispatchState === undefined ? 'pre-dispatch' : options.dispatchState;
+     if (!ALLOWED_DISPATCH_STATES.has(dispatchState)) {
+       return fail('CONFIG_INVALID', `invalid dispatchState "${dispatchState}"`);
+     }
+ 
+     // R3: 校验 selection.mode 枚举
+-    const selection = options.selection || { mode: 'auto' };
++    const selection = options.selection === undefined ? { mode: 'auto' } : options.selection;
++    if (!selection || typeof selection !== 'object' || Array.isArray(selection)) {
++      return fail('CONFIG_INVALID', 'selection must be an object');
++    }
+     if (!ALLOWED_SELECTION_MODES.has(selection.mode)) {
+       return fail('CONFIG_INVALID', `invalid selection.mode "${selection.mode}"`);
+     }

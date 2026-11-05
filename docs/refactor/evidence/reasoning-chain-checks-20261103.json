@@ -1,0 +1,102 @@
+{
+  "schemaVersion": 1,
+  "chain": "reasoning",
+  "status": "MECHANICAL_PASS",
+  "acceptanceDecision": "MAIN_AGENT_REQUIRED",
+  "scope": "local-controlled-fixtures; no paid provider or target deployment",
+  "baseCommit": "3e379fd3ab08aa5829191d1536cab8cb653657dd",
+  "generatedAt": "2026-11-03T02:12:46.428Z",
+  "sources": {
+    "scripts/northstar-chain-checks.mjs": "297671f3fd9afa88a5cca49445ba28e4d4086480b4718ed49be28b8724971526",
+    "shell/attachments/source-store.cjs": "03dcf706ea1d6ccfc9ac95359c3ec568e21e77917867f31023032b39a0d28686",
+    "shell/conversations.cjs": "a1086a4f49d5c5afca41cb00c9757c14b7a458a429bd6ac8dfeef539f367c464",
+    "shell/db-migrations/024_conversation_reasoning_preference.sql": "ab387295709691ce299ab0c6344e147a7fa6e4771a43b32e8d10787dcba3e37b",
+    "shell/db-migrations/025_document_sources.sql": "31341d542121ed21cafd97a81948633ed9e92076eb433445b564421794a4b850",
+    "shell/db-migrations/026_memory_provenance.sql": "6ef41399618328fa9b2ba3d4e01487c761abe4ba195971fbffdd5c0c3e82a586",
+    "shell/db-migrations/027_native_context_session.sql": "92ad6cdab29af8b41754dd02916ad1c2376a59d405aa34a0974aa1efc6bb88cb",
+    "shell/memory/provenance-store.cjs": "c5ed87bddefcf11c238f8fc2e6ba453f9bdb4ab7e5b5c7c7c86d5a5180f45134",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+    "shell/persistent-runner.mjs": "1ea1be28eec0e4747918afa0be7d87e0dd4d3dbbd83822cb7c4aa5f00c43c43b",
+    "shell/public/app.js": "f76c542576b74ed462fff94d55c96f0b1c58dee584e9bdc3d4522e79fea10889",
+    "shell/public/index.html": "659d194af24b585d5015e5c6c63226718c55b8253d037223eb768efa32c01294",
+    "shell/public/styles.css": "e5559bcb38d1a134f3b716d02bdbf88b436a1649cd63abba2ed1461c65e24e5d",
+    "shell/runtime/dsh-adapter.cjs": "71a893813b91c85dc5eeefa1165f91f71e33d603a5419a0384695c97859d70a7",
+    "shell/runtime/dsh-native-context-r4-candidate.mjs": "546a1409bb6dfb574ecb9c0a71482a52714e58ed40d3909b1f2f74dd0b75a701",
+    "shell/runtime/dsh-release-manifest.json": "7d9ea82adaed2a2ae74e6f3bca56dd9d87da857a9ee8f42c7fe1a2f6a7696f5a",
+    "shell/runtime/run-budget-csv.json": "9f5419dfad11192227620e080cbafc20bc7075294ff00d9b19f85b78bd6c6db9",
+    "shell/runtime/run-budget-media.json": "29771b1acb1eac781d551745e063a86172abcca4d758f72cff50793be60b4287",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/server.cjs": "4afed94234b89890954e3325c7c1ae01ebbe871c621518c6605e01df52f9b104",
+    "shell/tasks/chat-request.cjs": "4e04396baf1b525b6de998f10d687187df652dcca2f4acee1bf4595c2fba8ecd",
+    "shell/tenant.cjs": "98c4a9a6459575ccce1fb9b94acb436b380fa7f13424696242febd2181a8ba28",
+    "tests/probes/reasoning-browser-driver-20261102.js": "a9dd39fbf0dd93b5c021c0fbd70ebd38867c6abcc905ac0dc15a253b0c080526",
+    "tests/regression/chat-request-attachments-test.mjs": "56163785f8af6d0ff7c189a3408d3c36be2c209bf6466963956c007c273f2e04",
+    "tests/regression/conversation-model-preference-test.mjs": "747ac44942c5b06f0be4e64546d3e85776862428a2c9216c7e827e5c1bff94b2",
+    "tests/regression/dsh-adapter-error-frame-test.mjs": "3f3b99daa00945a4d58165b575fc3724ea7bfb263dea3994462560bc69ad941f",
+    "tests/regression/dsh-model-info-rpc-test.mjs": "d69b15be0923768e7d79056064498bdc640931ef431aa7b5f93c2994ce7242f0",
+    "tests/regression/dsh-parent-rpc-test.mjs": "c406132707d2650aceff5da566e56e3cff688ca91b4e8b654564ec88c9fc377d",
+    "tests/regression/f1-dsh-model-switch-identity-test.mjs": "bbb244431616c39e2d0004ca383645a3b50e4c950ccee6901771298f814a977c",
+    "tests/regression/native-tool-run-gate-sdk-test.mjs": "85be0b683d50879e95b85326f83373bce3e9e382d2f99241bdfd28847eb8a407",
+    "tests/regression/reasoning-http-sdk-integration-test.mjs": "aca5ab404059ed6998fc3488f29a1c0dde9a1a188b1c395defb5bcbfff82a9f7",
+    "tests/regression/reasoning-native-runner-test.mjs": "17e28f2f384eb25730d572132d979dcd4df412055ca6f10a580af760cf4776a5",
+    "tests/regression/reasoning-run-snapshot-test.mjs": "f95162f6373a09ec38a43435b948db989908ba55d47df1d0223217fc8cff8587",
+    "tests/regression/storage-upgrade-test.mjs": "7b9e11f0ed4da5db886c738e8862d8ea9198e9b38d0c6eb40310713db4729ef1",
+    "tests/regression/ui-model-switch-test.mjs": "1bd6a447420840ddeeac7bedc516f14b3aebbbb8b598a8829cdf7b3c0c6504f0"
+  },
+  "sourceDrift": [],
+  "checks": [
+    {
+      "id": "ui",
+      "command": [
+        "node",
+        "tests/regression/ui-model-switch-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 6076,
+      "log": "docs/refactor/evidence/reasoning-chain-checks-20261103-ui.txt",
+      "logSha256": "aada2a45eafc5239b019310b20a50948e8986eff142260f205eec348bd4b7e9f"
+    },
+    {
+      "id": "http-sdk",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/reasoning-http-sdk-integration-test.mjs"
+      ],
+      "browser": true,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 5533,
+      "log": "docs/refactor/evidence/reasoning-chain-checks-20261103-http-sdk.txt",
+      "logSha256": "dd06a6125abb3654af43e03197b5292d41118a7b76679d22dde3bf8c7459cf05"
+    },
+    {
+      "id": "boundaries",
+      "command": [
+        "node",
+        "--test",
+        "tests/regression/dsh-model-info-rpc-test.mjs",
+        "tests/regression/dsh-adapter-error-frame-test.mjs",
+        "tests/regression/dsh-parent-rpc-test.mjs",
+        "tests/regression/reasoning-native-runner-test.mjs",
+        "tests/regression/reasoning-run-snapshot-test.mjs",
+        "tests/regression/conversation-model-preference-test.mjs",
+        "tests/regression/chat-request-attachments-test.mjs",
+        "tests/regression/storage-upgrade-test.mjs",
+        "tests/regression/native-tool-run-gate-sdk-test.mjs",
+        "tests/regression/f1-dsh-model-switch-identity-test.mjs"
+      ],
+      "browser": false,
+      "exitCode": 0,
+      "signal": null,
+      "timedOut": false,
+      "durationMs": 12036,
+      "log": "docs/refactor/evidence/reasoning-chain-checks-20261103-boundaries.txt",
+      "logSha256": "c5a134182984fe1ac705ff8fd2146878782f7f7c153d1a7144f7d663011c271e"
+    }
+  ]
+}
