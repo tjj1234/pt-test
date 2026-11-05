@@ -1486,7 +1486,7 @@ async function ask(msg) {
   // 音视频：提交 [{ type:"video"|"audio", url }]，气泡里由 chat-media.js 渲成播放器。
   // 只传 url 不传文件本体 —— 落盘和租户隔离都在基座 /api/upload-media 那边做完了。
   // 只挑传完的（有 url 且 uploading 为 false）：正在传的那条 url 还是空的。
-  const readyMedia = pendingMedia.filter(m => m && m.url && !m.uploading);
+  // Reuse readyMedia computed at the start of ask().
   let optimisticMedia = null;
   if (readyMedia.length) {
     // 发给后端：严格 { type, url } 两个字段
