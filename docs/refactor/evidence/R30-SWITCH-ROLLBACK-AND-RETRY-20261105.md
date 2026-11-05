@@ -1,0 +1,5 @@
+# R30首次切换回滚及重试修正
+首次脚本完成新归档/217源码校验、495包31007文件闭包、PG真实隔离恢复273Run/29迁移、profile重建。最后静态资源检查误用/app.js返回401导致cmp失败，脚本自动恢复原unit和原profile并重启旧r28。主程脚本错误，不归责Bug作者，也不因一次误报绕过真实健康门禁。
+主程重新只读确认旧r28 active、PID338865、NRestarts0、WorkingDirectory旧r28、health ok。旧版/app.js也401；实际/assets/app.js为200且SHA23146dfb3657acb1a711631791605affe900371dbeaf0d2fc29bc7df31147970与旧源一致。未执行覆盖live DB的恢复，PG恢复仅在隔离库；备份/恢复点/新release保留，不删除。
+备份/var/backups/northstar/r30-20261105T091212Z，隔离库northstar_r30_verify_20261105091212；root私有。systemd-analyze显示其他xfs_scrub/cloudmonitor旧unit的警告，不是本轮新服务故障，不擅自修改这些系统服务。
+修正脚本R30-DEPLOY-RETRY-VERIFIED-20261105.sh已bash-n通过并上传/tmp/pt-r30-validation-20261105/deploy-retry.sh，SHA48876db69c0f8e0676e4814ce932d6bc5a8670224aef1f5b45ef1f8b18022ba0。改为正确/assets/app.js，已有候选目录仅root-owned且全量源码/闭包再次核验后复用，不删除/覆盖；重新检查在途任务、新备份和PG隔离恢复，不跳过回滚。新增health PID比对真实MainPID、将无关unit验证信息保留在root私有日志。脚本尚未执行；当前无后台测试或部署任务，线上仍旧r28。

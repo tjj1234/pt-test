@@ -1,0 +1,8 @@
+# R30 Bug修复候选已部署，独立QA待完成
+状态DEPLOYED_FOR_QA / INDEPENDENT_ACCEPTANCE_PENDING，不是全部20Bug结项，Bug-12为DEGRADED_PREVIEW。Gemini原8包与第二批8个反馈未混入。
+用户交互sudo回执：2026-11-05T09:15:31Z新备份/var/backups/northstar/r30-20261105T091531Z；PG隔离恢复库northstar_r30_verify_20261105091531，273Run/29迁移匹配，PUBLIC CONNECT已撤销/连接limit0。PROFILE_REBUILD_PASS后启动新release成功。归档SHA493ad02a9d6a2b32aea2913604a4f74032c35143c479360dcda4875fd2ba2199，217绑定源码/419成员；依赖闭包495包/31007文件严格匹配，锁未变。配置/迁移无增量，保留旧release与root私有备份，不回传备份内容。
+主程随后独立SSH回读：northstar-shell active、PID339125、NRestarts0，WorkingDirectory=/opt/northstar/releases/controlled-trial-20261105-candidate-34-r30-bugfix-draft/shell；本地与公网health均ok且PID相同；analytics active；匿名/api/models401，/login200。前端/assets/app.js本地与公网SHA均e9f1c17f5053cbf584376e5790e564b5de9cb53ba010a8975624981438a7c5c8，匹配R4候选；server SHAad4ac769267e3bc412a592e2347ced940f5ad261abaedd0d6b09da0b510341b3，runner SHA577fbc627805e5f03f99537b0f9d9edcc32a997c9d374d317e781fae3245362b。应用health version仍1.0.0，版本身份以release目录/归档/源码指纹为准。
+第一次切换曾因主程错误检查/app.js401自动回滚，已修为/assets/app.js并重新备份、恢复验证和切换。本次没有触发回滚；不将前次回滚当完整业务数据恢复演练。
+未真实Google回调/登录态产品点击、未发PT模型/媒体请求、未使用新候选验证实扣。本轮用户已批准最多2美元、每类至多一次、未知不重试，但授权不等于已执行。下一步独立测试工程师按更新R28-BUGFIX-QA-REQUEST-20261105.md做本次精确版本复测；不复制旧报告Cookie，截图/trace需脱敏。当前没有后台付费或部署任务。
+
+主程额外实际回读已部署217份源码：checked217、mismatch=[]、PASS。该结果与用户脚本回执分开记录。
