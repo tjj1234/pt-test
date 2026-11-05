@@ -1392,82 +1392,19 @@ async function handleChat(req, res, me, body, taskRun = null) {
   const htmlBlockMatch = reply && (reply.match(/```html\s*([\s\S]*?<!DOCTYPE html[\s\S]*?<\/html>[\s\S]*?)```/i) ||
                                   reply.match(/```html\s*(<html[\s\S]*?<\/html>)[\s\S]*?```/i));
   if (htmlBlockMatch && (!r.artifacts || !r.artifacts.some(a => a && a.rel && a.rel.endsWith(".html")))) {
-    try {
-      const tenantWs = tenantMod.getTenantWorkspace ? tenantMod.getTenantWorkspace(me.tenant.id) : path.join(RUNTIME, "workspaces", me.tenant.id);
-      let wsStat;
-      try {
-        wsStat = fs.lstatSync(tenantWs);
-      } catch (e) {
-        if (e && e.code === "ENOENT") {
-          fs.mkdirSync(tenantWs, { recursive: true });
-          wsStat = fs.lstatSync(tenantWs);
-        } else {
-          throw e;
-        }
-      }
-      if (!wsStat || wsStat.isSymbolicLink() || !wsStat.isDirectory()) {
-        throw new Error("tenant workspace is not a safe directory");
-      }
-      const dirFlags = fs.constants.O_RDONLY | fs.constants.O_DIRECTORY | fs.constants.O_NOFOLLOW;
-      const dirFd = fs.openSync(tenantWs, dirFlags);
-      try {
-        const htmlContent = htmlBlockMatch[1].trim();
-        let written = false;
-        let seq = 1;
-        while (!written && seq <= 1000) {
-          const htmlRel = seq === 1 ? "report.html" : "report_" + seq + ".html";
-          const htmlAbs = path.join(tenantWs, htmlRel);
-          let exists = false;
-          try {
-            fs.lstatSync(htmlAbs);
-            exists = true;
-          } catch (e) {
-            if (e && e.code !== "ENOENT") throw e;
-          }
-          if (exists) {
-            seq++;
-            continue;
-          }
-
-          let fd;
-          try {
-            fd = fs.openSync(htmlAbs, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
-          } catch (openErr) {
-            if (openErr && (openErr.code === "EEXIST" || openErr.code === "EINVAL")) {
-              seq++;
-              continue;
-            }
-            throw openErr;
-          }
-
-          try {
-            fs.writeFileSync(fd, htmlContent, "utf8");
-            if (typeof fs.fsyncSync === "function") fs.fsyncSync(fd);
-          } catch (writeErr) {
-            try { fs.closeSync(fd); } catch (_) {}
-            try { fs.unlinkSync(htmlAbs); } catch (_) {}
-            throw writeErr;
-          }
-          fs.closeSync(fd);
-
-          const stat = fs.statSync(htmlAbs);
-          if (!stat.isFile() || (typeof stat.nlink === "number" && stat.nlink !== 1)) {
-            try { fs.unlinkSync(htmlAbs); } catch (_) {}
-            throw new Error("artifact must be regular file with nlink=1");
-          }
-
-          const art = artifactsMod.normalizeArtifact({ rel: htmlRel, name: htmlRel, size: stat.size, mtime: stat.mtimeMs });
-          if (art) {
-            hostArtifacts.set(art.rel, art);
-            sse({ artifact: art });
-          }
-          written = true;
-        }
-      } finally {
-        try { fs.closeSync(dirFd); } catch (_) {}
-      }
-    } catch (e) {
-      log.warn("html_artifact_materialize_failed", { error: e && e.message ? e.message : String(e) });
+    // 方案 B（临时安全修复 / DEGRADED_PREVIEW）：
+    // 依主审指令，关闭普通聊天回复扫描 HTML 后自动写盘、登记及发送对应产物事件的路径。
+    // 在具备经主审核实的可靠安全写入/发布机制前，不从主服务进程直接向租户目录创建 HTML 文件。
+    // 聊天回复中的 HTML 原始内容完整保留；明确提示自动预览暂不可用；不生成虚假产物或失效链接。
+    if (typeof log !== "undefined" && log.info) {
+      log.info("html_artifact_materialize_degraded", {
+        reason: "DEGRADED_PREVIEW: automatic HTML preview materialization is disabled for write-side safety",
+        tenantId: me?.tenant?.id || null
+      });
+    }
+    const degradedNotice = "\n\n> 💡 **提示**：已检测到 HTML 网页内容。当前写端安全策略升级中，自动预览功能暂不可用（DEGRADED_PREVIEW），您可以直接查看或复制代码。";
+    if (typeof reply === "string" && !reply.includes("DEGRADED_PREVIEW")) {
+      reply += degradedNotice;
     }
   }
   const artifacts = [...new Map([

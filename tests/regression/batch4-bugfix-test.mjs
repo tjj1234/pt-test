@@ -49,9 +49,10 @@ test('Batch 4 Bug-13 & Bug-14: runner evicts poisoned agent session on failure a
 
 test('Batch 4 Bug-12 & Bug-07: HTML code block materialization & persona upload constraints', async () => {
   const serverCode = fs.readFileSync(path.join(ROOT, 'shell/server.cjs'), 'utf8');
-  // Verify HTML code block detection and artifact generation in server.cjs
+  // Verify HTML code block detection and Plan B safety closure (DEGRADED_PREVIEW)
   assert.match(serverCode, /htmlBlockMatch/);
-  assert.match(serverCode, /report\.html/);
+  assert.match(serverCode, /DEGRADED_PREVIEW/);
+  assert.doesNotMatch(serverCode, /fs\.openSync\(htmlAbs/);
 
   const persona = fs.readFileSync(path.join(ROOT, 'shell/agent-persona.md'), 'utf8');
   // Verify persona contains clear file writeback / read-only boundary
