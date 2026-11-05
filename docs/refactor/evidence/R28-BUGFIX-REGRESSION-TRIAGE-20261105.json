@@ -1,0 +1,207 @@
+{
+  "code_commit": "db94e425d3746db8c7ab138b462049f5f8a7c5f2",
+  "first_run": {
+    "total": 267,
+    "passed": 222,
+    "failed": 45,
+    "environment": "sandbox with cross-directory dependencies"
+  },
+  "rerun": {
+    "total": 45,
+    "passed": 42,
+    "failed": 3,
+    "environment": "clean locked installs; loopback permitted"
+  },
+  "subsequent_archive_gate": "PASS with new independently audited archive; old archive untouched",
+  "baseline_comparison": {
+    "native_reasoning": "baseline PASS; candidate invalid effort then valid effort fails and test leaks child",
+    "ui_model_switch": "baseline 57/57; candidate 54/57"
+  },
+  "current_blockers": [
+    "R4-RUNNER-RECOVERY",
+    "R4-MODEL-LABEL"
+  ],
+  "deployment": "BLOCKED; active r28 unchanged",
+  "rerun_rows": [
+    {
+      "suite": "chat-rate-limit-by-account-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "chat-usage-failure-accounting-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "context-http-sdk-integration-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "conversation-model-preference-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "csv-document-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "current-northstar-draft-artifact-test.mjs",
+      "status": "FAIL"
+    },
+    {
+      "suite": "docexport-candidate-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "dsh-adapter-error-frame-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "dsh-bootstrap-policy-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "dsh-cli-profile-ready-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "dsh-model-info-rpc-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "dsh-parent-rpc-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "dsh-runtime-release-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "f1-dsh-model-switch-identity-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "f1-managed-media-http-sdk-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "f1-model-media-task-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "f1-native-model-switch-intent-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "f1-pt-media-csp-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "f1-ui-media-http-history-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "f2-csv-http-sdk-integration-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "google-login-integration-review-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "google-login-server-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "m3-workspace-enabled-status-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "managed-media-read-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "media-external-usage-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "media-reservation-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "memory-change-cancel-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "memory-session-invalidation-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "memory-untrusted-upload-boundary-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "native-image-http-sdk-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "office-http-sdk-integration-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "profile-startup-failure-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "pt-contract-key-status-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "reasoning-http-sdk-integration-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "reasoning-native-runner-test.mjs",
+      "status": "TIMEOUT"
+    },
+    {
+      "suite": "skill-http-sdk-integration-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "source-http-sdk-integration-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "t03-chat-http-same-key-disconnect-replay-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "t03-child-manual-check-stop-http-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "t03-ui-preheader-ack-loss-real-chat-retry-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "t04-adapter-abort-drain-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "t10-artifact-history-persistence-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "t10-artifact-tenant-symlink-audit-test.mjs",
+      "status": "PASS"
+    },
+    {
+      "suite": "ui-model-switch-test.mjs",
+      "status": "FAIL"
+    },
+    {
+      "suite": "xlsx-http-sdk-integration-test.mjs",
+      "status": "PASS"
+    }
+  ]
+}
