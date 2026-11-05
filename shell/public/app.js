@@ -2697,9 +2697,8 @@ async function loadModels() {
       const isVision = m.id === "qwen3.8-flash" || (Array.isArray(m.inputModalities?.value) && m.inputModalities.value.includes("image")) || j.imageEligibility?.[m.id]?.ok;
       const visionTag = isVision ? " · 支持图片理解" : "";
       const firstRunNotice = !blockedReason && cap.manualEligible && cap.verificationRequired ? "（可手动首调" + visionTag + "）" : (visionTag ? "（" + visionTag.slice(3) + "）" : "");
-      const isGen = cap.chat === false;
-      const genNotice = isGen ? "（" + (cap.kind === "video" ? "视频生成" : "图像生成") + " · 点击切换生成模式）" : "";
-      o.textContent = (m.name || m.id) + (isGen ? genNotice : (blockedReason ? "（" + (cap.chat === false ? modelKindLabel(cap.kind) + " · " : "") + blockedReason + "）" : firstRunNotice));
+      const kindPrefix = cap.chat === false ? modelKindLabel(cap.kind) + " · " : "";
+      o.textContent = (m.name || m.id) + (blockedReason ? "（" + kindPrefix + blockedReason + "）" : firstRunNotice);
       if (m.id === j.current) o.selected = true;
       modelSelect.appendChild(o);
     }
