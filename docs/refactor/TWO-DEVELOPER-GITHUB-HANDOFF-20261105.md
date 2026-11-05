@@ -1,6 +1,9 @@
 # 两位程序员跨电脑开发交接与GitHub规则
 2026-11-05｜状态：领取准备；A/B为角色占位，人员账号与实际能力待登记。范围暂按现有35包减Gemini原01–08，即09–35共27包；用户提到28包，额外1包未确认，不自行新增。09/10仅规格样本获批，仍有实现工作。
 
+## 适用范围与责任边界
+本文的个人账号、独立开发分支、推送和PR规则，仅适用于分给两位新程序员的任务包。Gemini原01–08正在由Codex审核，r28 Bug修复也由Codex接收复审；这些线的合并、推送与接线由Codex负责，不要求两位新程序员接手、维护分支或重复修复。GitHub已保存的fix/auto-08-r1-r6、fix/questions-isolation-20261104、candidate/r28-bugfix-full仅为主程留存候选，不是新程序员领取入口，也不代表通过审核。
+
 ## 仓库与可用基线
 共同使用https://github.com/tjj1234/pt-test。协作准备分支为handoff/two-developers-20261105；其代码基线为bbd9997，附当前任务规格、候选和审核证据，**不是所有修复已经合并的可发布版本**。main不是本轮开发基线。两人分别使用自己的GitHub账号、SSH或个人凭据，由管理员授予必要仓库访问权；不共享主账号/Token/生产权限。账号未提供前A/B分支只是命名占位，不代表GitHub权限已设置。
 必读顺序：[入门](DEVELOPER-ONBOARDING.md)→[研发测试发布流程](ENGINEERING-DELIVERY-WORKFLOW.md)→[总台账](REFACTOR-MASTER-TRACKER-20261103.md)→[路线图](PRODUCT-ROADMAP-AND-RESOURCES-20261103.md)→所属任务包及[规格索引](PACKAGE-SPEC-INDEX-20261104.md)。包内已有UI/契约/验收内容不在本文复制；遇历史状态冲突，以最新主审证据和总台账为准，不凭日期猜测，向主程登记冲突。
