@@ -1,0 +1,18 @@
+✔ 1. Word (.docx) 生成真实有效性与结构完整性 (6.378291ms)
+✔ 2. Excel (.xlsx) 生成真实有效性与表格反读验证 (7.188667ms)
+✔ 3. PDF (.pdf) 生成真实有效性与 ISO 32000-1 规范校验 (0.392792ms)
+✔ 4. PDF 分页机制与多页渲染验证 (0.307ms)
+✔ 5. 严格 Fail-Closed：数据缺失与字段异常校验 (0.275041ms)
+✔ 6. 资源边界控制：行数、单元格数、文件大小与参数越界 (0.84575ms)
+✔ 7. 专项测试：Excel 公式注入防御（CSV/Spreadsheet Formula Injection） (1.768125ms)
+✔ 8. 顶层独立表格与空值/Null 容错测试 (1.190625ms)
+✔ input guard runs before any format generator and rejects unsafe structure (3.107625ms)
+✔ XLSX sheet names are legal and unique without losing tables (2.227208ms)
+ℹ tests 10
+ℹ suites 0
+ℹ pass 10
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 103.291083
