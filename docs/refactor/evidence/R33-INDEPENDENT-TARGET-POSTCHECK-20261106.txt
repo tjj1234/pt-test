@@ -1,0 +1,11 @@
+ActiveState=active
+SubState=running
+MainPID=367662
+NRestarts=0
+WorkingDirectory=/opt/northstar/releases/controlled-trial-20261106-candidate-34-r33-questions-m1-draft/shell
+active
+{"ok":true,"status":"ok","version":"1.0.0","pid":367662,"uptimeSec":62,"ts":"2026-11-06T08:02:47.372Z"}INDEPENDENT_SOURCE_BINDING_PASS 223
+shell/public/app.js 0885b75481fa69e78d5d96faf3070d4d0815fbf2fca41f298d432961ff7771fc
+shell/public/styles.css 4854a660de0ff59a0fd57b3575b4f5f15998e04744bfd8b9bc26994586323e56
+shell/server.cjs 3278327be080cc6b530b2cfee41f1c0caff7ff67513b79c87042c4de31035c55
+R31_RETAINED
