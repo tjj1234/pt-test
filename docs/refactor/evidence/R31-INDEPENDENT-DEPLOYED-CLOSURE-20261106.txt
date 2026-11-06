@@ -1,0 +1,17 @@
+{
+  "result": "PASS",
+  "target": {
+    "platform": "linux",
+    "arch": "x64",
+    "gate": "enforced"
+  },
+  "packageCount": 495,
+  "fileCount": 31007,
+  "arborist": "8.0.5",
+  "packageLockSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+  "generatedWithNode": "v22.23.4",
+  "checkedWithNode": "v24.22.0"
+}
+ActiveState=active
+MainPID=363348
+NRestarts=0

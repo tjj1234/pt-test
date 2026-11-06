@@ -1,0 +1,12 @@
+ActiveState=active
+SubState=running
+MainPID=363348
+NRestarts=0
+WorkingDirectory=/opt/northstar/releases/controlled-trial-20261106-candidate-34-r31-batch5-draft/shell
+active
+{"ok":true,"status":"ok","version":"1.0.0","pid":363348,"uptimeSec":109,"ts":"2026-11-06T03:45:46.106Z"}
+518d4b7e121bf2666a44366cba233c584d25b34f47b53e66c6bdf082acac3095  /opt/northstar/releases/controlled-trial-20261106-candidate-34-r31-batch5-draft/shell/public/app.js
+4854a660de0ff59a0fd57b3575b4f5f15998e04744bfd8b9bc26994586323e56  /opt/northstar/releases/controlled-trial-20261106-candidate-34-r31-batch5-draft/shell/public/styles.css
+c3da979a5ee0bd103ab003d6b336e8870f0fb43a30ba6503573acd34fdc5d094  /opt/northstar/releases/controlled-trial-20261106-candidate-34-r31-batch5-draft/shell/server.cjs
+R30_RELEASE_RETAINED
+INDEPENDENT_SOURCE_BINDING_PASS 217

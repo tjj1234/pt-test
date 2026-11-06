@@ -1,5 +1,5 @@
 # R31 batch5同版QA清单
-当前状态：候选已集成冻结、**未部署**。只有主程提供目标源码/目录/归档指纹核对后，测试工程师才可把测试环境标为R31；当前已有R30测试结果继续归属R30，不混用。
+当前状态：**R31已部署agent-fat，独立目标/公网指纹后检通过，可以开始同版QA**。线上PID363348、WorkingDirectory=/opt/northstar/releases/controlled-trial-20261106-candidate-34-r31-batch5-draft/shell；主程已核对217份源码、app/CSS、公网健康及匿名边界。已有R30测试结果继续归属R30，不混用。部署证据见evidence/R31-DEPLOYED-FOR-QA-20261106.md。
 目标源码fd1f11ef120082068a0d0b83819883c35285ee07；归档northstar-controlled-trial-20261106-candidate-34-r31-batch5-draft.tar.gz，SHA256 6addd5e342b9696f4d37ddc30bc60412b6f8ab5b735161b2e07fe38df4818955；/assets/app.js SHA256 518d4b7e121bf2666a44366cba233c584d25b34f47b53e66c6bdf082acac3095。范围是R30加batch5三处修复及主程一行补丁，不含Gemini八包或第二批其他争议项。
 
 | 项目 | 必测交互与判定 |

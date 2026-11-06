@@ -1,0 +1,15 @@
+{
+  "healthStatus": 200,
+  "health": {
+    "ok": true,
+    "status": "ok",
+    "version": "1.0.0",
+    "pid": 363348,
+    "uptimeSec": 113,
+    "ts": "2026-11-06T03:45:50.915Z"
+  },
+  "loginStatus": 200,
+  "anonymousModelsStatus": 401,
+  "appSha256": "518d4b7e121bf2666a44366cba233c584d25b34f47b53e66c6bdf082acac3095",
+  "stylesSha256": "4854a660de0ff59a0fd57b3575b4f5f15998e04744bfd8b9bc26994586323e56"
+}
