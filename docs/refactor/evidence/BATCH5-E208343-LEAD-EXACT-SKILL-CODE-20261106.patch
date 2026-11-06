@@ -1,0 +1,11 @@
+--- a/shell/public/app.js
++++ b/shell/public/app.js
+@@ -1423,7 +1423,7 @@
+       } else {
+         const err = (j && j.error) ? j.error : ("HTTP " + r.status);
+-        if (j && (j.code === "SKILL_NOT_AVAILABLE" || j.error?.includes("技能"))) {
++        if (j && j.code === "SKILL_NOT_AVAILABLE") {
+           if (state.skillSelection) {
+             state.skillSelection.unavailable = true;
+             renderSelectedSkill();
+           }

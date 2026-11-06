@@ -2765,7 +2765,12 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
       });
       return;
     } catch (error) {
-      if (!res.headersSent) return json(res, error.statusCode || 400, { ok: false, code: error.code || "CHAT_SUBMISSION_FAILED", error: error.statusCode === 404 ? "对话不存在或不属于你" : "任务提交失败，请重试" });
+      if (!res.headersSent) {
+        const errorMsg = error.code === "SKILL_NOT_AVAILABLE"
+          ? "所选技能版本已禁用或无法验证，请解绑后重新选择"
+          : (error.statusCode === 404 ? "对话不存在或不属于你" : "任务提交失败，请重试");
+        return json(res, error.statusCode || 400, { ok: false, code: error.code || "CHAT_SUBMISSION_FAILED", error: errorMsg });
+      }
       if (!res.writableEnded) res.end();
       return;
     }

@@ -1422,7 +1422,13 @@ async function runChat(payload) {
         cm.textContent = "第 " + j.turns + " 轮 · 常驻 agent 会话续接";
       } else {
         const err = (j && j.error) ? j.error : ("HTTP " + r.status);
-        if (j && Array.isArray(j.messages)) renderChat(j.messages);
+        if (j && j.code === "SKILL_NOT_AVAILABLE") {
+          if (state.skillSelection) {
+            state.skillSelection.unavailable = true;
+            renderSelectedSkill();
+          }
+          bubbleSys("所引用的技能已停用或无法验证。如需继续对话，请在输入框上方点击「移除」解绑该技能，或更换其他可用技能后再发送。");
+        } else if (j && Array.isArray(j.messages)) renderChat(j.messages);
         else bubbleSys("执行失败：" + err);
         cm.textContent = "";
       }
@@ -2863,6 +2869,19 @@ async function loadMemory() {
   if (!list) return;
   list.innerHTML = '<div class="mem-empty">读取中…</div>';
   try {
+    const memScope = $("#memScope");
+    if (memScope) {
+      const convOpt = memScope.querySelector('option[value="conversation"]');
+      if (convOpt) {
+        if (!state.activeId) {
+          convOpt.disabled = true;
+          convOpt.textContent = "当前对话范围（请先选择对话）";
+        } else {
+          convOpt.disabled = false;
+          convOpt.textContent = "当前对话范围";
+        }
+      }
+    }
     const sourceSelect=$('#memSource');if(sourceSelect){const prior=sourceSelect.value;sourceSelect.replaceChildren(new Option('不绑定资料',''));const response=await fetch('/api/sources',{credentials:'same-origin'});if(response.ok){for(const source of (await response.json()).sources||[]){if(!source.pendingCleanup)sourceSelect.appendChild(new Option(source.name,source.id));}}sourceSelect.value=prior;}
     const j = await (await fetch("/api/memory", { credentials: "same-origin" })).json();
     const items = (j && Array.isArray(j.memories)) ? j.memories : [];
@@ -2890,9 +2909,14 @@ const memAdd = $("#memAdd");
 if (memAdd) memAdd.addEventListener("click", async () => {
   const key = $("#memKey").value.trim(), val = $("#memVal").value.trim();
   if (!key || !val) { alert("记忆名和内容都要填"); return; }
+  const scopeVal = $("#memScope").value;
+  if (scopeVal === "conversation" && !state.activeId) {
+    alert("请先从左侧选择一个对话，或将范围改为「用户范围」后再提交。");
+    return;
+  }
   const r = await fetch("/api/memory", {
     method: "POST", credentials: "same-origin",
-    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value: val,scope:$("#memScope").value,conversationId:$("#memScope").value==='conversation'?state.activeId:undefined,mode:$("#memMode").value,sourceId:$('#memSource').value||undefined }),
+    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value: val,scope:scopeVal,conversationId:scopeVal==='conversation'?state.activeId:undefined,mode:$("#memMode").value,sourceId:$('#memSource').value||undefined }),
   });
   const j = await r.json().catch(() => null);
   if (j && j.ok) { $("#memKey").value = ""; $("#memVal").value = ""; loadMemory(); }
@@ -3183,10 +3207,16 @@ async function loadSkills() {
   }
 }
 function renderSelectedSkill() {
-  const chip=$("#selectedSkillChip");if(!chip)return;chip.replaceChildren();chip.hidden=!state.skillSelection;
-  if(!state.skillSelection)return;
-  chip.appendChild(mkNode("span","","Skill："+state.skillSelection.skillId+" @ "+state.skillSelection.version));
-  const clear=mkNode("button","","移除");clear.type="button";clear.onclick=()=>{state.skillSelection=null;state.skillSelectionOverride=true;renderSelectedSkill();};chip.appendChild(clear);
+  const chip = $("#selectedSkillChip"); if (!chip) return; chip.replaceChildren(); chip.hidden = !state.skillSelection;
+  if (!state.skillSelection) return;
+  const isUnavail = state.skillSelection.unavailable === true;
+  const tagText = "Skill：" + state.skillSelection.skillId + " @ " + state.skillSelection.version + (isUnavail ? "（已失效/不可用）" : "");
+  const tagSpan = mkNode("span", isUnavail ? "skill-unavailable" : "", tagText);
+  if (isUnavail) tagSpan.style.color = "var(--err, #d93025)";
+  chip.appendChild(tagSpan);
+  const clear = mkNode("button", "", "移除"); clear.type = "button";
+  clear.onclick = () => { state.skillSelection = null; state.skillSelectionOverride = true; renderSelectedSkill(); };
+  chip.appendChild(clear);
 }
 async function loadPublishedSkills() {
   const box=$("#publishedSkillList");if(!box)return;

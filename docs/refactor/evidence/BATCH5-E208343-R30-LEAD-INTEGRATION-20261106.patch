@@ -1,0 +1,150 @@
+--- a/shell/public/app.js
++++ b/shell/public/app.js
+@@ -1422,7 +1422,13 @@
+         cm.textContent = "第 " + j.turns + " 轮 · 常驻 agent 会话续接";
+       } else {
+         const err = (j && j.error) ? j.error : ("HTTP " + r.status);
+-        if (j && Array.isArray(j.messages)) renderChat(j.messages);
++        if (j && j.code === "SKILL_NOT_AVAILABLE") {
++          if (state.skillSelection) {
++            state.skillSelection.unavailable = true;
++            renderSelectedSkill();
++          }
++          bubbleSys("所引用的技能已停用或无法验证。如需继续对话，请在输入框上方点击「移除」解绑该技能，或更换其他可用技能后再发送。");
++        } else if (j && Array.isArray(j.messages)) renderChat(j.messages);
+         else bubbleSys("执行失败：" + err);
+         cm.textContent = "";
+       }
+@@ -2863,6 +2869,19 @@
+   if (!list) return;
+   list.innerHTML = '<div class="mem-empty">读取中…</div>';
+   try {
++    const memScope = $("#memScope");
++    if (memScope) {
++      const convOpt = memScope.querySelector('option[value="conversation"]');
++      if (convOpt) {
++        if (!state.activeId) {
++          convOpt.disabled = true;
++          convOpt.textContent = "当前对话范围（请先选择对话）";
++        } else {
++          convOpt.disabled = false;
++          convOpt.textContent = "当前对话范围";
++        }
++      }
++    }
+     const sourceSelect=$('#memSource');if(sourceSelect){const prior=sourceSelect.value;sourceSelect.replaceChildren(new Option('不绑定资料',''));const response=await fetch('/api/sources',{credentials:'same-origin'});if(response.ok){for(const source of (await response.json()).sources||[]){if(!source.pendingCleanup)sourceSelect.appendChild(new Option(source.name,source.id));}}sourceSelect.value=prior;}
+     const j = await (await fetch("/api/memory", { credentials: "same-origin" })).json();
+     const items = (j && Array.isArray(j.memories)) ? j.memories : [];
+@@ -2890,9 +2909,14 @@
+ if (memAdd) memAdd.addEventListener("click", async () => {
+   const key = $("#memKey").value.trim(), val = $("#memVal").value.trim();
+   if (!key || !val) { alert("记忆名和内容都要填"); return; }
++  const scopeVal = $("#memScope").value;
++  if (scopeVal === "conversation" && !state.activeId) {
++    alert("请先从左侧选择一个对话，或将范围改为「用户范围」后再提交。");
++    return;
++  }
+   const r = await fetch("/api/memory", {
+     method: "POST", credentials: "same-origin",
+-    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value: val,scope:$("#memScope").value,conversationId:$("#memScope").value==='conversation'?state.activeId:undefined,mode:$("#memMode").value,sourceId:$('#memSource').value||undefined }),
++    headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key, value: val,scope:scopeVal,conversationId:scopeVal==='conversation'?state.activeId:undefined,mode:$("#memMode").value,sourceId:$('#memSource').value||undefined }),
+   });
+   const j = await r.json().catch(() => null);
+   if (j && j.ok) { $("#memKey").value = ""; $("#memVal").value = ""; loadMemory(); }
+@@ -3183,10 +3207,16 @@
+   }
+ }
+ function renderSelectedSkill() {
+-  const chip=$("#selectedSkillChip");if(!chip)return;chip.replaceChildren();chip.hidden=!state.skillSelection;
+-  if(!state.skillSelection)return;
+-  chip.appendChild(mkNode("span","","Skill："+state.skillSelection.skillId+" @ "+state.skillSelection.version));
+-  const clear=mkNode("button","","移除");clear.type="button";clear.onclick=()=>{state.skillSelection=null;state.skillSelectionOverride=true;renderSelectedSkill();};chip.appendChild(clear);
++  const chip = $("#selectedSkillChip"); if (!chip) return; chip.replaceChildren(); chip.hidden = !state.skillSelection;
++  if (!state.skillSelection) return;
++  const isUnavail = state.skillSelection.unavailable === true;
++  const tagText = "Skill：" + state.skillSelection.skillId + " @ " + state.skillSelection.version + (isUnavail ? "（已失效/不可用）" : "");
++  const tagSpan = mkNode("span", isUnavail ? "skill-unavailable" : "", tagText);
++  if (isUnavail) tagSpan.style.color = "var(--err, #d93025)";
++  chip.appendChild(tagSpan);
++  const clear = mkNode("button", "", "移除"); clear.type = "button";
++  clear.onclick = () => { state.skillSelection = null; state.skillSelectionOverride = true; renderSelectedSkill(); };
++  chip.appendChild(clear);
+ }
+ async function loadPublishedSkills() {
+   const box=$("#publishedSkillList");if(!box)return;
+--- a/shell/public/styles.css
++++ b/shell/public/styles.css
+@@ -800,9 +800,16 @@
+ .toolbar-btn{
+   padding:7px 13px;border:1px solid var(--line);border-radius:8px;
+   background:#fff;color:var(--text-1);font-size:13px;cursor:pointer;font-family:inherit;
+-  transition:border-color .15s,color .15s;
++  transition:border-color .15s,color .15s,background-color .15s;
+ }
+ .toolbar-btn:hover{border-color:#1a1a1a;color:#1a1a1a}
++.toolbar-btn[aria-pressed="true"]{
++  border-color:var(--brand);
++  background:var(--bg-soft);
++  color:var(--brand);
++  font-weight:600;
++  box-shadow:inset 0 0 0 1px var(--brand);
++}
+ 
+ /* ---------- 弹窗 ---------- */
+ .modal-mask{
+--- a/shell/server.cjs
++++ b/shell/server.cjs
+@@ -2765,7 +2765,12 @@
+       });
+       return;
+     } catch (error) {
+-      if (!res.headersSent) return json(res, error.statusCode || 400, { ok: false, code: error.code || "CHAT_SUBMISSION_FAILED", error: error.statusCode === 404 ? "对话不存在或不属于你" : "任务提交失败，请重试" });
++      if (!res.headersSent) {
++        const errorMsg = error.code === "SKILL_NOT_AVAILABLE"
++          ? "所选技能版本已禁用或无法验证，请解绑后重新选择"
++          : (error.statusCode === 404 ? "对话不存在或不属于你" : "任务提交失败，请重试");
++        return json(res, error.statusCode || 400, { ok: false, code: error.code || "CHAT_SUBMISSION_FAILED", error: errorMsg });
++      }
+       if (!res.writableEnded) res.end();
+       return;
+     }
+--- /dev/null
++++ b/tests/regression/batch5-followup-test.mjs
+@@ -0,0 +1,37 @@
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import fs from 'node:fs';
++import path from 'node:path';
++
++const ROOT = path.resolve(import.meta.dirname, '../..');
++
++test('Bug-2.6: Toolbar button aria-pressed active styling is present in styles.css', async () => {
++  const css = fs.readFileSync(path.join(ROOT, 'shell/public/styles.css'), 'utf8');
++  assert.match(css, /\.toolbar-btn\[aria-pressed="true"\]/);
++  assert.match(css, /border-color:\s*var\(--brand\)/);
++  assert.match(css, /background:\s*var\(--bg-soft\)/);
++});
++
++test('Bug-2.8: Memory scope checks activeId, guards against missing conversationId, and prevents silent scope expansion', async () => {
++  const appJs = fs.readFileSync(path.join(ROOT, 'shell/public/app.js'), 'utf8');
++  assert.match(appJs, /memScope\.querySelector\('option\[value="conversation"\]'\)/);
++  assert.match(appJs, /convOpt\.disabled\s*=\s*true/);
++  assert.match(appJs, /convOpt\.textContent\s*=\s*"当前对话范围（请先选择对话）"/);
++  // Verify strict avoidance of silent scope mutation to "user"
++  assert.doesNotMatch(appJs, /if\s*\(memScope\.value\s*===\s*"conversation"\)\s*memScope\.value\s*=\s*"user"/);
++  assert.match(appJs, /scopeVal\s*===\s*"conversation"\s*&&\s*!state\.activeId/);
++});
++
++test('Bug-2.4: Chat submission maps SKILL_NOT_AVAILABLE with friendly notice, marks unavailable without silent unbinding', async () => {
++  const serverCode = fs.readFileSync(path.join(ROOT, 'shell/server.cjs'), 'utf8');
++  assert.match(serverCode, /error\.code\s*===\s*"SKILL_NOT_AVAILABLE"/);
++  assert.match(serverCode, /所选技能版本已禁用或无法验证/);
++
++  const appJs = fs.readFileSync(path.join(ROOT, 'shell/public/app.js'), 'utf8');
++  assert.match(appJs, /j\.code\s*===\s*"SKILL_NOT_AVAILABLE"/);
++  // Verify that runChat marks unavailable rather than wiping state.skillSelection directly
++  assert.match(appJs, /state\.skillSelection\.unavailable\s*=\s*true/);
++  assert.doesNotMatch(appJs, /state\.skillSelection\.unavailable\s*=\s*true[\s\S]{1,100}state\.skillSelection\s*=\s*null/);
++  assert.match(appJs, /已失效\/不可用/);
++  assert.match(appJs, /点击「移除」解绑该技能/);
++});

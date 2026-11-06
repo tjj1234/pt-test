@@ -1,0 +1,12 @@
+{
+  "base": "ab8107182a0d29d78c674ff64f69ae68319e603b",
+  "authorCommit": "e20834380a697fb3ab69c180c66c900939940bec",
+  "patch": "docs/refactor/evidence/BATCH5-E208343-R30-LEAD-INTEGRATION-20261106.patch",
+  "patchSha256": "34abc9c8daf877a65021d466a523efea079b52cebc07c1089b5f87e0e9732305",
+  "files": {
+    "shell/public/app.js": "518d4b7e121bf2666a44366cba233c584d25b34f47b53e66c6bdf082acac3095",
+    "shell/public/styles.css": "4854a660de0ff59a0fd57b3575b4f5f15998e04744bfd8b9bc26994586323e56",
+    "shell/server.cjs": "c3da979a5ee0bd103ab003d6b336e8870f0fb43a30ba6503573acd34fdc5d094",
+    "tests/regression/batch5-followup-test.mjs": "98f2fe66f5c803797af523b811d9ed0091f0806b5a02a59c1c6b4926df6a3daa"
+  }
+}

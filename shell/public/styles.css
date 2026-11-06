@@ -800,9 +800,16 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 .toolbar-btn{
   padding:7px 13px;border:1px solid var(--line);border-radius:8px;
   background:#fff;color:var(--text-1);font-size:13px;cursor:pointer;font-family:inherit;
-  transition:border-color .15s,color .15s;
+  transition:border-color .15s,color .15s,background-color .15s;
 }
 .toolbar-btn:hover{border-color:#1a1a1a;color:#1a1a1a}
+.toolbar-btn[aria-pressed="true"]{
+  border-color:var(--brand);
+  background:var(--bg-soft);
+  color:var(--brand);
+  font-weight:600;
+  box-shadow:inset 0 0 0 1px var(--brand);
+}
 
 /* ---------- 弹窗 ---------- */
 .modal-mask{

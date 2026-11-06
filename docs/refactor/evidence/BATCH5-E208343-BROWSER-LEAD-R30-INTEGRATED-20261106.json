@@ -1,0 +1,95 @@
+{
+  "candidate": "e208343",
+  "results": [
+    {
+      "name": "memory preserves conversation scope while unavailable",
+      "status": "PASS",
+      "detail": {
+        "value": "conversation",
+        "disabled": true
+      }
+    },
+    {
+      "name": "no-conversation memory POST blocked",
+      "status": "PASS",
+      "detail": {
+        "posts": 0,
+        "alerts": [
+          "请先从左侧选择一个对话，或将范围改为「用户范围」后再提交。"
+        ]
+      }
+    },
+    {
+      "name": "selected conversation memory uses conversation scope",
+      "status": "PASS",
+      "detail": [
+        {
+          "key": "scope-test",
+          "value": "private content",
+          "scope": "conversation",
+          "conversationId": "A",
+          "mode": "manual"
+        }
+      ]
+    },
+    {
+      "name": "exact unavailable error retains selection and displays warning",
+      "status": "PASS",
+      "detail": {
+        "selection": {
+          "releaseId": "release-A",
+          "skillId": "skill-A",
+          "version": 1,
+          "unavailable": true
+        },
+        "text": "Skill：skill-A @ 1（已失效/不可用）移除"
+      }
+    },
+    {
+      "name": "manual remove clears selection",
+      "status": "PASS"
+    },
+    {
+      "name": "ordinary skill-related error must not declare version unavailable",
+      "status": "PASS",
+      "detail": {
+        "selection": {
+          "releaseId": "release-A",
+          "skillId": "skill-A",
+          "version": 1
+        },
+        "text": "Skill：skill-A @ 1移除"
+      }
+    },
+    {
+      "name": "usage range click highlights only selected button",
+      "status": "PASS",
+      "detail": [
+        {
+          "range": "today",
+          "pressed": "false",
+          "border": "rgb(26, 26, 26)",
+          "shadow": "none"
+        },
+        {
+          "range": "week",
+          "pressed": "true",
+          "border": "rgb(232, 232, 232)",
+          "shadow": "rgb(26, 26, 26) 0px 0px 0px 1px inset"
+        },
+        {
+          "range": "month",
+          "pressed": "false",
+          "border": "rgb(232, 232, 232)",
+          "shadow": "none"
+        }
+      ]
+    }
+  ],
+  "passed": 7,
+  "failed": 0,
+  "pageErrors": [],
+  "chatPosts": 2,
+  "sourceRoot": "/private/tmp/pt-batch5-r30-integration-20261106/shell/public",
+  "sourceSha256": "518d4b7e121bf2666a44366cba233c584d25b34f47b53e66c6bdf082acac3095"
+}
