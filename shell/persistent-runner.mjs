@@ -8,6 +8,7 @@ import { defineTool } from "@deepseek-ai/dsh-tools";
 import {installPublishedSkillProvider} from './published-skill-provider.mjs';
 import {installNativeContextGateR4} from './dsh-native-context-r4-candidate.mjs';
 import {nativeImageMessage} from './native-image-message.mjs';
+let withNativeQuestionExecution = (_active,_execution,next) => next();
 
 const require = createRequire(import.meta.url);
 const { createRunBudget } = require("./budget.cjs");
@@ -94,8 +95,8 @@ function loadRunBudgetPolicy(profile = "default") {
   if (!dshHome) throw Object.assign(new Error("Run budget configuration root is unavailable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
   const mediaTask = /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.exec(profile)?.[1] || null;
   const withSkill=profile==='skill'||profile==='skill-csv'||profile.startsWith('skill-media:');
-  if (profile !== "default" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
-  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
+  if (profile !== "default" && profile !== "questions" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "questions" ? "run-budget-questions.json" : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
   let text;
   try { text = readFileSync(configPath, "utf8"); }
   catch {
@@ -199,7 +200,7 @@ const MEDIA_NO_LINK_NOTE =
  */
 
 const name = "persistent-runner";
-const inject = ["agentDefaultModel", "agents", "sessions", "attachments"];
+const inject = ["agentDefaultModel", "agents", "sessions", "attachments", "userQuestions"];
 const RPC_PROTOCOL_VERSION = 1;
 const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1", "native-context-v1", "skill-pins-v1"]);
 const CONTROL_ERROR_MESSAGES = Object.freeze({
@@ -274,7 +275,7 @@ async function guardNativeToolExecution(active, execution, next) {
     if (admission.code === 'RUN_DURATION_LIMIT') active.expire?.();
     throw deny(admission.code);
   }
-  try { return await next(); }
+  try { return await withNativeQuestionExecution(active,execution,next); }
   finally { admission.settle(); }
 }
 
@@ -293,6 +294,17 @@ function apply(ctx) {
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
     const pendingToolRequests = new Map(); // requestId -> { sessionId, resolve, reject }
     const activeTurns = new Map(); // sessionId -> isolated turn context
+    if(ctx.get("userQuestions")){
+    const nativeQuestions = await import('./native-question-provider.mjs');
+    const {apply:installAskUserTool} = await import('@deepseek-ai/dsh-tool-ask-user');
+    withNativeQuestionExecution=nativeQuestions.withNativeQuestionExecution;
+    const {installNativeQuestionProvider}=nativeQuestions;
+    installAskUserTool(ctx);
+    installNativeQuestionProvider(ctx,{
+      getActiveTurn:agent=>[...activeTurns.values()].find(turn=>turn.agent===agent),
+      ask:(active,args)=>requestParentTool(active.sessionId,'northstar.user_question',args),
+    });
+    }
     const nativeContextGate=installNativeContextGateR4(ctx,{
       getActiveTurn:nativeId=>{const turn=activeTurns.get(String(nativeId).replace(/^session-/,''));return turn?{sessionId:nativeId,runId:turn.runId,tenantId:turn.tenantId,budget:{admit:operation=>{if(turn.auxiliaryAdmissions>=turn.contextModelCalls)return {allowed:false,code:'RUN_MODEL_CALL_LIMIT'};const admission=turn.budget.admit(operation);if(admission.allowed)turn.auxiliaryAdmissions++;return admission;}},cancelRequested:turn.cancelRequested,expired:turn.expired,maxOutputTokens:turn.maxOutputTokens}:null;},
       onAuxiliaryDispatch:binding=>{const active=activeTurns.get(String(binding.sessionId).replace(/^session-/,''));if(active?.runId!==binding.runId)throw budgetAdmissionError('RUN_NOT_BOUND');active.auxiliaryDispatches++;},
@@ -465,7 +477,7 @@ function apply(ctx) {
           || (cmd.compact!==undefined&&typeof cmd.compact!=='boolean')
           || (cmd.runId!==undefined&&(typeof cmd.runId!=='string'||!cmd.runId.trim()||cmd.runId.length>128))
           || (cmd.recordModelIntents !== undefined && typeof cmd.recordModelIntents !== "boolean")
-          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
+          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv","questions"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
         emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
           code: cmd.protocolVersion !== RPC_PROTOCOL_VERSION ? "PROTOCOL_VERSION_MISMATCH" : "TASK_FRAME_INVALID",
           message: "Parent task frame is invalid" });
@@ -924,6 +936,10 @@ function apply(ctx) {
 
         const agent = rec.agent;
         turn.agent = agent;
+        if(ctx.get('userQuestions')){
+          rec.questionMaskDispose?.();
+          rec.questionMaskDispose=turn.toolPolicy?.allowedTools?.includes('ask_user_question')?null:agent.ctx.tools.restrict({deny:['ask_user_question']});
+        }
         publishedSkillProvider.invalidate();
         firstSeq = agent.session.seq;
         if (activeBudget.expired) {

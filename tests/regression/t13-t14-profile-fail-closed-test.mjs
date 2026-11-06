@@ -29,7 +29,8 @@ test("run-persistent profile admits only published pinned skills and keeps ambie
   assert.doesNotMatch(patch, /- id: tool-skill\n  disabled: true/);
   for(const name of ["published-skill-provider.mjs","skill-release-snapshot.cjs","run-budget-skill.json"])assert.equal(Object.hasOwn(manifest.files,name),true);
   assert.deepEqual(profilePackage.dsh.profile.bundles, ["@deepseek-ai/dsh-base"]);
-  assert.deepEqual(Object.keys(profilePackage.dependencies), ["@deepseek-ai/dsh-base"]);
+  assert.deepEqual(Object.keys(profilePackage.dependencies), ["@deepseek-ai/dsh-base","@deepseek-ai/dsh-tool-ask-user"]);
+  assert.equal(profilePackage.dependencies['@deepseek-ai/dsh-tool-ask-user'],lock.packages['node_modules/@deepseek-ai/dsh-tool-ask-user'].version);
   assert.equal(lock.packages["node_modules/@deepseek-ai/dsh-base"].version, "0.1.1-rc.2");
   assert.match(lock.packages["node_modules/@deepseek-ai/dsh-base"].resolved, /^https:\/\/registry\.npmjs\.org\//);
   assert.match(lock.packages["node_modules/@deepseek-ai/dsh-base"].integrity, /^sha512-/);

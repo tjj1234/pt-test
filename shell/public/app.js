@@ -3,6 +3,7 @@ const chat = $("#chat"), ta = $("#ta"), send = $("#send"), stopBtn = $("#stop"),
 const convListEl = $("#convList"), newBtn = $("#newConv");
 let dashLoaded = false;
 const state = { list: [], activeId: null, loadedId: null, busy: false, unread: {} };
+const userQuestionCache = new Map();
 // A request belongs to its conversation for its full browser lifecycle. Switching
 // sessions changes composer/stop controls without cancelling or overwriting the prior stream.
 const chatRunsByConversation = new Map();
@@ -324,6 +325,7 @@ function addRunReviewButton(host, runId) {
       }
       addRunUsageControls(panel, runId, data.run.state);
       addMediaReservationControls(panel, runId);
+      addQuestionHistoryControl(panel, runId);
     } catch {
       panel.textContent = "运行记录暂时无法读取，请稍后重试。";
     } finally { button.disabled = false; }
@@ -986,7 +988,7 @@ async function openConversation(id, opts) {
   saveRoute();
   void loadModels();
   // 右侧已经渲染着这个对话 → 只切视图，不重复拉取（避免闪烁和滚动跳动）
-  if (!force && state.loadedId === id) { restoreMediaAuthorization(id); return; }
+  if (!force && state.loadedId === id) { restoreMediaAuthorization(id); restoreUserQuestions(id); return; }
   try {
     const r = await fetch("/api/conversations/" + encodeURIComponent(id), { credentials: "same-origin" });
     if (!r.ok) { if (current()) { renderChat([]); state.loadedId = null; } return; }
@@ -995,7 +997,7 @@ async function openConversation(id, opts) {
     const conv = (j && j.conversation) ? j.conversation : null;
     renderChat(conv && conv.messages ? conv.messages : []);
     showManualCheckHistory(id);
-    restoreMediaAuthorization(id);
+    restoreMediaAuthorization(id); restoreUserQuestions(id);
     state.loadedId = id;
     // 详情带 archived 就以它为准 —— 列表可能是上一版缓存（刚归档完刷新列表的间隙）
     if (conv && typeof conv.archived === "boolean") setComposerLocked(conv.archived);
@@ -1264,6 +1266,7 @@ async function runChat(payload) {
           if (obj.connecting && viewing()) { showConnecting(t); }
           observeManualCheck(obj.operationStatus);
           if (obj.mediaAuthorization) observeMediaAuthorization(obj.mediaAuthorization);
+          if (obj.userQuestion) observeUserQuestion(targetId,obj.userQuestion);
           if (obj.artifact && viewing()) { pushArtifact(obj.artifact); openArtifactPane(); }
           if (obj.delta && viewing()) { acc += obj.delta; streamInto(t, acc); }
           if (obj.step && viewing()) {
@@ -1343,6 +1346,7 @@ async function runChat(payload) {
                 if (event.type === "delta") { acc += payload.text || ""; if (viewing()) streamInto(t, acc); }
                 else if (event.type === "state") {
                   observeManualCheck(payload.operationStatus);
+                  if(payload.action === "user_question")observeUserQuestion(targetId,{runId:event.runId,question:payload.question});
                   if (payload.action === "media_authorization_required") observeMediaAuthorization({runId:event.runId,taskType:payload.taskType,expiresAt:payload.expiresAt,parameterSummary:payload.parameterSummary});
                 }
                 else if (event.type === "step") {
@@ -1486,6 +1490,7 @@ async function ask(msg) {
   const effectiveMsg = msg.trim() || (pendingImage ? "请分析这张图片" : (pendingDocs.length ? "请分析附件内容" : (readyMedia.length ? "请分析音视频内容" : "请分析引用的资料内容")));
   ta.value = ""; ta.style.height = "auto";
   const payload = { conversationId: state.activeId, message: effectiveMsg };
+  if ($('#allowQuestions')?.checked) payload.allowQuestions=true;
   if(pendingSourceCitations.length)payload.sourceCitations=pendingSourceCitations.map(({label,...item})=>item);
   // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
   if (currentPanel) payload.context = { panel: currentPanel, panelLabel: TITLES[currentPanel] || currentPanel };
@@ -4151,6 +4156,66 @@ if ($("#artSwitch")) $("#artSwitch").addEventListener("change", (e) => {
   renderArtifactPane();
 });
 
+
+function renderUserQuestion(host,entry) {
+  const q=entry.question;
+  const panel=document.createElement('section');panel.className='user-question';panel.dataset.questionId=q.id;
+  panel.style.cssText='margin:12px 0;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--bg-soft)';
+  const heading=document.createElement('strong');heading.textContent=q.header||'助手需要你的答复';panel.appendChild(heading);
+  const text=document.createElement('p');text.textContent=q.question;panel.appendChild(text);
+  if(q.detail){const detail=document.createElement('p');detail.textContent=q.detail;panel.appendChild(detail);}
+  const notice=document.createElement('p');notice.setAttribute('role','status');
+  const final=q.status!=='pending'||Date.now()>=q.deadline;
+  const choices=[];
+  for(const label of q.options||[]){
+    const row=document.createElement('label'),input=document.createElement('input');input.type=q.multiSelect?'checkbox':'radio';input.name='question-'+entry.key;input.value=label;input.disabled=final;
+    row.appendChild(input);row.appendChild(document.createTextNode(label));row.style.display='block';panel.appendChild(row);choices.push(input);
+  }
+  const custom=document.createElement('textarea');custom.placeholder='补充说明或自定义答复';custom.maxLength=2000;custom.disabled=final;panel.appendChild(custom);
+  const submit=document.createElement('button');submit.type='button';submit.textContent='提交答复';submit.disabled=final;panel.appendChild(submit);
+  notice.textContent=q.status==='answered'?'已答复':q.status==='cancelled'?'本次提问已取消':q.status==='expired'||Date.now()>=q.deadline?'本次提问已过期':'答复后助手会继续本次任务；这不是执行审批。';
+  panel.appendChild(notice);
+  submit.addEventListener('click',async()=>{
+    submit.disabled=true;
+    const answer={selected:choices.filter(input=>input.checked).map(input=>input.value)};
+    if(custom.value.trim())answer.custom=custom.value.trim();
+    try{
+      const response=await fetch('/api/runs/'+encodeURIComponent(entry.runId)+'/questions/'+encodeURIComponent(q.id)+'/answer',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({callId:q.callId,answer})});
+      const data=await response.json();
+      if(!response.ok||data.ok!==true)throw new Error(data.code==='INVALID_ANSWER'?'请选择或填写有效答复。':'答复尚未确认，请刷新提问状态后核对。');
+      q.status='answered';notice.textContent='已答复，助手正在继续本次任务。';custom.disabled=true;choices.forEach(input=>input.disabled=true);
+    }catch(error){notice.textContent=error.message;submit.disabled=q.status!=='pending'||Date.now()>=q.deadline;}
+  });
+  host.appendChild(panel);return panel;
+}
+function observeUserQuestion(conversationId,value) {
+  const q=value?.question;
+  if(!validRunReviewId(value?.runId)||!q||typeof q.id!=='string'||q.id.length>128||typeof q.callId!=='string'||q.callId.length>128||typeof q.question!=='string'||q.question.length>4000||!['pending','answered','expired','cancelled'].includes(q.status)||!Number.isSafeInteger(q.deadline))return;
+  if(q.options!==null&&q.options!==undefined&&(!Array.isArray(q.options)||q.options.length>20||q.options.some(x=>typeof x!=='string'||x.length>1000)))return;
+  const key=JSON.stringify([value.runId,q.callId,q.id]);
+  const previous=userQuestionCache.get(key);
+  if(previous&&previous.question.status!=='pending'&&q.status==='pending')return;
+  previous?.panel?.remove();
+  const entry={key,conversationId,runId:value.runId,question:q,panel:null};userQuestionCache.set(key,entry);
+  if(userQuestionCache.size>128)userQuestionCache.delete(userQuestionCache.keys().next().value);
+  if(state.activeId===conversationId)entry.panel=renderUserQuestion(chat,entry);
+}
+function restoreUserQuestions(conversationId){
+  if(state.activeId!==conversationId)return;
+  for(const entry of userQuestionCache.values())if(entry.conversationId===conversationId){entry.panel?.remove();entry.panel=renderUserQuestion(chat,entry);}
+}
+function addQuestionHistoryControl(host,runId){
+  const button=document.createElement('button');button.type='button';button.textContent='查看提问记录';host.appendChild(button);
+  button.addEventListener('click',async()=>{
+    button.disabled=true;const history=document.createElement('div');host.appendChild(history);
+    try{
+      const response=await fetch('/api/runs/'+encodeURIComponent(runId)+'/questions',{credentials:'same-origin'});if(!response.ok)throw Error();
+      const data=await response.json();if(!Array.isArray(data.questions))throw Error();
+      if(!data.questions.length)history.textContent='本次运行没有提问。';
+      for(const q of data.questions.slice(0,32))renderUserQuestion(history,{runId,question:q,key:JSON.stringify([runId,q.callId,q.id])});
+    }catch{history.textContent='提问记录暂时无法读取。';}finally{button.disabled=false;}
+  });
+}
 
 /* B3 回归测试用：把模型能力查询函数挂到全局（浏览器里本来就是全局的，这里只是显式化）。 */
 if (typeof globalThis !== "undefined") {

@@ -1,0 +1,10 @@
+{
+  "maxDurationMs": 180000,
+  "maxModelCalls": 3,
+  "maxToolCalls": 1,
+  "maxToolCallsPerKey": 1,
+  "maxRetries": 1,
+  "maxOutputTokens": 128,
+  "contextModelCalls": 1,
+  "allowedTools": ["ask_user_question"]
+}

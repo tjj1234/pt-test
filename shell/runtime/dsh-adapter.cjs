@@ -179,6 +179,8 @@ const PROFILE_SOURCE_FILES = Object.freeze({
   "published-skill-provider.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "published-skill-provider.mjs"),
   "skill-release-snapshot.cjs": (runner) => path.resolve(path.dirname(runner), "skills", "release-snapshot.cjs"),
   "native-image-message.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "native-image-message.mjs"),
+  "native-question-provider.mjs": (runner) => path.resolve(path.dirname(runner), "runtime", "native-question-provider.mjs"),
+  "run-budget-questions.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-questions.json"),
   "run-budget.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget.json"),
   "run-budget-skill.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-skill.json"),
   "run-budget-skill-csv.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-skill-csv.json"),
@@ -189,7 +191,7 @@ const PROFILE_SOURCE_FILES = Object.freeze({
 const PROFILE_PATCH = [
   "- id: hmr",
   "  disabled: true",
-  ...["session-title-llm", "user-questions", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "skill-filesystem", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
+  ...["session-title-llm", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "skill-filesystem", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
   "",
   "- id: compaction-basic",
   "  config:",
@@ -201,7 +203,7 @@ const PROFILE_PATCH = [
   "      name: './northstar-patch-watch-compat.mjs'",
   "    - id: persistent-runner",
   "      name: './persistent-runner.mjs'",
-  "      inject: [agentDefaultModel, agents, sessions, attachments]",
+  "      inject: [agentDefaultModel, agents, sessions, attachments, userQuestions]",
   "",
 ].join("\n");
 
@@ -226,6 +228,7 @@ function profileFiles(persistentRunner) {
   }
   const { buildProfileDependencyContract, PROFILE_DEPENDENCY_FILE } = require("./profile-dependencies.cjs");
   const dependencyContract = buildProfileDependencyContract({
+    plugins: ["@deepseek-ai/dsh-tool-ask-user"],
     lockfile: fs.readFileSync(path.resolve(__dirname, "../package-lock.json")),
     npmrc: fs.readFileSync(path.resolve(__dirname, "../.npmrc")),
   });
@@ -974,7 +977,7 @@ function createDshRuntime(opts = {}) {
         ...((spec.inputImages !== undefined || (!warm && !resume && spec.historyInputImages?.length))
           ? {inputImages:[...(!warm&&!resume?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
         ...(spec.recordModelIntents === true ? { recordModelIntents: true } : {}),
-        ...(["csv","skill","skill-csv"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv","questions"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) { waiter.taskDispatched = true; writeJson(proc, taskFrame); }
       else proc.pendingTasks.set(sessionId, taskFrame);
 
@@ -1040,7 +1043,7 @@ function createDshRuntime(opts = {}) {
       };
       proc.waiters.set(sessionId, waiter);
       const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, task, model: spec.model, tenantId,
-        ...(["csv","skill","skill-csv"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv","questions"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) writeJson(proc, taskFrame);
       else proc.pendingTasks.set(sessionId, taskFrame);
       setTimeout(() => {

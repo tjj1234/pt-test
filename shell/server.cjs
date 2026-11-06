@@ -396,6 +396,7 @@ let taskStore = null;            // 持久化 run 与事件（T03）
 let controlledMediaGrants = null;
 let mediaReservationRelease = null;
 let mediaAuthorization = null;
+let userQuestionService = null;
 let managedMediaFetch = null;
 let managedMediaReader = null;
 let managedMediaHosts = [];
@@ -1162,7 +1163,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
     reasoningEffort: taskRun?.modelSelection?.reasoningEffort,
-    budgetProfile: controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
+    budgetProfile: body.allowQuestions === true && !controlledMediaGrant && !pinnedSkills.skills.length && !lastUser?.csvSelections?.length ? "questions" : controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
       : taskRun && Array.isArray(lastUser?.csvSelections) && lastUser.csvSelections.length === 1 ? (pinnedSkills.skills.length?"skill-csv":"csv") : pinnedSkills.skills.length?"skill":undefined,
     pinnedSkills,
     runId:taskRun?.runId,
@@ -1171,7 +1172,10 @@ async function handleChat(req, res, me, body, taskRun = null) {
     recordModelIntents: Boolean(modelIntentHandler),
     timeoutMs: taskTimeoutMs,
     onToolRequest: request => request.name === MODEL_INTENT_RPC && modelIntentHandler
-      ? modelIntentHandler.handle(request) : request.name==='northstar.skill_snapshot'?publishedSkills.readPinned({userId:uid,tenantId:me.tenant.id},pinnedSkills,request.args?.releaseId):request.name==='northstar.skill_resource'?(async()=>{
+      ? modelIntentHandler.handle(request) : request.name==='northstar.user_question' ? (()=>{
+        if(!taskRun || body.allowQuestions!==true || controlledMediaGrant || pinnedSkills.skills.length || lastUser?.csvSelections?.length)throw Object.assign(Error('Question mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});
+        return userQuestionService.ask({identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,leaseOwner:taskRun.leaseOwner,args:request.args,signal:request.signal});
+      })() : request.name==='northstar.skill_snapshot'?publishedSkills.readPinned({userId:uid,tenantId:me.tenant.id},pinnedSkills,request.args?.releaseId):request.name==='northstar.skill_resource'?(async()=>{
         const args=request.args;if(!args||Object.keys(args).some(key=>!['releaseId','paths'].includes(key))||!Array.isArray(args.paths)||!args.paths.length||args.paths.length>16||new Set(args.paths).size!==args.paths.length)throw Object.assign(Error('Invalid skill resource'),{code:'SKILL_RESOURCE_INVALID'});
         const release=await publishedSkills.readPinned({userId:uid,tenantId:me.tenant.id},pinnedSkills,args.releaseId);
         const files=args.paths.map(name=>{const file=release.files.find(file=>file.path===name);if(!file)throw Object.assign(Error('Unknown pinned resource'),{code:'SKILL_RESOURCE_INVALID'});return file;});return {skillId:release.skillId,version:release.version,contentHash:release.contentHash,files};
@@ -1814,6 +1818,15 @@ async function handle(req, res) {
   const runIdentity = { userId: me.user.id, tenantId: me.tenant.id };
   const managedMediaMatch=p.match(/^\/api\/run-media\/([a-f0-9-]{36})\/([a-f0-9-]{36}\.(?:png|jpe?g|webp|gif|avif|mp4|webm|mov))$/i);
   if(managedMediaMatch)return managedMediaReader(req,res,runIdentity,{runId:managedMediaMatch[1],filename:managedMediaMatch[2]});
+  const userQuestionMatch=p.match(/^\/api\/runs\/([a-f0-9-]{36})\/questions(?:\/([^/]+)\/answer)?$/i);
+  if(userQuestionMatch && ['GET','POST'].includes(req.method)){
+    try{
+      if(req.method==='GET'&&!userQuestionMatch[2])return json(res,200,{ok:true,...await userQuestionService.list(runIdentity,userQuestionMatch[1])});
+      if(req.method!=='POST'||!userQuestionMatch[2])return json(res,405,{ok:false,code:'METHOD_NOT_ALLOWED'});
+      const result=await userQuestionService.answer(runIdentity,userQuestionMatch[1],decodeURIComponent(userQuestionMatch[2]),JSON.parse(await readBody(req,16384)));
+      return json(res,result.ok?200:result.code==='INVALID_ANSWER'?400:409,result.ok?{ok:true,questionId:result.questionId,status:'answered'}:{ok:false,code:result.code});
+    }catch(error){const code=error instanceof SyntaxError||error instanceof URIError?'QUESTION_INPUT_INVALID':/^[A-Z][A-Z0-9_]{0,63}$/.test(error.code||'')?error.code:'STORE_UNAVAILABLE';return json(res,code==='NOT_FOUND'?404:['INVALID_ANSWER','QUESTION_INPUT_INVALID','QUESTION_SCOPE_INVALID'].includes(code)?400:409,{ok:false,code});}
+  }
   const mediaAuthorizationMatch = p.match(/^\/api\/runs\/([a-f0-9-]{36})\/media-authorization$/i);
   if (mediaAuthorizationMatch && ["GET","POST"].includes(req.method)) {
     if(process.env.PT_MEDIA_GENERATION==="off"||process.env.PT_CONTROLLED_MEDIA_AUTHORIZATION !== "1")return json(res,404,{ok:false,code:"NOT_FOUND"});
@@ -2656,6 +2669,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
         if (event.type === "queued") frame({ queued: true });
         else if (event.type === "connecting") frame({ connecting: true });
         else if (event.type === "state" && p.operationStatus === "manual_check") frame({ operationStatus: "manual_check" });
+        else if (event.type === "state" && p.action === "user_question") frame({userQuestion:{runId:event.runId,question:p.question}});
         else if (event.type === "state" && p.action === "media_authorization_required") frame({mediaAuthorization:{runId:event.runId,taskType:p.taskType,expiresAt:p.expiresAt,parameterSummary:p.parameterSummary}});
         else if (event.type === "delta") frame({ delta: p.text || "" });
         else if (event.type === "step") frame({ step: p.step });
@@ -2714,7 +2728,8 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
           const frame = (data) => res.write("id: " + event.seq + "\ndata: " + JSON.stringify(data) + "\n\n");
           if (event.type === "connecting") frame({ connecting: true });
           else if (event.type === "state" && p.operationStatus === "manual_check") frame({ operationStatus: "manual_check" });
-          else if (event.type === "state" && p.action === "media_authorization_required") frame({mediaAuthorization:{runId:event.runId,taskType:p.taskType,expiresAt:p.expiresAt,parameterSummary:p.parameterSummary}});
+          else if (event.type === "state" && p.action === "user_question") frame({userQuestion:{runId:event.runId,question:p.question}});
+        else if (event.type === "state" && p.action === "media_authorization_required") frame({mediaAuthorization:{runId:event.runId,taskType:p.taskType,expiresAt:p.expiresAt,parameterSummary:p.parameterSummary}});
           else if (event.type === "delta") frame({ delta: p.text || "" });
           else if (event.type === "step") frame({ step: p.step });
           else if (event.type === "artifact") frame({ artifact: p.artifact });
@@ -2935,6 +2950,7 @@ async function main() {
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
   taskStore = createTaskStore(auth.db);
+  userQuestionService = require("./questions/service.cjs").createQuestionService({db:auth.db});
   publishedSkills=createSkillPublicationStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   memoryProvenance=createMemoryProvenanceStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   sources=createSourceStore({db:auth.db,uploadsRoot:path.join(RUNTIME,'_uploads'),onRevoke:async(identity,conversationIds)=>{

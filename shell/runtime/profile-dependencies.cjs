@@ -26,7 +26,7 @@ function validIntegrity(value) {
  * declaration of release inputs, not verification of installed dependencies.
  * Accept raw bytes so whitespace changes also invalidate the managed profile.
  */
-function buildProfileDependencyContract({ lockfile, npmrc, bundles = ["@deepseek-ai/dsh-base"] } = {}) {
+function buildProfileDependencyContract({ lockfile, npmrc, bundles = ["@deepseek-ai/dsh-base"], plugins = [] } = {}) {
   if (!(typeof lockfile === "string" || Buffer.isBuffer(lockfile))) {
     throw invalid("Profile dependencies require raw shell lockfile bytes");
   }
@@ -42,9 +42,11 @@ function buildProfileDependencyContract({ lockfile, npmrc, bundles = ["@deepseek
   if (!Array.isArray(bundles) || !bundles.length || new Set(bundles).size !== bundles.length) {
     throw invalid("Profile bundles must be a nonempty unique package list");
   }
+  if (!Array.isArray(plugins) || new Set([...bundles,...plugins]).size!==bundles.length+plugins.length) throw invalid('Profile plugin names must be unique');
   const dependencies = {};
   const lockedBundles = {};
-  for (const name of bundles) {
+  const lockedPlugins = {};
+  for (const name of [...bundles,...plugins]) {
     if (typeof name !== "string" || !/^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/.test(name)) {
       throw invalid("Profile bundle name is invalid");
     }
@@ -56,7 +58,7 @@ function buildProfileDependencyContract({ lockfile, npmrc, bundles = ["@deepseek
       throw invalid(`Profile bundle lacks a production exact-version lock entry: ${name}`);
     }
     dependencies[name] = entry.version;
-    lockedBundles[name] = { version: entry.version, resolved: entry.resolved, integrity: entry.integrity };
+    (bundles.includes(name)?lockedBundles:lockedPlugins)[name] = { version: entry.version, resolved: entry.resolved, integrity: entry.integrity };
   }
   return {
     dependencies,
@@ -66,6 +68,7 @@ function buildProfileDependencyContract({ lockfile, npmrc, bundles = ["@deepseek
       shellLockfileSha256: crypto.createHash("sha256").update(lockfile).digest("hex"),
       shellNpmrcSha256: crypto.createHash("sha256").update(npmrc).digest("hex"),
       bundles: lockedBundles,
+      ...(plugins.length?{plugins:lockedPlugins}:{}),
     },
   };
 }
