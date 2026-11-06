@@ -203,7 +203,7 @@ const PROFILE_PATCH = [
   "      name: './northstar-patch-watch-compat.mjs'",
   "    - id: persistent-runner",
   "      name: './persistent-runner.mjs'",
-  "      inject: [agentDefaultModel, agents, sessions, attachments, userQuestions]",
+  "      inject: [agentDefaultModel, agents, sessions, attachments, userQuestions, tools]",
   "",
 ].join("\n");
 

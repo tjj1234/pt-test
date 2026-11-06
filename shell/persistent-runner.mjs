@@ -5,6 +5,7 @@ import { installModelSelection } from "@deepseek-ai/dsh-agent";
 import { LlmError } from "@deepseek-ai/dsh-llm";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import { defineTool } from "@deepseek-ai/dsh-tools";
+import { apply as installAskUserTool } from "@deepseek-ai/dsh-tool-ask-user";
 import {installPublishedSkillProvider} from './published-skill-provider.mjs';
 import {installNativeContextGateR4} from './dsh-native-context-r4-candidate.mjs';
 import {nativeImageMessage} from './native-image-message.mjs';
@@ -200,7 +201,7 @@ const MEDIA_NO_LINK_NOTE =
  */
 
 const name = "persistent-runner";
-const inject = ["agentDefaultModel", "agents", "sessions", "attachments", "userQuestions"];
+const inject = ["agentDefaultModel", "agents", "sessions", "attachments", "userQuestions", "tools"];
 const RPC_PROTOCOL_VERSION = 1;
 const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1", "native-context-v1", "skill-pins-v1"]);
 const CONTROL_ERROR_MESSAGES = Object.freeze({
@@ -296,7 +297,6 @@ function apply(ctx) {
     const activeTurns = new Map(); // sessionId -> isolated turn context
     if(ctx.get("userQuestions")){
     const nativeQuestions = await import('./native-question-provider.mjs');
-    const {apply:installAskUserTool} = await import('@deepseek-ai/dsh-tool-ask-user');
     withNativeQuestionExecution=nativeQuestions.withNativeQuestionExecution;
     const {installNativeQuestionProvider}=nativeQuestions;
     installAskUserTool(ctx);

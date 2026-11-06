@@ -36,8 +36,8 @@ def audit_candidate(name=NAME, unit_name="northstar-shell-candidate-34-draft.ser
   text=body.decode('utf8')
   pattern=r'''(?:require\(\s*|from\s*|import\(\s*)['"](\.[^'"]+)['"]'''
   for spec in re.findall(pattern,text):
-   if name=='shell/persistent-runner.mjs' and spec in ('./budget.cjs','./usage.cjs','./presets.cjs','./native-image-message.mjs','./dsh-native-context-r4-candidate.mjs','./published-skill-provider.mjs'):
-    mapped={'./budget.cjs':'shell/tasks/budget.cjs','./usage.cjs':'shell/runtime/usage.cjs','./presets.cjs':'business/media/presets.cjs','./native-image-message.mjs':'shell/runtime/native-image-message.mjs','./dsh-native-context-r4-candidate.mjs':'shell/runtime/dsh-native-context-r4-candidate.mjs','./published-skill-provider.mjs':'shell/runtime/published-skill-provider.mjs'}[spec]
+   if name=='shell/persistent-runner.mjs' and spec in ('./budget.cjs','./usage.cjs','./presets.cjs','./native-image-message.mjs','./dsh-native-context-r4-candidate.mjs','./published-skill-provider.mjs','./native-question-provider.mjs'):
+    mapped={'./budget.cjs':'shell/tasks/budget.cjs','./usage.cjs':'shell/runtime/usage.cjs','./presets.cjs':'business/media/presets.cjs','./native-image-message.mjs':'shell/runtime/native-image-message.mjs','./dsh-native-context-r4-candidate.mjs':'shell/runtime/dsh-native-context-r4-candidate.mjs','./published-skill-provider.mjs':'shell/runtime/published-skill-provider.mjs','./native-question-provider.mjs':'shell/runtime/native-question-provider.mjs'}[spec]
     assert mapped in files;continue
    if name=='shell/runtime/published-skill-provider.mjs' and spec=='./skill-release-snapshot.cjs':
     assert 'shell/skills/release-snapshot.cjs' in files;continue
