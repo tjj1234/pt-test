@@ -16,6 +16,6 @@
 
 恢复时先核对 Git、当前归档与并发产物，不重复部署。agent交流11626.md 在本轮读取仍为 0 字节，因此不声称读取其 80–107 行；本轮按已识别 R5 交付实施。
 
-后续队列：先将 R33 按精确指纹安装到隔离 staging，执行 R33-QUESTIONS-M1-QA-REQUEST-20261106.md；未得到同版本独立 QA 不宣布验收。随后按既有 GEMINI-01-08-LEAD-REVIEW-20261106.md 队列推进 03 现有 writer/worker 复用、02 真实解析器、04 原生 web provider、07 实际协议/F3 只读核对，08 仅选择器局部通过、01 缺真实后端。不要把已有审查阻断或作者自测改成整包通过。Bug-12 保持 DEGRADED_PREVIEW，R31 Bug QA 与本次问答 QA 分开。
+后续队列：用户已明确授权部署唯一正式环境；先将 R33 按精确指纹安装到正式环境并通过独立后检，然后执行 R33-QUESTIONS-M1-QA-REQUEST-20261106.md；未得到同版本独立 QA 不宣布验收。随后按既有 GEMINI-01-08-LEAD-REVIEW-20261106.md 队列推进 03 现有 writer/worker 复用、02 真实解析器、04 原生 web provider、07 实际协议/F3 只读核对，08 仅选择器局部通过、01 缺真实后端。不要把已有审查阻断或作者自测改成整包通过。Bug-12 保持 DEGRADED_PREVIEW，R31 Bug QA 与本次问答 QA 分开。
 
 当前交付引用 evidence/QUESTIONS-M1-* 证据；最终验证：默认回归 270/270；Linux 精确归档 39/39；本地 Chrome 闭环、实际 PostgreSQL 锁等待检查通过；详情见 QUESTIONS-M1-LEAD-REVIEW-20261106.md。无需让用户逐个转发修复样本。没有后台持续工程任务。
