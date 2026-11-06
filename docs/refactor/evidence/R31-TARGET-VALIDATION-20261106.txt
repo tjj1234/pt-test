@@ -1,0 +1,35 @@
+/tmp/pt-r31-validation-20261106-97a3e5a/northstar-controlled-trial-20261106-candidate-34-r31-batch5-draft.tar.gz: OK
+/tmp/pt-r31-validation-20261106-97a3e5a/northstar-controlled-trial-20261106-candidate-34-r31-batch5-draft.sources.json: OK
+/tmp/pt-r31-validation-20261106-97a3e5a/northstar-controlled-trial-20261105-candidate-34-r30-bugfix-draft.sources.json: OK
+SOURCE_BINDING_PASS app 217
+SOURCE_BINDING_PASS controlled-trial-20261105-candidate-34-r30-bugfix-draft 217
+UNCHANGED_MIGRATIONS_SETTINGS_AND_PYTHON_SYNTAX_PASS
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+
+added 641 packages in 15s
+npm warn install-scripts 5 packages have install scripts not yet covered by allowScripts:
+npm warn install-scripts   @deepseek-ai/dsh-subprocess-local@0.1.1-rc.2 (postinstall: node scripts/ensure-spawn-helper.mjs)
+npm warn install-scripts   @google/genai@1.52.0 (preinstall: echo 'preinstall: no-op')
+npm warn install-scripts   koffi@3.3.3 (install: node ./cnoke.cjs -P . -D src/koffi --prebuild --release)
+npm warn install-scripts   node-pty@1.2.0-beta.15 (install: node scripts/prebuild.js || node-gyp rebuild; postinstall: node scripts/post-install.js)
+npm warn install-scripts   protobufjs@7.6.6 (postinstall: node scripts/postinstall)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+{
+  "result": "PASS",
+  "target": {
+    "platform": "linux",
+    "arch": "x64",
+    "gate": "enforced"
+  },
+  "packageCount": 495,
+  "fileCount": 31007,
+  "arborist": "8.0.5",
+  "packageLockSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+  "generatedWithNode": "v22.23.4",
+  "checkedWithNode": "v24.22.0"
+}
+R31_TARGET_CLEAN_INSTALL_PASS
+v24.22.0
+Python 3.14.4
