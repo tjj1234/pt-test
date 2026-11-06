@@ -1,0 +1,26 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/questions-authority-fiXbRU/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+▶ production question authority: scope, transactions, deadline, workers and cleanup
+  ✔ another worker answers; original waiter follows DB terminal (113.614583ms)
+  ✔ same question IDs across Runs are independent and foreign owner cannot read (22.398583ms)
+  ✔ expiry persists; late answer is rejected and reopening retains timeout (48.262584ms)
+  ✔ cancel tombstone blocks later creation, without changing another Run (8.584583ms)
+  ✔ concurrent answer CAS has exactly one winner (113.456958ms)
+  ✔ host service uses durable owner API and closes approval early (122.738ms)
+  ✔ same ID across native calls is isolated; changed arguments conflict (112.403375ms)
+  ✔ completed Run and expired worker lease cannot accept answers (222.992958ms)
+  ✔ answer committed before cancellation remains the waiter terminal (12.732958ms)
+  ✔ storage outage fails closed without inventing a cancelled authority (8.589417ms)
+✔ production question authority: scope, transactions, deadline, workers and cleanup (2382.850167ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-exe4V2/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ native questions cross owned HTTP, durable authority, reload and real SDK (2851.723125ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 12
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2899.8345

@@ -1,0 +1,33 @@
+✖ native pinned launcher records the final selected model before both warm-session requests (4007.805ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4036.514083
+
+✖ failing tests:
+
+test at tests/regression/f1-native-model-switch-intent-test.mjs:7:1
+✖ native pinned launcher records the final selected model before both warm-session requests (4007.805ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'qwen3.5-flash',
+  -   'seed-2-0-lite-260228'
+  - ]
+  
+      at TestContext.<anonymous> (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/f1-native-model-switch-intent-test.mjs:12:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'qwen3.5-flash', 'seed-2-0-lite-260228' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

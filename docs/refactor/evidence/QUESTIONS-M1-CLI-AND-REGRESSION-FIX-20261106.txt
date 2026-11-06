@@ -1,0 +1,80 @@
+✖ real DSH CLI boots isolated run-persistent profile and reaches runner ready without model calls (15091.733958ms)
+✖ native pinned launcher records the final selected model before both warm-session requests (4357.977458ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-Jp9oz3/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ native questions cross owned HTTP, durable authority, reload and real SDK (2892.75225ms)
+✔ native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch (190.649083ms)
+✔ sessionStorage failure fails closed before sending a new chat POST (2.187625ms)
+✔ a stopped Run with uncertain upstream status gets the explicit AC03 warning (2.56125ms)
+✔ ambiguous chat POST retries once with the same idempotency key and exact body (0.891875ms)
+✔ page reload recovers uncertain submission by idempotency key using GET only (1.4505ms)
+✔ refresh resumes remembered run using GET only; transient network exception retries without duplicate POST (1.0325ms)
+✔ resume HTTP 401 clears invalid remembered run without a new POST (0.364292ms)
+✔ resume HTTP 403 clears invalid remembered run without a new POST (0.802ms)
+✔ resume HTTP 404 clears invalid remembered run without a new POST (0.383542ms)
+✔ temporary HTTP 429 retries durable replay rather than releasing the active request (0.778333ms)
+✔ temporary HTTP 503 retries durable replay rather than releasing the active request (1.088209ms)
+✔ conversation switch during replay terminal detail fetch cannot render the old conversation (0.543834ms)
+✔ late original SSE done artifacts from A do not alter the visible B artifact pane (0.452834ms)
+✔ failed historical image replay keeps conversation messages and shows attachment error outside history (2.041ms)
+✔ failed Run keeps completed and failed tool steps in history before the transient error prompt (0.8615ms)
+✔ SSE needKey terminal event keeps its dedicated prompt without duplicate error bubble (0.461667ms)
+✔ terminal conversation detail network retries before forgetting durable run (0.898083ms)
+✔ terminal conversation detail 503 retries before forgetting durable run (0.911208ms)
+✔ an in-flight remembered run owns its conversation and blocks a second create POST (0.746333ms)
+✔ durable cursor consumes each delta once while replaying an unconsumed done after detail failure (0.52ms)
+✔ production list refresh network after done cannot replay consumed deltas or rerender terminal detail (1.005708ms)
+✔ production list refresh 503 after done cannot replay consumed deltas or rerender terminal detail (0.349791ms)
+✔ A to B to A navigation ignores the first A response after the newer A history has rendered (0.496ms)
+✔ terminal detail 401/403/404 clears remembered run without retrying or rendering unauthorized history (2.153458ms)
+✔ an older open-history response cannot overwrite the same conversation terminal replay result (0.445458ms)
+✔ an older open-history response cannot overwrite the same conversation terminal original SSE result (0.930959ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 27
+ℹ fail 2
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15148.43125
+
+✖ failing tests:
+
+test at tests/regression/dsh-cli-profile-ready-test.mjs:24:1
+✖ real DSH CLI boots isolated run-persistent profile and reaches runner ready without model calls (15091.733958ms)
+  AssertionError [ERR_ASSERTION]: timed out waiting for runner ready
+      at waitFor (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/dsh-cli-profile-ready-test.mjs:21:10)
+      at async TestContext.<anonymous> (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/dsh-cli-profile-ready-test.mjs:63:3)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+test at tests/regression/f1-native-model-switch-intent-test.mjs:7:1
+✖ native pinned launcher records the final selected model before both warm-session requests (4357.977458ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'qwen3.5-flash',
+  -   'seed-2-0-lite-260228'
+  - ]
+  
+      at TestContext.<anonymous> (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/f1-native-model-switch-intent-test.mjs:12:10)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [ 'qwen3.5-flash', 'seed-2-0-lite-260228' ],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }

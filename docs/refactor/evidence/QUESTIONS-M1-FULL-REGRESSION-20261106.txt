@@ -1,0 +1,39 @@
+run-regression (default)：发现 270 个回归套件
+
+✓ active-config-inspect-test.mjs (42ms)
+✓ analytics-scoped-token-test.mjs (26ms)
+✓ artifact-openat-test.mjs (33ms)
+✓ artifacts-boundary-test.mjs (24ms)
+✓ artifacts-test.mjs (26ms)
+✓ auth-flow-fixes-test.mjs (44ms)
+✓ batch1-bugfix-test.mjs (30ms)
+✓ batch2-bugfix-test.mjs (24ms)
+✓ batch3-bugfix-test.mjs (29ms)
+✓ batch4-bugfix-test.mjs (29ms)
+✓ batch5-followup-test.mjs (26ms)
+✓ c2-dsh-env-isolation-test.mjs (20ms)
+✓ chat-model-snapshot-test.mjs (1138ms)
+✗ chat-rate-limit-by-account-test.mjs (33ms)  [exit-1]
+✓ chat-request-attachments-test.mjs (34ms)
+✓ chat-transport-retry-budget-test.mjs (6286ms)
+✗ chat-usage-failure-accounting-test.mjs (47ms)  [exit-1]
+✗ context-http-sdk-integration-test.mjs (1078ms)  [exit-1]
+✓ controlled-media-parameters-test.mjs (40ms)
+✓ conversation-docx-export-test.mjs (157ms)
+✗ conversation-model-preference-http-test.mjs (1157ms)  [exit-1]
+✓ conversation-model-preference-test.mjs (895ms)
+✓ csv-analysis-test.mjs (33ms)
+✓ csv-column-profile-test.mjs (27ms)
+✗ csv-document-http-test.mjs (1025ms)  [exit-1]
+✓ csv-export-test.mjs (25ms)
+✓ csv-parser-test.mjs (25ms)
+✓ csv-source-test.mjs (28ms)
+✓ csv-xlsx-export-test.mjs (70ms)
+✗ current-northstar-draft-artifact-test.mjs (380ms)  [exit-1]
+✓ db-failclosed-test.mjs (735ms)
+✓ docexport-candidate-test.mjs (131ms)
+✓ docexport-input-guard-candidate-test.mjs (27ms)
+✓ docx-evidence-index-candidate-test.mjs (27ms)
+✓ docx-evidence-index-main-review-test.mjs (30ms)
+✓ dsh-adapter-error-frame-test.mjs (3387ms)
+✓ dsh-bootstrap-policy-test.mjs (83ms)

@@ -1,0 +1,22 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/questions-authority-LROo8r/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+▶ production question authority: scope, transactions, deadline, workers and cleanup
+  ✔ another worker answers; original waiter follows DB terminal (114.483833ms)
+  ✔ same question IDs across Runs are independent and foreign owner cannot read (24.109042ms)
+  ✔ expiry persists; late answer is rejected and reopening retains timeout (48.188459ms)
+  ✔ cancel tombstone blocks later creation, without changing another Run (9.799208ms)
+  ✔ concurrent answer CAS has exactly one winner (111.030208ms)
+  ✔ host service uses durable owner API and closes approval early (115.3455ms)
+  ✔ same ID across native calls is isolated; changed arguments conflict (122.382542ms)
+  ✔ completed Run and expired worker lease cannot accept answers (245.509625ms)
+  ✔ answer committed before cancellation remains the waiter terminal (32.218042ms)
+  ✔ storage outage fails closed without inventing a cancelled authority (13.115042ms)
+✔ production question authority: scope, transactions, deadline, workers and cleanup (1865.206333ms)
+ℹ tests 11
+ℹ suites 0
+ℹ pass 11
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1913.757791

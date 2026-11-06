@@ -1,0 +1,40 @@
+✔ real DSH CLI boots isolated run-persistent profile and reaches runner ready without model calls (1252.98775ms)
+✔ native pinned launcher records the final selected model before both warm-session requests (4376.297333ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-Aq6t50/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ native questions cross owned HTTP, durable authority, reload and real SDK (2929.675542ms)
+✔ native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch (196.129375ms)
+✔ sessionStorage failure fails closed before sending a new chat POST (3.5535ms)
+✔ a stopped Run with uncertain upstream status gets the explicit AC03 warning (1.905084ms)
+✔ ambiguous chat POST retries once with the same idempotency key and exact body (1.3695ms)
+✔ page reload recovers uncertain submission by idempotency key using GET only (1.474291ms)
+✔ refresh resumes remembered run using GET only; transient network exception retries without duplicate POST (0.668792ms)
+✔ resume HTTP 401 clears invalid remembered run without a new POST (0.773458ms)
+✔ resume HTTP 403 clears invalid remembered run without a new POST (0.688ms)
+✔ resume HTTP 404 clears invalid remembered run without a new POST (0.389959ms)
+✔ temporary HTTP 429 retries durable replay rather than releasing the active request (1.312791ms)
+✔ temporary HTTP 503 retries durable replay rather than releasing the active request (0.913959ms)
+✔ conversation switch during replay terminal detail fetch cannot render the old conversation (1.079958ms)
+✔ late original SSE done artifacts from A do not alter the visible B artifact pane (0.686167ms)
+✔ failed historical image replay keeps conversation messages and shows attachment error outside history (0.958542ms)
+✔ failed Run keeps completed and failed tool steps in history before the transient error prompt (0.642666ms)
+✔ SSE needKey terminal event keeps its dedicated prompt without duplicate error bubble (0.411125ms)
+✔ terminal conversation detail network retries before forgetting durable run (0.770542ms)
+✔ terminal conversation detail 503 retries before forgetting durable run (0.843666ms)
+✔ an in-flight remembered run owns its conversation and blocks a second create POST (0.721333ms)
+✔ durable cursor consumes each delta once while replaying an unconsumed done after detail failure (1.460916ms)
+✔ production list refresh network after done cannot replay consumed deltas or rerender terminal detail (1.21ms)
+✔ production list refresh 503 after done cannot replay consumed deltas or rerender terminal detail (0.891875ms)
+✔ A to B to A navigation ignores the first A response after the newer A history has rendered (1.068042ms)
+✔ terminal detail 401/403/404 clears remembered run without retrying or rendering unauthorized history (1.994875ms)
+✔ an older open-history response cannot overwrite the same conversation terminal replay result (0.668084ms)
+✔ an older open-history response cannot overwrite the same conversation terminal original SSE result (0.54625ms)
+ℹ tests 29
+ℹ suites 0
+ℹ pass 29
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4414.93525

@@ -1,0 +1,396 @@
+run-regression (default)：发现 270 个回归套件
+
+✓ active-config-inspect-test.mjs (51ms)
+✓ analytics-scoped-token-test.mjs (26ms)
+✓ artifact-openat-test.mjs (34ms)
+✓ artifacts-boundary-test.mjs (24ms)
+✓ artifacts-test.mjs (26ms)
+✓ auth-flow-fixes-test.mjs (46ms)
+✓ batch1-bugfix-test.mjs (31ms)
+✓ batch2-bugfix-test.mjs (24ms)
+✓ batch3-bugfix-test.mjs (31ms)
+✓ batch4-bugfix-test.mjs (31ms)
+✓ batch5-followup-test.mjs (26ms)
+✓ c2-dsh-env-isolation-test.mjs (20ms)
+✓ chat-model-snapshot-test.mjs (1229ms)
+✓ chat-rate-limit-by-account-test.mjs (1684ms)
+✓ chat-request-attachments-test.mjs (37ms)
+✓ chat-transport-retry-budget-test.mjs (6259ms)
+✓ chat-usage-failure-accounting-test.mjs (2228ms)
+✓ context-http-sdk-integration-test.mjs (3689ms)
+✓ controlled-media-parameters-test.mjs (38ms)
+✓ conversation-docx-export-test.mjs (131ms)
+✓ conversation-model-preference-http-test.mjs (4025ms)
+✓ conversation-model-preference-test.mjs (943ms)
+✓ csv-analysis-test.mjs (33ms)
+✓ csv-column-profile-test.mjs (27ms)
+✓ csv-document-http-test.mjs (2033ms)
+✓ csv-export-test.mjs (31ms)
+✓ csv-parser-test.mjs (26ms)
+✓ csv-source-test.mjs (27ms)
+✓ csv-xlsx-export-test.mjs (73ms)
+✗ current-northstar-draft-artifact-test.mjs (361ms)  [exit-1]
+✓ db-failclosed-test.mjs (720ms)
+✓ docexport-candidate-test.mjs (97ms)
+✓ docexport-input-guard-candidate-test.mjs (29ms)
+✓ docx-evidence-index-candidate-test.mjs (26ms)
+✓ docx-evidence-index-main-review-test.mjs (26ms)
+✓ dsh-adapter-error-frame-test.mjs (3377ms)
+✓ dsh-bootstrap-policy-test.mjs (82ms)
+✗ dsh-cli-profile-ready-test.mjs (15088ms)  [exit-1]
+✓ dsh-configured-catalog-test.mjs (49ms)
+✓ dsh-installation-test.mjs (53ms)
+✓ dsh-model-info-rpc-test.mjs (3576ms)
+✓ dsh-native-context-gate-candidate-test.mjs (55ms)
+✓ dsh-native-context-r2-test.mjs (31ms)
+✓ dsh-native-context-r3-test.mjs (30ms)
+✓ dsh-native-context-r4-test.mjs (154ms)
+✓ dsh-native-reasoning-r2-test.mjs (42ms)
+✓ dsh-native-reasoning-r3-test.mjs (32ms)
+✓ dsh-native-reasoning-selection-candidate-test.mjs (29ms)
+✓ dsh-parent-rpc-test.mjs (11955ms)
+✓ dsh-runtime-release-test.mjs (37ms)
+✓ external-operations-store-test.mjs (1308ms)
+✓ external-operations-worker-test.mjs (2446ms)
+✓ f1-auto-runtime-verification-test.mjs (30ms)
+✓ f1-budget-policy-change-test.mjs (180ms)
+✓ f1-candidate34-draft-artifact-test.mjs (453ms)
+✓ f1-catalog-cache-r5-artifact-test.mjs (326ms)
+✓ f1-catalog-cache-shape-probe-test.mjs (113ms)
+✓ f1-controlled-media-admission-test.mjs (24ms)
+✓ f1-dsh-model-switch-identity-test.mjs (3278ms)
+✓ f1-host-media-review-view-test.mjs (55ms)
+✓ f1-managed-media-http-sdk-test.mjs (4117ms)
+✓ f1-media-asset-ingest-candidate-test.mjs (138ms)
+✓ f1-media-base-url-test.mjs (32ms)
+✓ f1-media-catalog-scope-test.mjs (29ms)
+✓ f1-media-default-catalog-scope-test.mjs (38ms)
+✓ f1-media-gateway-consistency-test.mjs (140ms)
+✓ f1-media-input-asset-run-test.mjs (28ms)
+✓ f1-media-result-acceptance-test.mjs (23ms)
+✓ f1-media-runner-host-test.mjs (3338ms)
+✓ f1-model-identity-evidence-test.mjs (25ms)
+✓ f1-model-media-matrix-test.mjs (28ms)
+✓ f1-model-media-task-http-test.mjs (1554ms)
+✗ f1-native-model-switch-intent-test.mjs (3949ms)  [exit-1]
+✓ f1-pt-media-csp-http-test.mjs (1140ms)
+✓ f1-ptvideo-result-guard-candidate-test.mjs (34ms)
+✓ f1-r2-cache-schema-backport-test.mjs (284ms)
+✓ f1-reviewed-media-apply-test.mjs (29ms)
+✓ f1-reviewed-media-qualification-test.mjs (29ms)
+✓ f1-ui-media-history-test.mjs (6045ms)
+✓ f1-ui-media-http-history-test.mjs (1502ms)
+✓ f1-ui-run-review-link-test.mjs (6111ms)
+✓ f2-csv-analysis-adapter-test.mjs (52ms)
+✓ f2-csv-analysis-result-candidate-test.mjs (30ms)
+✓ f2-csv-column-selection-candidate-test.mjs (29ms)
+✓ f2-csv-host-rpc-test.mjs (26ms)
+✓ f2-csv-http-sdk-integration-test.mjs (1930ms)
+✓ f2-csv-real-sdk-runner-test.mjs (130ms)
+✓ f2-csv-run-artifact-test.mjs (36ms)
+✓ f2-csv-run-handler-test.mjs (48ms)
+✓ f2-csv-run-source-test.mjs (30ms)
+✓ f3-bound-text-estimate-test.mjs (27ms)
+✓ f3-price-catalog-store-test.mjs (1205ms)
+✓ f3-price-snapshot-selection-candidate-test.mjs (27ms)
+✓ f3-pt-consume-record-candidate-test.mjs (28ms)
+✓ f3-pt-consume-record-main-review-test.mjs (85ms)
+✓ f3-pt-consume-record-r2-candidate-test.mjs (28ms)
+✓ f3-text-cost-estimate-test.mjs (24ms)
+✓ google-auth-review-test.mjs (3796ms)
+✓ google-auth-routes-review-test.mjs (4480ms)
+✓ google-auth-routes-test.mjs (28ms)
+✓ google-auth-test.mjs (8111ms)
+✓ google-binding-review-test.mjs (1841ms)
+✓ google-login-integration-review-test.mjs (7758ms)
+✓ google-login-server-test.mjs (1493ms)
+✓ google-session-upgrade-test.mjs (715ms)
+✓ host-tool-handler-test.mjs (58ms)
+✓ lease-recovery-sweep-test.mjs (25ms)
+✓ m1-tool-wiring-test.mjs (993ms)
+✓ m3-workspace-enabled-status-test.mjs (36ms)
+✓ managed-media-read-test.mjs (68ms)
+✓ managed-media-writer-candidate-test.mjs (143ms)
+✓ managed-media-writer-main-review-test.mjs (59ms)
+✓ managed-result-publisher-test.mjs (41ms)
+✓ media-authorization-test.mjs (1271ms)
+✓ media-external-usage-http-test.mjs (1394ms)
+✓ media-grant-store-candidate-test.mjs (1108ms)
+✓ media-reservation-http-test.mjs (2362ms)
+✓ media-reservation-reconciliation-candidate-test.mjs (35ms)
+✓ media-reservation-release-candidate-test.mjs (1365ms)
+✓ media-reservation-view-candidate-test.mjs (32ms)
+✓ media-result-url-boundary-test.mjs (25ms)
+✓ media-route-admission-run-test.mjs (30ms)
+✓ media-route-admission-test.mjs (28ms)
+✓ media-route-test.mjs (38ms)
+✓ media-run-lifecycle-test.mjs (1133ms)
+✓ media-subprocess-submission-boundary-test.mjs (34ms)
+✓ memory-change-cancel-http-test.mjs (1471ms)
+✓ memory-change-cancels-active-runs-test.mjs (1034ms)
+✓ memory-context-budget-test.mjs (760ms)
+✓ memory-provenance-candidate-test.mjs (34ms)
+✓ memory-provenance-store-test.mjs (1068ms)
+✓ memory-session-invalidation-http-test.mjs (1388ms)
+✓ memory-untrusted-upload-boundary-http-test.mjs (1435ms)
+✓ memory-zero-budget-test.mjs (26ms)
+✓ model-capabilities-review-test.mjs (28ms)
+✓ model-capabilities-test.mjs (42ms)
+✓ model-catalog-diagnostics-test.mjs (31ms)
+✓ model-catalog-failure-stage-test.mjs (50ms)
+✓ model-catalog-lifecycle-test.mjs (139ms)
+✓ model-catalog-test.mjs (36ms)
+✓ native-image-auto-verification-test.mjs (31ms)
+✓ native-image-http-sdk-test.mjs (2611ms)
+✓ native-image-message-test.mjs (86ms)
+✓ native-image-routing-test.mjs (30ms)
+✓ native-tool-run-gate-sdk-test.mjs (213ms)
+✓ northstar-backup-fs-test.mjs (35ms)
+✓ northstar-data-backup-test.mjs (11853ms)
+✓ northstar-dsh-manifest-test.mjs (77ms)
+✓ northstar-preflight-test.mjs (79ms)
+✓ office-document-parser-test.mjs (200ms)
+✓ office-http-sdk-integration-test.mjs (2159ms)
+✓ office-structured-input-test.mjs (152ms)
+✓ persistent-runner-control-errors-test.mjs (173ms)
+✓ persistent-runner-parallel-test.mjs (257ms)
+✓ persistent-runner-real-sdk-rpc-probe.mjs (172ms)
+✓ phase1-contract-review-test.mjs (42ms)
+✓ phase1-contract-test.mjs (30ms)
+✓ pinned-asset-fetch-test.mjs (47ms)
+✓ portable-xlsx-candidate-test.mjs (42ms)
+✓ portable-xlsx-main-review-test.mjs (46ms)
+✓ profile-dependencies-test.mjs (27ms)
+✓ profile-lifecycle-test.mjs (52ms)
+✓ profile-maintenance-cli-test.mjs (122ms)
+✓ profile-paths-test.mjs (29ms)
+✓ profile-startup-failure-test.mjs (56ms)
+✓ pt-asset-upload-bridge-candidate-test.mjs (1463ms)
+✓ pt-asset-upload-bridge-r2-candidate-test.mjs (1662ms)
+✓ pt-contract-key-status-test.mjs (238ms)
+✓ pt-media-http-status-test.mjs (37ms)
+✓ ptvideo-bridge-test.mjs (2012ms)
+✓ ptvideo-main-engine-test.mjs (773ms)
+✓ published-skill-provider-test.mjs (59ms)
+✓ questions-authority-store-test.mjs (1942ms)
+✓ questions-http-sdk-integration-test.mjs (2167ms)
+✓ queued-run-conversation-serialization-test.mjs (2526ms)
+✓ queued-run-recovery-test.mjs (2464ms)
+✓ reasoning-http-sdk-integration-test.mjs (2268ms)
+✓ reasoning-native-runner-test.mjs (149ms)
+✓ reasoning-run-snapshot-test.mjs (30ms)
+✓ regression-plan-test.mjs (21ms)
+✓ regression-test.mjs (56ms)
+✓ release-archive-preflight-main-review-test.mjs (251ms)
+✓ release-media-scope-test.mjs (25ms)
+✓ response-usage-test.mjs (24ms)
+✓ run-budget-event-test.mjs (24ms)
+✓ run-budget-summary-test.mjs (45ms)
+✓ runtime-contract-test.mjs (66ms)
+✓ seam-smoke.mjs (1044ms)
+✓ seam-test.mjs (45ms)
+✓ session-runs-test.mjs (27ms)
+✓ session-scheduler-review-test.mjs (27ms)
+✓ session-scheduler-test.mjs (29ms)
+✓ settings-maintenance-cli-test.mjs (204ms)
+✓ settings-upgrade-cli-test.mjs (494ms)
+✓ settings-upgrade-test.mjs (92ms)
+✓ settings-version-test.mjs (41ms)
+✓ skill-http-sdk-integration-test.mjs (2395ms)
+✓ skill-publication-store-test.mjs (1128ms)
+✓ skill-release-snapshot-test.mjs (40ms)
+✓ skill-run-snapshot-test.mjs (28ms)
+✓ source-http-sdk-integration-test.mjs (2162ms)
+✓ source-retrieval-candidate-test.mjs (30ms)
+✓ source-retrieval-main-review-test.mjs (28ms)
+✓ source-store-revocation-test.mjs (1036ms)
+✓ standard-media-catalog-test.mjs (29ms)
+✓ storage-google-policy-review-test.mjs (1264ms)
+✓ storage-init-cleanup-test.mjs (49ms)
+✓ storage-review-test.mjs (778ms)
+✓ storage-upgrade-test.mjs (1832ms)
+✓ t03-cancelling-crash-recovery-test.mjs (982ms)
+✓ t03-chat-http-same-key-disconnect-replay-test.mjs (9443ms)
+✓ t03-child-manual-check-stop-http-test.mjs (1465ms)
+✓ t03-child-manual-check-ui-test.mjs (28ms)
+✓ t03-external-manual-check-process-restart-test.mjs (1366ms)
+✓ t03-lease-recovery-sweep-test.mjs (3878ms)
+✓ t03-lost-ack-completed-replay-test.mjs (1036ms)
+✓ t03-media-timeout-no-resubmit-test.mjs (5066ms)
+✓ t03-ui-preheader-ack-loss-real-chat-retry-test.mjs (7480ms)
+✓ t04-adapter-abort-drain-test.mjs (7006ms)
+✓ t04-cancel-releases-conversation-lease-sibling-pglite-test.mjs (1185ms)
+✓ t04-conversation-lease-pglite-fencing-test.mjs (982ms)
+✓ t10-artifact-history-persistence-test.mjs (1463ms)
+✓ t10-artifact-openat-leaf-race-test.mjs (31ms)
+✓ t10-artifact-openat-nonregular-test.mjs (48ms)
+✓ t10-artifact-tenant-symlink-audit-test.mjs (1375ms)
+✓ t11-run-budget-event-persistence-test.mjs (990ms)
+✓ t13-t14-profile-fail-closed-test.mjs (44ms)
+✓ t16-candidate17-ustar-release-test.mjs (39ms)
+✓ t16-candidate18-ustar-release-test.mjs (39ms)
+✓ t16-candidate19-ustar-release-test.mjs (96ms)
+✓ t16-candidate28-ustar-release-test.mjs (40ms)
+✓ t16-candidate30-ustar-release-test.mjs (211ms)
+✓ t16-candidate31-ustar-release-test.mjs (182ms)
+✓ t16-candidate32-ustar-release-test.mjs (54ms)
+✓ t17-candidate-lockfile-provenance-test.mjs (56ms)
+✓ t17-profile-dependency-config-test.mjs (252ms)
+✓ task-budget-provider-test.mjs (28ms)
+✓ task-execution-test.mjs (2154ms)
+✓ task-heartbeat-boundary-review-test.mjs (6726ms)
+✓ task-router-budget-test.mjs (50ms)
+✓ task-sse-observer-review-test.mjs (1047ms)
+✓ task-store-review-test.mjs (6264ms)
+✓ task-store-test.mjs (1164ms)
+✓ tenant-mock-smoke.mjs (45ms)
+✓ tool-calls-usage-evidence-test.mjs (1664ms)
+✓ tool-registry-test.mjs (64ms)
+✓ tool-schema-review-test.mjs (105ms)
+✓ tool-schema-validator-test.mjs (144ms)
+✓ ui-archive-readonly-test.mjs (135ms)
+✓ ui-artifact-preview-test.mjs (6035ms)
+✓ ui-chat-bugfixes-test.mjs (6101ms)
+✓ ui-chat-connecting-label-test.mjs (6054ms)
+✓ ui-chat-doc-upload-frontend-test.mjs (6210ms)
+✓ ui-chat-elapsed-format-test.mjs (45ms)
+✓ ui-chat-media-route-step-test.mjs (26ms)
+✓ ui-chat-media-upload-test.mjs (8432ms)
+✓ ui-conversation-isolation-test.mjs (6466ms)
+✓ ui-flows-enable-real-status-test.mjs (6067ms)
+✓ ui-media-authorization-test.mjs (6114ms)
+✓ ui-media-reservation-reconciliation-test.mjs (6095ms)
+✓ ui-model-switch-test.mjs (6082ms)
+✓ ui-route-memory-test.mjs (257ms)
+✗ ui-run-resume-review-test.mjs (60ms)  [exit-1]
+✓ ui-settings-auth-accounts-test.mjs (195ms)
+✓ ui-tracking-quality-report-test.mjs (53ms)
+✓ ui-usage-token-summary-test.mjs (6045ms)
+✓ usage-dsh-sdk-shape-test.mjs (1290ms)
+✓ workspace-idempotent-test.mjs (21ms)
+✓ workspace-test.mjs (22ms)
+✓ xlsx-http-sdk-integration-test.mjs (2025ms)
+
+—— current-northstar-draft-artifact-test.mjs 输出末尾 ——
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 339.69925
+✖ failing tests:
+test at tests/regression/current-northstar-draft-artifact-test.mjs:7:1
+✖ active draft binds current sources and independently audits exact archive bytes (337.461125ms)
+  AssertionError [ERR_ASSERTION]: Traceback (most recent call last):
+    File "/private/tmp/pt-questions-m1-r5-integration-20261106/scripts/package-northstar-candidate34-r31-draft.py", line 39, in <module>
+      builder.main()
+      ~~~~~~~~~~~~^^
+    File "/private/tmp/pt-questions-m1-r5-integration-20261106/scripts/package-northstar-candidate34-draft.py", line 110, in main
+      if any(not p.is_file() or p.read_bytes()!=v for p,v in outputs.items()):raise ValueError('DRAFT_OR_SOURCE_CHANGED')
+                                                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  ValueError: DRAFT_OR_SOURCE_CHANGED
+  
+  
+  1 !== 0
+  
+      at TestContext.<anonymous> (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/current-northstar-draft-artifact-test.mjs:12:96)
+      at Test.runInAsyncScope (node:async_hooks:228:14)
+      at Test.run (node:internal/test_runner/test:1118:25)
+      at Test.start (node:internal/test_runner/test:1015:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:358:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 1,
+    expected: 0,
+    operator: 'strictEqual',
+    diff: 'simple'
+  }
+
+—— dsh-cli-profile-ready-test.mjs 输出末尾 ——
+✖ real DSH CLI boots isolated run-persistent profile and reaches runner ready without model calls (15060.319125ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 15062.28875
+✖ failing tests:
+test at tests/regression/dsh-cli-profile-ready-test.mjs:24:1
+✖ real DSH CLI boots isolated run-persistent profile and reaches runner ready without model calls (15060.319125ms)
+  AssertionError [ERR_ASSERTION]: timed out waiting for runner ready
+      at waitFor (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/dsh-cli-profile-ready-test.mjs:21:10)
+      at async TestContext.<anonymous> (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/dsh-cli-profile-ready-test.mjs:63:3)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: undefined,
+    expected: undefined,
+    operator: 'fail',
+    diff: 'simple'
+  }
+
+—— f1-native-model-switch-intent-test.mjs 输出末尾 ——
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3925.885667
+✖ failing tests:
+test at tests/regression/f1-native-model-switch-intent-test.mjs:7:1
+✖ native pinned launcher records the final selected model before both warm-session requests (3924.141375ms)
+  AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+  + actual - expected
+  
+  + []
+  - [
+  -   'qwen3.5-flash',
+  -   'seed-2-0-lite-260228'
+  - ]
+  
+      at TestContext.<anonymous> (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/f1-native-model-switch-intent-test.mjs:12:10)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    generatedMessage: true,
+    code: 'ERR_ASSERTION',
+    actual: [],
+    expected: [Array],
+    operator: 'deepStrictEqual',
+    diff: 'simple'
+  }
+
+—— ui-run-resume-review-test.mjs 输出末尾 ——
+✔ conversation switch during replay terminal detail fetch cannot render the old conversation (0.399292ms)
+✔ late original SSE done artifacts from A do not alter the visible B artifact pane (0.377292ms)
+✔ failed historical image replay keeps conversation messages and shows attachment error outside history (0.634041ms)
+✔ failed Run keeps completed and failed tool steps in history before the transient error prompt (0.394417ms)
+✔ SSE needKey terminal event keeps its dedicated prompt without duplicate error bubble (0.35525ms)
+✔ terminal conversation detail network retries before forgetting durable run (0.382875ms)
+✔ terminal conversation detail 503 retries before forgetting durable run (0.347166ms)
+✔ an in-flight remembered run owns its conversation and blocks a second create POST (0.337541ms)
+✔ durable cursor consumes each delta once while replaying an unconsumed done after detail failure (0.463458ms)
+✔ production list refresh network after done cannot replay consumed deltas or rerender terminal detail (0.413541ms)
+✔ production list refresh 503 after done cannot replay consumed deltas or rerender terminal detail (0.318875ms)
+✖ A to B to A navigation ignores the first A response after the newer A history has rendered (0.545791ms)
+✔ terminal detail 401/403/404 clears remembered run without retrying or rendering unauthorized history (1.086875ms)
+✔ an older open-history response cannot overwrite the same conversation terminal replay result (0.3855ms)
+✔ an older open-history response cannot overwrite the same conversation terminal original SSE result (0.343708ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 24
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 18.355125
+✖ failing tests:
+test at tests/regression/ui-run-resume-review-test.mjs:281:1
+✖ A to B to A navigation ignores the first A response after the newer A history has rendered (0.545791ms)
+  TypeError: Cannot read properties of undefined (reading 'text')
+      at TestContext.<anonymous> (file:///private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/ui-run-resume-review-test.mjs:295:84)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:787:7)
+
+run-regression：共 270 个套件，通过 266，失败 4

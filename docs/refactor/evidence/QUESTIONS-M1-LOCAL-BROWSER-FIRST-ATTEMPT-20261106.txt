@@ -1,0 +1,39 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-l5utRC/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✖ native questions cross owned HTTP, durable authority, reload and real SDK (47946.286541ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 47987.12825
+
+✖ failing tests:
+
+test at tests/regression/questions-http-sdk-integration-test.mjs:4:1
+✖ native questions cross owned HTTP, durable authority, reload and real SDK (47946.286541ms)
+  locator.fill: Timeout 30000ms exceeded.
+  Call log:
+  [2m  - waiting for locator('#ta')[22m
+  [2m    - locator resolved to <textarea id="ta" rows="1" placeholder="输入问题，或用 @引用数据面板内容… (Enter 发送 / Shift+Enter 换行)"></textarea>[22m
+  [2m    - fill("Clarify my reporting format")[22m
+  [2m  - attempting fill action[22m
+  [2m    2 × waiting for element to be visible, enabled and editable[22m
+  [2m      - element is not visible[22m
+  [2m    - retrying fill action[22m
+  [2m    - waiting 20ms[22m
+  [2m    2 × waiting for element to be visible, enabled and editable[22m
+  [2m      - element is not visible[22m
+  [2m    - retrying fill action[22m
+  [2m      - waiting 100ms[22m
+  [2m    59 × waiting for element to be visible, enabled and editable[22m
+  [2m       - element is not visible[22m
+  [2m     - retrying fill action[22m
+  [2m       - waiting 500ms[22m
+  
+      at TestContext.<anonymous> (/private/tmp/pt-questions-m1-r5-integration-20261106/tests/regression/questions-http-sdk-integration-test.mjs:81:33) {
+    name: 'TimeoutError'
+  }
