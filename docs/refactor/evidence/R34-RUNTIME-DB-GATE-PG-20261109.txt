@@ -1,0 +1,22 @@
+R34 runtime ACL gate, isolated PostgreSQL 16, localhost disposable database r34_gate_fixture
+Final command: PT_PG_HOST=127.0.0.1 PT_PG_PORT=64972 PT_PG_DATABASE=r34_gate_fixture PT_PG_USER=postgres node tests/probes/r34-runtime-db-gate-pg-20261109.cjs
+Final exit code: 0
+PASS: administrator migrations leave runtime ACL gate closed
+PASS: question grants alone do not mask missing AUTO attempt privileges
+PASS: exact necessary grants pass repeatedly as actual runtime login
+PASS: actual read-only CLI exits 0 with matching runtime credentials
+PASS: superuser, wrong role and wrong database cannot pass
+PASS: revoked write privilege and unproven RLS policy close gate
+PASS: schema denial rejected; gate wrote zero business rows
+PASS: missing migration table rejected without creating it
+
+Earlier iterations, not final PASS evidence:
+1. Sandboxed localhost connection failed PG_CONNECTION_FAILED; rerun with approved network access.
+2. First fixture schema-revoke assertion failed: PostgreSQL PUBLIC retained USAGE. Corrected isolated fixture to revoke PUBLIC grant before testing explicit schema denial; gate correctly evaluated effective privilege.
+3. With schema USAGE truly absent, to_regclass raised 42501. Gate hardened to report SCHEMA_USAGE_REQUIRED before table resolution. Final clean-container rerun above passed.
+All disposable containers stopped and removed. No formal environment connection, credential access, migration, GRANT, or paid model request performed.
+
+Additional CLI argument/backend checks (no database connection), exit 0 for assertion harness:
+PASS CLI rejects RUNTIME_DB_IDENTITY_REQUIRED
+PASS CLI rejects RUNTIME_DB_POSTGRES_REQUIRED
+PASS CLI rejects RUNTIME_DB_USAGE
