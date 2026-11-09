@@ -1,0 +1,48 @@
+{
+  "reviewedCommit": "ee3081570236881b4e1e01a08ef4545729aa48cf",
+  "priorReviewedCommit": "882f5322267eb01ba86ae290153ca1dbe51d5f4c",
+  "newCommitChangesOnly": "tests/regression/streaming-lifecycle-e2e-test.mjs",
+  "sourceSha256": {
+    "shell/server.cjs": "c7a95ecfe053fa3000029dd94739808b5c744ab1701c2696bcda84d2e1053fed",
+    "shell/runtime/dsh-adapter.cjs": "11103e3041791c17521d1ce2f8c7df2f91c5363b05c5434ff393706c2891e9e8",
+    "shell/public/app.js": "81635b7a0da2c9f9fadf674d30a6b30a2628e810d4d5edf965cf53f7da06f536",
+    "business/attribution/import/workspace-meta.js": "74136d3afebda8911284a61af465e2cb9ae9cb4545dc6d43b31f04f01be2b97c",
+    "tests/regression/streaming-lifecycle-e2e-test.mjs": "7a0d5741af8459fb82559b61273c34aca1c9b674bbb914af9c14153b160aa063",
+    "shell/package-lock.json": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4"
+  },
+  "existingPatchSha256": "a39a5dc551182e53b4b9cb03648853e8cc7c3328192ccad118bbd1ecd891173b",
+  "checks": {
+    "npmCiOffline": {
+      "packages": 639,
+      "exitCode": 0
+    },
+    "httpLifecycle": {
+      "testUnits": 1,
+      "scenarios": 9,
+      "exitCode": 0,
+      "dshBackend": "protocol fixture child; real host HTTP/server/adapter and disk PGlite"
+    },
+    "focusedRegression": {
+      "testUnits": 10,
+      "exitCode": 0,
+      "previewAssertionsWithinSuite": 64
+    },
+    "patchAgainstCurrentR34Check": {
+      "exitCode": 0,
+      "scope": "existing a39a5dc5 patch, not yet updated ee30815 test"
+    },
+    "stateBoundaryCharacterization": {
+      "exitCode": 0,
+      "meaning": "Reproduced persisted-null cache, actual worker race, wrong current-turn partial UI label and 503 misreported as not-connected; not acceptance"
+    },
+    "networkCalls": "localhost HTTP only, no provider requests",
+    "deployment": false,
+    "merged": false,
+    "newPatchExactGitFiles": 12,
+    "newPatchR34ApplyCheckExitCode": 0
+  },
+  "deliveryTip": "a69bcaf79a7a909451cc7e3674dbe20cae0699bf",
+  "newPatchSha256": "e051f51f8247b8365f8996bece2bb80b22b20393a708ba305b909ed9e324b9fd",
+  "authorHandoffSha256": "9728e790c399140236023d74e43f31d5596a9fd545e943145a9b105b16279c4b",
+  "branchReportSha256": "90b76fc16fb6bb2061e930d87dff34e346de5ae4577399d63c1b2b795fbd6eae"
+}

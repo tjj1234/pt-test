@@ -1,0 +1,40 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-streaming-e2e-ozevNw/master.key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+
+[Scenario 1] Real HTTP/Run/Adapter User Manual Stop with Partial Retention...
+  ✔ Scenario 1: User stop correctly persisted partial text in real DB
+
+[Scenario 2] Adapter Timeout Interruption Partial Retention...
+  ✔ Scenario 2: Timeout interruption correctly preserved partial text with stopReason: timeout
+
+[Scenario 3] Execution Error with Streamed Content Retention...
+  ✔ Scenario 3: Error response properly retained partial text in conversation error record
+
+[Scenario 4] Client Connection Abrupt Disconnect Replay...
+  ✔ Scenario 4: Disconnected client request safely completes and persists in DB
+
+[Scenario 5] Concurrent Multi-Session Physical Isolation...
+  ✔ Scenario 5: Concurrent multi-session physical isolation 100% verified
+
+[Scenario 6] Late Frames Immunity...
+  ✔ Scenario 6: Late frames safely ignored without state pollution
+
+[Scenario 7] Idempotency Key Replay Semantics...
+  ✔ Scenario 7: Idempotent replay safely prevented duplicate turn commits
+
+[Scenario 8] Whitespace-Only Interrupted Stream Leaves Clean DB...
+  ✔ Scenario 8: Whitespace-only stream leaves clean conversation history in DB
+
+[Scenario 9] Cold Storage Shutdown, Reopen Consistency and Lease Loss Fencing...
+  ✔ Scenario 9: Cold DB restart and lease loss fencing/recovery 100% verified
+
+=== ALL STREAMING LIFECYCLE E2E TESTS PASSED WITH REAL HTTP, RUN, ADAPTER, SERVER AND PERSISTENT DB ===
+✔ streaming lifecycle E2E interruption persistence and consistency across server, run, adapter, and db (5479.49825ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9432.798

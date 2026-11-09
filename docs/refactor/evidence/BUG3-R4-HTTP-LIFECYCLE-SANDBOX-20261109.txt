@@ -1,0 +1,26 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/northstar-streaming-e2e-1zwFBX/master.key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✖ streaming lifecycle E2E interruption persistence and consistency across server, run, adapter, and db (1169.887333ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1227.820541
+
+✖ failing tests:
+
+test at tests/regression/streaming-lifecycle-e2e-test.mjs:24:1
+✖ streaming lifecycle E2E interruption persistence and consistency across server, run, adapter, and db (1169.887333ms)
+  Error: listen EPERM: operation not permitted 127.0.0.1
+      at Server.setupListenHandle [as _listen2] (node:net:1926:21)
+      at listenInCluster (node:net:2005:12)
+      at node:net:2214:7
+      at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {
+    code: 'EPERM',
+    errno: -1,
+    syscall: 'listen',
+    address: '127.0.0.1'
+  }
