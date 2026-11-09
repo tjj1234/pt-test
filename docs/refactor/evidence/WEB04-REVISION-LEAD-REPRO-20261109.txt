@@ -1,0 +1,10 @@
+{"case":"privateAddressClassification","ip":"fc01::1","blocked":false}
+{"case":"privateAddressClassification","ip":"fd12::1","blocked":false}
+{"case":"privateAddressClassification","ip":"fe90::1","blocked":false}
+{"case":"privateAddressClassification","ip":"::ffff:7f00:1","blocked":false}
+{"case":"bracketedIPv6Loopback","result":{"ok":true,"parsed":"https://[::1]/"}}
+{"case":"NaNMaxBytes","result":{"ok":true,"url":"https://safe.example","title":"","snippet":"fixture","content":"fixture","contentSha256":"f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d","byteLength":7,"fetchedAt":1794193307064}}
+{"case":"ctxFinalPrivateURL","result":{"ok":true,"url":"https://127.0.0.1/private","title":"","snippet":"private fixture","content":"private fixture","contentSha256":"91b172346dd8b6a26765fc89f252757736515c0cedcdc5602afb86169093f57f","byteLength":15,"fetchedAt":1794193307064}}
+{"case":"nonCooperativeFetcherCancellation","result":"STILL_PENDING_AFTER_ABORT"}
+{"case":"backendTimeout","result":"STILL_PENDING_AFTER_DEADLINE"}
+ZERO_NETWORK_CALLS; synthetic boundary probes against exact author module

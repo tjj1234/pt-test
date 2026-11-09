@@ -1,0 +1,10 @@
+{
+  "qaReportSha256": "287a5a30f28b1343a9e55130962725c3d4334a029655bd87e678d6da190203c8",
+  "qaSpecSha256": "ff0e20287ef35049d7e51e3b73cf2a28eb51981d7749ef3a2c05b8002a113b59",
+  "bugPatchSha256": "e955d4b4cd42c0d62f998fa356387e590d2a06c70d32d9b4aadf0dfc1b13d8a6",
+  "bugAuthor": "65646dee2d7c758e7091871b1e895f9c548bea14",
+  "webAuthor": "eb6b29bec4064b73fb716f783ed5456e64eb55df",
+  "runtimeSnapshotBase": "88d6535",
+  "integrationBase": "faadef2",
+  "state": "scope frozen; no production release"
+}

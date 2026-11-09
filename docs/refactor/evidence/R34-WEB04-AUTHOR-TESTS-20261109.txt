@@ -1,0 +1,49 @@
+
+=== WEB 可信联网研究与引用探针开始 ===
+
+[1] URL 基础与协议安全校验
+  ✔ [PASS] 非 HTTPS 协议返回 HTTP_REJECTED
+  ✔ [PASS] URL 带有用户名密码凭据返回 CREDENTIAL_IN_URL
+  ✔ [PASS] 畸形 URL 返回 INVALID_URL
+
+[2] SSRF 私网 IP 与域名白名单拦截
+  ✔ [PASS] 127.0.0.1 回环 IP 返回 PRIVATE_IP_REJECTED
+  ✔ [PASS] 192.168.x 私网 IP 返回 PRIVATE_IP_REJECTED
+  ✔ [PASS] 10.x 私网 IP 返回 PRIVATE_IP_REJECTED
+  ✔ [PASS] 非白名单域名返回 DOMAIN_NOT_TRUSTED
+  ✔ [PASS] 合法白名单 HTTPS URL 校验通过
+
+[3] fetchPage DNS 模拟私网重绑定拦截
+  ✔ [PASS] DNS 解析到私网返回 PRIVATE_IP_REJECTED
+
+[4] 默认离线环境安全检测
+  ✔ [PASS] 离线环境默认安全拦截返回 NETWORK_BLOCKED
+
+[5] fetchPage 模拟抓取与 SHA256 确定性
+  ✔ [PASS] 抓取成功 ok=true
+  ✔ [PASS] title 提取准确
+  ✔ [PASS] contentSha256 计算精确
+  ✔ [PASS] 多次抓取具有确定性与幂等性 SHA256 证据
+
+[6] fetchPage 资源与生命周期异常处理
+  ✔ [PASS] 内容超限返回 CONTENT_TOO_LARGE
+  ✔ [PASS] 重定向超限返回 REDIRECT_LIMIT
+  ✔ [PASS] 抓取超时返回 FETCH_TIMEOUT
+  ✔ [PASS] 信号取消返回 RUN_CANCELLED
+
+[7] 搜索接口与 Citation 结构化
+  ✔ [PASS] 离线状态 search 返回 blocked=true
+  ✔ [PASS] 无外部引擎时返回空结果列表
+  ✔ [PASS] 搜索正常返回 blocked=false
+  ✔ [PASS] 提供商名称正确
+  ✔ [PASS] 自动过滤未受信任域名（保留2条）
+  ✔ [PASS] 第1条引用 index=1
+  ✔ [PASS] 引用 URL 正确
+  ✔ [PASS] 结果生成确定性 SHA256
+  ✔ [PASS] 第2条引用 index=2
+
+[8] 搜索参数约束
+  ✔ [PASS] query 超过 512 字符抛出 INVALID_INPUT
+
+=== WEB 探针完成：共 28 项，通过 28 项，失败 0 项 ===
+

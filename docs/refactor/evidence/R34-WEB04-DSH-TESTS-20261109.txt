@@ -1,0 +1,21 @@
+
+=== DSH 原生 WEB 接缝集成探针 ===
+
+[1] DSH Provider 契约与独立可用性
+  ✔ [PASS] createDshSearchProvider 和 createDshFetchProvider 满足 DSH Provider 契约
+
+[2] 注册至 ctx.web 并通过 WebRuntime 调用
+  ✔ [PASS] ctx.web.search 执行成功且受信任域名自动过滤
+  ✔ [PASS] ctx.web.fetch 执行成功并规范返回 body
+
+[3] dsh-tool-web 模型工具无缝桥接
+  ✔ [PASS] dsh-tool-web web_search 直接复用注册 provider 并成功执行
+
+[4] 中途取消与超时异常传递
+  ✔ [PASS] 取消信号在 ctx.web 接缝处被诚实拦截
+
+[5] 字节限额与 SSRF 防护在 DSH 适配器生效
+  ✔ [PASS] 谎报 byteLength 时，真实内容超过 maxBytes 正确阻断
+
+=== DSH WEB 集成探针完成：共 6 项全数通过 ===
+
