@@ -1,0 +1,30 @@
+{
+  "candidateCommit": "33fc6240ce0aa597f766ba99140db5b9e611c625",
+  "candidateSourceSha256": "617afcfd5cb61d3a357c8a5995975dafc7f778e9ba88c87ab2ff9bfcbe0adc07",
+  "patchSha256": "e6fa7fcb3b6c8de1ea4599af9725876d6d63d3b77278f7fdbe2d403431b1ce75",
+  "deliveryReportSha256": "23a0587d78d5b355379310cec34cff62da4ccebd085e9296013c2ddca1d46bbc",
+  "lockSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+  "sdkSources": {
+    "dsh-web/lib/index.js": "21d6d99d6b826937e6aabbcb0b32c91bd1f214586c6fd3ada538f15737eec8d7",
+    "dsh-web/lib/types/types.d.ts": "6dd019710aa46136ab2399ca2e61254c34b0224b490298eb65bb7b6a3ca760b8",
+    "dsh-tool-web/lib/index.js": "4e137deacb32fb7e963d60c379f5593ae79bba76b978135df661688157cd30ee"
+  },
+  "qaReports": {
+    "R33_FULL_INDEPENDENT_QA_ACCEPTANCE_REPORT.md": "dbc5cf78f73da690f65346746b7a416c30b0a2971497fb19ca71e5795849dbb6",
+    "MASTER_PRODUCT_FEATURE_AND_TEST_SPEC.md": "d829216e04df6797dee8842d8b0fdec205e4b39b22dd065fe366c6d331388611"
+  },
+  "verification": {
+    "patchMatchedGitFiles": 9,
+    "fixedNativeGroups": 6,
+    "lifecycleGroups": 5,
+    "authorAssertions": 28,
+    "initialCounterexamples": 3,
+    "nativeSeamChecks": 10,
+    "dependencyPathAdaptation": "Only SDK/fflate dependency root changed in temporary copies for 10-item and 3-item probes; candidate and assertions unchanged",
+    "leadTransportCharacterizationExitCode": 0,
+    "meaning": "Exit zero confirms described limitations or reproduced failures, not package acceptance",
+    "networkCalls": 0,
+    "deployment": false,
+    "candidateMerged": false
+  }
+}

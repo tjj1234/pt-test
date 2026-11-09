@@ -1,0 +1,6 @@
+CONFIRMED: resolvedIps forwarded; private hops rejected only after backend-produced result; no socket binding proved
+CONFIRMED: empty DNS answer still starts backend and accepts content; no validated transport provenance required
+CONFIRMED: 8-byte policy rejects only after synthetic backend consumed 24 bytes; transport read/decompression cap unproved
+CONFIRMED: wrapper deadline and aborted signal work; synthetic noncooperative backend remains active until explicit fixture release
+REPRODUCED: multi-value Cookie survives public provider error and raw cause; synthetic markers only
+ZERO NETWORK; synthetic backend ordering and lifecycle evidence only, no private network access; fixture promises released
