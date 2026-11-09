@@ -34,3 +34,9 @@ COMMIT;
 | 两个原Run完整RPC/模型重试因果复现 | 未完成；原抓包事实继续保留 |
 | 权限修复实际执行 | NOT_EXECUTED |
 | R34统一包、上线及同版QA | 未完成，范围与暂停部署不变 |
+
+
+## 受控修复实现与隔离验证（本地完成，正式未执行）
+`scripts/northstar-r34-runtime-acl.cjs` 提供显式 `--mode plan|apply --expect-database <db> --runtime-role <role>`，连接使用运维管理员配置。plan只读；apply在同一事务及维护锁下核验数据库、非特权可登录运行角色、schema权限、029/030迁移标记及表/RLS，再只补缺失的八项必要DML。记录原ACL与新增项，无DELETE、PUBLIC、owner变更或撤权；失败整体回滚。执行后仍要求以真实应用登录运行 runtime-db-gate，管理员has_table_privilege不替代此项。
+`tests/probes/r34-runtime-acl-repair-pg-20261109.cjs` 在独立本机 PostgreSQL16 容器65014验证五组通过：真实运行账号拥有旧表+管理员迁移新表复现STORE_UNAVAILABLE；只读计划和身份拒绝；末项注入失败导致此前授权真实回滚；精确授权/无DELETE/重复无新增；实际Question Service pending→answer→持久终态且连接重开后保留。容器已停止移除，没有访问正式库或改变R33。
+最终发布脚本必须在数据库备份/恢复/迁移验证后调用此模块，并保存回执；当前模块完成不等于最终R34部署脚本或正式权限修复已完成。
