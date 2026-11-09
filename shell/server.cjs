@@ -1187,8 +1187,9 @@ async function handleChat(req, res, me, body, taskRun = null) {
     recordModelIntents: Boolean(modelIntentHandler),
     timeoutMs: taskTimeoutMs,
     onToolRequest: request => request.name === MODEL_INTENT_RPC && modelIntentHandler
-      ? modelIntentHandler.handle(request) : request.name==='northstar.user_question' ? (()=>{
+      ? modelIntentHandler.handle(request) : ['northstar.user_question','northstar.user_question_validate'].includes(request.name) ? (()=>{
         if(!taskRun || body.allowQuestions!==true || controlledMediaGrant || pinnedSkills.skills.length || lastUser?.csvSelections?.length)throw Object.assign(Error('Question mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});
+        if(request.name==='northstar.user_question_validate')return userQuestionService.validate(request.args);
         return userQuestionService.ask({identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,leaseOwner:taskRun.leaseOwner,args:request.args,signal:request.signal});
       })() : request.name==='northstar.skill_snapshot'?publishedSkills.readPinned({userId:uid,tenantId:me.tenant.id},pinnedSkills,request.args?.releaseId):request.name==='northstar.skill_resource'?(async()=>{
         const args=request.args;if(!args||Object.keys(args).some(key=>!['releaseId','paths'].includes(key))||!Array.isArray(args.paths)||!args.paths.length||args.paths.length>16||new Set(args.paths).size!==args.paths.length)throw Object.assign(Error('Invalid skill resource'),{code:'SKILL_RESOURCE_INVALID'});

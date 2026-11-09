@@ -1,0 +1,3 @@
+{"width":1280,"hostWidth":900,"scrollWidth":1039,"compactWidths":[171.390625,89.5,144.0625,144.078125,72.03125,97.828125]}
+{"width":375,"hostWidth":343,"scrollWidth":1039,"compactWidths":[171.390625,89.5,144.0625,144.078125,72.03125,97.828125]}
+PASS desktop/mobile short column minimums, unbroken identifiers and contained horizontal scrolling; actual production bizTable

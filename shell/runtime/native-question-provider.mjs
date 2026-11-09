@@ -20,3 +20,17 @@ export function installNativeQuestionProvider(ctx,{getActiveTurn,ask}) {
     return result;
   }});
 }
+
+// Normalize only the native consumer's declared fields; the host reuses the
+// exact side-effect-free validator used immediately before durable creation.
+export function nativeQuestionPreflightArguments(execution) {
+  const args=execution.arguments;
+  if(!execution.callId||Buffer.byteLength(JSON.stringify(args)??'')>32768)throw fail('QUESTION_INPUT_INVALID');
+  if(!args||typeof args!=='object'||Array.isArray(args)||Object.keys(args).some(k=>k!=='questions')||!Array.isArray(args.questions)||args.questions.length<1||args.questions.length>8)throw fail('QUESTION_INPUT_INVALID');
+  const questions=args.questions.map(q=>{
+    if(!q||typeof q!=='object'||Array.isArray(q)||Object.keys(q).some(k=>!['id','question','header','options','multi_select'].includes(k)))throw fail('QUESTION_INPUT_INVALID');
+    if(q.options!==undefined&&(!Array.isArray(q.options)||q.options.some(o=>!o||typeof o!=='object'||Array.isArray(o)||Object.keys(o).some(k=>!['label','description'].includes(k)))))throw fail('QUESTION_INPUT_INVALID');
+    return {id:q.id,question:q.question,...(q.header!==undefined?{header:q.header}:{}),...(q.options!==undefined?{options:q.options.map(o=>o.label)}:{}),...(q.multi_select!==undefined?{multiSelect:q.multi_select}:{})};
+  });
+  return {callId:String(execution.callId),questions};
+}

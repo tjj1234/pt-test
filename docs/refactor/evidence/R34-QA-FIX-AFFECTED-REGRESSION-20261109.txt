@@ -1,0 +1,80 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-hPsS9c/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ reasoning metadata and preference reach durable Runs, native requests and reopened history (3187.53525ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-Bo3PSM/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ published Skill passes owned HTTP publication, durable Run pins and native skill loading (3250.801792ms)
+✔ sessionStorage failure fails closed before sending a new chat POST (1.614583ms)
+✔ a stopped Run with uncertain upstream status gets the explicit AC03 warning (1.027458ms)
+✔ ambiguous chat POST retries once with the same idempotency key and exact body (3.696167ms)
+✔ page reload recovers uncertain submission by idempotency key using GET only (1.766541ms)
+✔ refresh resumes remembered run using GET only; transient network exception retries without duplicate POST (0.608875ms)
+✔ resume HTTP 401 clears invalid remembered run without a new POST (0.433708ms)
+✔ resume HTTP 403 clears invalid remembered run without a new POST (1.286042ms)
+✔ resume HTTP 404 clears invalid remembered run without a new POST (0.354625ms)
+✔ temporary HTTP 429 retries durable replay rather than releasing the active request (0.695ms)
+✔ temporary HTTP 503 retries durable replay rather than releasing the active request (0.547041ms)
+✔ conversation switch during replay terminal detail fetch cannot render the old conversation (0.385417ms)
+✔ late original SSE done artifacts from A do not alter the visible B artifact pane (0.952458ms)
+✔ failed historical image replay keeps conversation messages and shows attachment error outside history (0.870625ms)
+✔ failed Run keeps completed and failed tool steps in history before the transient error prompt (0.425958ms)
+✔ SSE needKey terminal event keeps its dedicated prompt without duplicate error bubble (0.356334ms)
+✔ terminal conversation detail network retries before forgetting durable run (0.376ms)
+✔ terminal conversation detail 503 retries before forgetting durable run (0.347041ms)
+✔ an in-flight remembered run owns its conversation and blocks a second create POST (0.329167ms)
+✔ durable cursor consumes each delta once while replaying an unconsumed done after detail failure (0.435958ms)
+✔ production list refresh network after done cannot replay consumed deltas or rerender terminal detail (0.407375ms)
+✔ production list refresh 503 after done cannot replay consumed deltas or rerender terminal detail (0.31675ms)
+✔ A to B to A navigation ignores the first A response after the newer A history has rendered (0.500958ms)
+✔ terminal detail 401/403/404 clears remembered run without retrying or rendering unauthorized history (1.206375ms)
+✔ an older open-history response cannot overwrite the same conversation terminal replay result (0.440875ms)
+✔ an older open-history response cannot overwrite the same conversation terminal original SSE result (0.41325ms)
+
+[1] 卡片区分「无记录(暂缺)」「有记录但真是 0」「有真实值」
+  ok   今日无记录 → 暂缺
+  ok   本月无记录 → 暂缺
+  ok   今日有记录但汇总真是 0 → 0
+  ok   本月有记录但汇总真是 0 → 0
+  ok   今日真实值正常显示
+  ok   本月真实值正常显示
+  ok   summary 为 null → 今日/本月都暂缺
+  ok   字段缺失 count 同样按暂缺处理（不把缺 count 当 0 显示）
+
+[2] 模型分布只在有数据时渲染
+  ok   有模型数据时渲染 1 块
+  ok   无模型数据时不渲染
+  ok   partial且total已知的卡片显式标记覆盖不完整
+  ok   unknown aggregate显示暂缺而非0
+  ok   legacy/mixed summary以部分数据呈现而不显示历史混合total
+  ok   partial模型不展示已知total且图表宽度为0
+  ok   unknown模型显示暂缺且不伪造0
+  ok   真实零仍明确显示0 tok
+  ok   mixed模型不展示混合total且图表宽度为0
+
+[3] bizLoadUsage 拉 tool-calls + summary，状态行只报调用次数
+  ok   状态行显示调用次数（不再混 token 汇总）
+  ok   卡片显示今日汇总
+  ok   媒体操作表展示 Run/操作键/provider/task/状态/查单次数
+  ok   媒体费用与币种明确显示 unknown
+  ok   加载下一页后保留首屏并追加后续操作
+  ok   末页隐藏加载更多按钮
+  ok   无调用时状态行文案
+  ok   无记录时卡片暂缺
+
+[4] 错误路径与示例回退
+  ok   summary 报错 → 状态行显示错误
+  ok   报错时卡片清空
+  ok   summary 404 回退示例仍显示真实数字
+
+结果：28 通过，0 失败
+✔ tests/regression/ui-usage-token-summary-test.mjs (6086.441417ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 6094.046084

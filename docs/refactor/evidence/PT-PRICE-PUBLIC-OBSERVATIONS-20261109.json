@@ -1,0 +1,67 @@
+{
+  "status": "OBSERVED_NOT_APPROVED_FOR_IMPORT",
+  "notes": [
+    "Fresh anonymous HTTP captures, not search-cache prices.",
+    "No historical effective date or zero cache-write rate inferred.",
+    "Current importer requires all four dimensions and one fixed source URL; these records are not an import file.",
+    "Time-dependent price rules and absent cache creation dimension require an explicit reviewed contract.",
+    "No production database or credential accessed."
+  ],
+  "observations": [
+    {
+      "model": "deepseek-v4-pro",
+      "sourceUrl": "https://powertokens.ai/models/deepseek-v4-pro",
+      "capturedAt": "2026-11-09T03:41:09Z",
+      "rawPageSha256": "3e2617248ba583b9308c09c58f6dfc8bbb695a0b9371f17f47ae638734c172b1",
+      "observedCurrency": "USD",
+      "observedUnit": "per 1M tokens",
+      "observedStandardRates": {
+        "input": 0.66,
+        "output": 1.98,
+        "implicitCacheHit": 0.022,
+        "explicitCacheHit": 0.022,
+        "cacheCreation": null
+      },
+      "cacheCreationLabel": "--",
+      "conditionalPricing": {
+        "weekdays": [
+          1,
+          2,
+          3,
+          4,
+          5
+        ],
+        "timezone": "UTC+08:00",
+        "localWindows": [
+          [
+            "09:00",
+            "12:00"
+          ],
+          [
+            "14:00",
+            "18:00"
+          ]
+        ],
+        "multiplier": 2,
+        "cacheMultiplierSemantics": "not separately specified on observed page"
+      }
+    },
+    {
+      "model": "glm-4.7",
+      "sourceUrl": "https://powertokens.ai/models/glm-4.7",
+      "capturedAt": "2026-11-09T03:41:11Z",
+      "rawPageSha256": "a4a17ca02426117d3b9661d52573ff276babc6ae9c0c8772463cd5e8bc98fa0f",
+      "observedCurrency": "USD",
+      "observedUnit": "per 1M tokens",
+      "observedStandardRates": {
+        "input": 0.6,
+        "output": 2.2,
+        "implicitCacheHit": 0.11,
+        "explicitCacheHit": 0.11,
+        "cacheCreation": null
+      },
+      "cacheCreationLabel": "--",
+      "conditionalPricing": null
+    }
+  ]
+}

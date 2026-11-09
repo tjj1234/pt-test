@@ -4,7 +4,7 @@ const {createQuestionStore}=require('./store.cjs');
 const fail=code=>Object.assign(new Error('Question request could not be completed'),{code});
 const isObject=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 function createQuestionService({db}) {
-  async function ask({identity,runId,leaseOwner,args,signal}) {
+  function prepareQuestions(args) {
     if (!isObject(args) || Object.keys(args).some(k=>!['callId','questions'].includes(k)) || typeof args.callId!=='string' || args.callId.length<1 || args.callId.length>128 || !Array.isArray(args.questions) || args.questions.length<1 || args.questions.length>8 || new Set(args.questions.map(q=>q?.id)).size!==args.questions.length || Buffer.byteLength(JSON.stringify(args))>32768) throw fail('QUESTION_INPUT_INVALID');
     const questions=args.questions.map(q=>{
       if (!isObject(q) || Object.keys(q).some(k=>!['id','question','detail','header','options','multiSelect','intent'].includes(k)) || (q.intent!==undefined&&q.intent!==null)) throw fail('APPROVAL_SEAM_PENDING_SPEC');
@@ -13,6 +13,10 @@ function createQuestionService({db}) {
       validateQuestionInput({questionId:q.id,...spec});
       return {id:q.id,spec};
     });
+    return questions;
+  }
+  async function ask({identity,runId,leaseOwner,args,signal}) {
+    const questions=prepareQuestions(args);
     const store=createQuestionStore({db,identity,runId,callId:args.callId,leaseOwner});
     const manager=createQuestionManager({...identity,runId,store});
     if(signal?.aborted) {await manager.cancelRun('Run aborted');throw fail('QUESTION_CANCELLED');}
@@ -48,6 +52,6 @@ function createQuestionService({db}) {
     const manager=createQuestionManager({...identity,runId,store});
     return manager.submitAnswer(id,input.answer,{respondentTenantId:identity.tenantId,respondentUserId:identity.userId});
   }
-  return Object.freeze({ask,list,answer});
+  return Object.freeze({ask,list,answer,validate:args=>{prepareQuestions(args);return {valid:true};}});
 }
 module.exports={createQuestionService};

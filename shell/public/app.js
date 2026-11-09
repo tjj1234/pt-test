@@ -3871,12 +3871,18 @@ async function bizRead(url, sample) {
   return { data: j, mock: false };
 }
 function bizTable(host, headers, rows) {
-  host.replaceChildren(); const table = bizNode("table"); table.style.cssText = "width:100%;border-collapse:collapse;text-align:left";
+  host.replaceChildren(); host.style.overflowX = "auto"; host.style.minWidth = "0"; host.style.maxWidth = "100%";
+  const compact = headers.map(h => !["输入摘要", "输出摘要", "文件", "详情"].includes(String(h)));
+  const table = bizNode("table"); table.style.cssText = "width:100%;border-collapse:collapse;text-align:left";
   const head = bizNode("thead"), tr = bizNode("tr");
-  headers.forEach(h => { const th = bizNode("th", h); th.style.padding = "12px"; tr.appendChild(th); }); head.appendChild(tr); table.appendChild(head);
-  const body = bizNode("tbody"); rows.forEach(cells => { const row = bizNode("tr"); cells.forEach(c => { const td = bizNode("td"); td.style.cssText = "padding:12px;border-top:1px solid var(--line);vertical-align:top;overflow-wrap:anywhere"; if (c instanceof Node) td.appendChild(c); else td.textContent = c == null ? "—" : String(c); row.appendChild(td); }); body.appendChild(row); });
+  headers.forEach((h,i) => { const th = bizNode("th", h); th.style.cssText = "padding:12px;white-space:nowrap;min-width:72px"; tr.appendChild(th); }); head.appendChild(tr); table.appendChild(head);
+  const body = bizNode("tbody"); rows.forEach(cells => { const row = bizNode("tr"); cells.forEach((c,i) => {
+    const td = bizNode("td"); td.style.cssText = "padding:12px;border-top:1px solid var(--line);vertical-align:top;" + (compact[i] ? "min-width:72px;white-space:nowrap;overflow-wrap:normal;word-break:normal" : "min-width:160px;max-width:420px;white-space:normal;overflow-wrap:anywhere");
+    if (c instanceof Node) td.appendChild(c); else td.textContent = c == null ? "—" : String(c); row.appendChild(td);
+  }); body.appendChild(row); });
   table.appendChild(body); host.appendChild(table);
 }
+
 let bizFlowsRequest = 0;
 async function bizLoadFlows() {
   const seq = ++bizFlowsRequest; $("#toolsStatus").textContent = "读取工具…";

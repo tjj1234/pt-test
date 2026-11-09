@@ -1,0 +1,46 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/questions-authority-1z4xCd/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+▶ production question authority: scope, transactions, deadline, workers and cleanup
+  ✔ another worker answers; original waiter follows DB terminal (115.900333ms)
+  ✔ same question IDs across Runs are independent and foreign owner cannot read (27.731792ms)
+  ✔ expiry persists; late answer is rejected and reopening retains timeout (48.942417ms)
+  ✔ cancel tombstone blocks later creation, without changing another Run (10.143667ms)
+  ✔ concurrent answer CAS has exactly one winner (112.343542ms)
+  ✔ host service uses durable owner API and closes approval early (113.811042ms)
+  ✔ same ID across native calls is isolated; changed arguments conflict (121.243417ms)
+  ✔ completed Run and expired worker lease cannot accept answers (234.088917ms)
+  ✔ answer committed before cancellation remains the waiter terminal (12.344667ms)
+  ✔ storage outage fails closed without inventing a cancelled authority (10.933125ms)
+✔ production question authority: scope, transactions, deadline, workers and cleanup (2796.442334ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-MdV83A/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"valid-one","runState":"completed","questions":[{"status":"answered","id":"report-format"}],"modelRequests":2,"codes":[{"ok":true,"state":"completed"}],"toolSteps":[],"budgetError":false,"modelBudgetError":false}
+✔ question preflight budget repair valid-one (3208.267209ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-ggUHTO/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"empty-question-then-valid","runState":"completed","questions":[{"status":"answered","id":"report-format"}],"modelRequests":3,"codes":[{"ok":true,"state":"completed"}],"toolSteps":[],"budgetError":false,"modelBudgetError":false}
+✔ question preflight budget repair empty-question-then-valid (1656.270125ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-b89FFR/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"two-tool-calls","runState":"failed","questions":[{"status":"answered","id":"report-format"}],"modelRequests":2,"codes":[{"ok":false,"code":"RUN_TOOL_CALL_LIMIT","error":"Run stopped because the tool-call budget was exhausted","state":"failed"}],"toolSteps":[],"budgetError":true,"modelBudgetError":false}
+✔ question preflight budget repair two-tool-calls (1542.275125ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-40xe1F/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"always-invalid","runState":"failed","questions":[],"modelRequests":3,"codes":[{"ok":false,"code":"RUN_MODEL_CALL_LIMIT","error":"Run stopped because the model-call budget was exhausted","state":"failed"}],"toolSteps":[],"budgetError":false,"modelBudgetError":true}
+✔ question preflight budget repair always-invalid (1794.7135ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-Ay0AR8/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+✔ native questions cross owned HTTP, durable authority, reload and real SDK (3475.790167ms)
+ℹ tests 16
+ℹ suites 0
+ℹ pass 16
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 8260.988917

@@ -271,6 +271,8 @@ async function guardNativeToolExecution(active, execution, next) {
   if (!NATIVE_RUN_TOOL_NAMES.has(execution.name) || !Array.isArray(active.toolPolicy?.allowedTools) || !active.toolPolicy.allowedTools.includes(execution.name)) {
     throw deny('RUN_TOOL_NOT_ALLOWED');
   }
+  if(execution.name==='ask_user_question'&&active.preflightQuestion)await active.preflightQuestion(execution);
+  if(active.cancelRequested||active.expired||execution.signal.aborted)throw budgetAdmissionError('RUN_CANCELLED');
   const admission = active.budget.admit({type: 'tool', key: canonicalToolKey(execution.name, execution.arguments)});
   if (!admission.allowed) {
     if (admission.code === 'RUN_DURATION_LIMIT') active.expire?.();
@@ -295,9 +297,14 @@ function apply(ctx) {
     const sessionKey = new Map();     // dsh Session 对象 -> sessionId（流式事件路由）
     const pendingToolRequests = new Map(); // requestId -> { sessionId, resolve, reject }
     const activeTurns = new Map(); // sessionId -> isolated turn context
+    let preflightNativeQuestionExecution=async()=>{};
     if(ctx.get("userQuestions")){
     const nativeQuestions = await import('./native-question-provider.mjs');
     withNativeQuestionExecution=nativeQuestions.withNativeQuestionExecution;
+    preflightNativeQuestionExecution=async (active,execution)=>{
+      await requestParentTool(active.sessionId,'northstar.user_question_validate',nativeQuestions.nativeQuestionPreflightArguments(execution));
+      if(activeTurns.get(active.sessionId)!==active||active.cancelRequested||active.expired||execution.signal.aborted)throw budgetAdmissionError('RUN_CANCELLED');
+    };
     const {installNativeQuestionProvider}=nativeQuestions;
     installAskUserTool(ctx);
     installNativeQuestionProvider(ctx,{
@@ -495,6 +502,7 @@ function apply(ctx) {
         auxiliaryDispatches:0,
         auxiliaryAdmissions:0,
         primaryModelCalls:0,
+        preflightQuestion:execution=>preflightNativeQuestionExecution(turn,execution),
         pinnedSkills:cmd.pinnedSkills||{skills:[]},
         recordModelIntents: cmd.recordModelIntents === true,
         tenantId: String(cmd.tenantId || "").trim(),
@@ -534,6 +542,7 @@ function apply(ctx) {
           budget: policy?.budget || null,
           configured: policy?.configured === true,
           contextModelCalls:policy?.contextModelCalls||0,
+          borrowUnusedContextSlot:cmd.budgetProfile==='questions',
           limits: policy?.limits || {},
           toolPolicy: policy?.toolPolicy || null,
           maxOutputTokens: Number.isSafeInteger(policy?.maxOutputTokens) ? policy.maxOutputTokens : null,
@@ -579,7 +588,7 @@ function apply(ctx) {
                   throw budgetAdmissionError("RUN_BUDGET_CONFIG_INVALID", "Run model budget is unavailable");
                 }
                 if(active.policyDenied)throw budgetAdmissionError(active.policyDenied);
-                if(active.contextModelCalls&&active.primaryModelCalls>=active.limits.maxModelCalls-active.contextModelCalls)throw budgetAdmissionError('RUN_MODEL_CALL_LIMIT');
+                if(active.contextModelCalls&&!active.borrowUnusedContextSlot&&active.primaryModelCalls>=active.limits.maxModelCalls-active.contextModelCalls)throw budgetAdmissionError('RUN_MODEL_CALL_LIMIT');
                 const admission = active.budget.admit({ type: "model" });
                 if (!admission.allowed) {
                   if (admission.code === "RUN_DURATION_LIMIT") active.expire?.();

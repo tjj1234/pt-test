@@ -1,0 +1,30 @@
+✔ native DSH web_search honors explicit Run admission and warm policy revocation (193.043542ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-K2t9R4/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"valid-one","runState":"completed","questions":[{"status":"answered","id":"report-format"}],"modelRequests":2,"codes":[{"ok":true,"state":"completed"}],"toolSteps":[],"budgetError":false,"modelBudgetError":false}
+✔ question preflight budget repair valid-one (2256.637417ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-BdrNRP/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"empty-question-then-valid","runState":"completed","questions":[{"status":"answered","id":"report-format"}],"modelRequests":3,"codes":[{"ok":true,"state":"completed"}],"toolSteps":[],"budgetError":false,"modelBudgetError":false}
+✔ question preflight budget repair empty-question-then-valid (1781.564333ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-kWZlFp/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"two-tool-calls","runState":"failed","questions":[{"status":"answered","id":"report-format"}],"modelRequests":2,"codes":[{"ok":false,"code":"RUN_TOOL_CALL_LIMIT","error":"Run stopped because the tool-call budget was exhausted","state":"failed"}],"toolSteps":[],"budgetError":true,"modelBudgetError":false}
+✔ question preflight budget repair two-tool-calls (1852.53525ms)
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/private/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/reasoning-http-sdk-WgzK0P/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+{"mode":"always-invalid","runState":"failed","questions":[],"modelRequests":3,"codes":[{"ok":false,"code":"RUN_MODEL_CALL_LIMIT","error":"Run stopped because the model-call budget was exhausted","state":"failed"}],"toolSteps":[],"budgetError":false,"modelBudgetError":true}
+✔ question preflight budget repair always-invalid (1589.494917ms)
+✔ native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch (128.478083ms)
+ℹ tests 6
+ℹ suites 0
+ℹ pass 6
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 7533.143375
