@@ -1,0 +1,29 @@
+{
+  "sourceCommit": "bdb63b98e2cc204c7e4e2976d16dfe1d5f1765ac",
+  "deliveryCommit": "4c4b08a57a9d3ead49f3acdb849f0109e7549c8b",
+  "patchSha256": "528f1e98016f76afff908a8a539cb71b4c7ab62648e7a83997767ba0848987f4",
+  "sourceSha256": {
+    "business/attribution/import/workspace-meta.js": "59d5b72fbec04e0719b25c761d7e379ef2bfc533a05faf174db650868dd6da84",
+    "shell/public/app.js": "664715e377c9fef52a8b93164e08a373873f56760e8df0c883f0fa68c7a7c77c",
+    "tests/regression/bug3-r4-state-boundary-test.mjs": "79e0c255e19366fafd6a71126d2f5b00e83b868fcf3b2772969088307989fa75",
+    "tests/regression/streaming-lifecycle-e2e-test.mjs": "96d869684587c793cb97059ee5b31882e03d9f66e969f1069d40bc8ce6999fe3"
+  },
+  "checks": {
+    "offlineInstall": {
+      "packages": 639,
+      "exitCode": 0
+    },
+    "authorAndAffectedRegression": {
+      "testUnits": 15,
+      "exitCode": 0,
+      "httpScenariosWithinSuite": 9,
+      "previewAssertionsWithinSuite": 64
+    },
+    "leadLockCharacterization": {
+      "exitCode": 0,
+      "meaning": "reproduces live-owner age-based lock theft; UI predicate observation bounded to expression only"
+    },
+    "paidCalls": 0,
+    "productionMutations": []
+  }
+}

@@ -1,0 +1,3 @@
+REPRODUCED: age-only recovery steals live-owner lock; concurrent writer commits, then original owner overwrites first committed value
+CONFIRMED expression boundary: last historical partial is accepted despite a different current runId; queued/pre-persistence cancellation path still needs HTTP proof
+ZERO NETWORK; genuine production store with two workers and controlled slow-I/O/elapsed-time scheduling; fixture released

@@ -5,14 +5,14 @@
 
 | 项目 | 当前真实状态 | 下一门禁 |
 |---|---|---|
-| 主程R33只读核验 | 诊断PG5组及Linux入口3组通过，未运行生产；SSH认证失效、旧socket不存在 | 用户恢复连接，主程执行SHA绑定只读核验；不迁移/授权/重启 |
+| 主程R33只读核验 | 正式R33只读核验完成；northstar_app缺问答两表三项DML权限，029已记录 | 按[受控修复计划](R33-LIVE-ACL-FINDING-AND-R34-REPAIR-PLAN-20261109.md)纳入R34；本轮未GRANT/迁移/重启 |
 | 04可信联网 | 候选33fc6240的native fetch与时序修复确认；实际transport、读取/资源终止及错误脱敏仍阻断；主程宿主web_fetch/可信上下文未接 | Gemini补backend原矩阵；Codex按冻结共享契约接Run/预算/来源与产品链 |
-| 第三批Bug | 交接a69bcaf、后续文档e4b6bd6；已跑源码ee30815：HTTP9场景及相关10单元通过，三项状态问题复现 | 首值跨worker覆盖、当前轮partial误判、503伪装未接通，以及实际断连/双活/lease/close证据收尾 |
+| 第三批Bug | 交付4c4b08a/源码bdb63b9：15/15通过，常规三项改善；活owner锁按年龄回收仍失效 | [锁恢复与时序主审](evidence/BUG3-R5-LOCK-RECOVERY-LEAD-REVIEW-20261109.md)，保留实际lease转移/进程close等原矩阵 |
 | QA与计费 | 双轨计费定义在两份QA文档已修订确认；本地估算缺价格、官方逐笔结果仍属QA报告证据 | 审核定价及PG导入、同scope官方记录与本地关联；USD/credits无官方规则保持unknown |
 | 08及其余八包范围 | 保留调用前M1持久预留与问答/列宽本地修复；01/02/03/07及05审批/06隔离等缺口仍按全量scope阻断 | 真实DSH/后端/权限/恢复与费用证据逐项验收；不能把关闭功能或partial候选称整包完成 |
 | 最终发布 | 无r34-final-all8最终归档，旧M1指纹保留但禁止作为最终包上线；Bug-12保持DEGRADED_PREVIEW | 同版本集成/浏览器/Linux闭包、数据恢复/迁移/ACL与回退后，按有效指令正式切换及独立QA |
 
-[主程剩余任务与依赖](R34-MAIN-REMAINING-WORK-20261109.md)｜[只读诊断准备](R33-READONLY-QUESTION-DIAGNOSTIC-RUNBOOK-20261109.md)｜[04共享接线契约](R34-WEB-HOST-INTEGRATION-CONTRACT-20261109.md)｜[最新04主审](evidence/WEB04-R4-AND-QA-BILLING-LEAD-REVIEW-20261109.md)｜[Bug主审与收尾](evidence/BUG3-R4-HTTP-AND-STATE-LEAD-REVIEW-20261109.md)｜[完整范围](R34-FINAL-ALL8-RELEASE-SCOPE-20261109.md)。
+[主程剩余任务与依赖](R34-MAIN-REMAINING-WORK-20261109.md)｜[只读诊断准备](R33-READONLY-QUESTION-DIAGNOSTIC-RUNBOOK-20261109.md)｜[04共享接线契约](R34-WEB-HOST-INTEGRATION-CONTRACT-20261109.md)｜[最新04主审](evidence/WEB04-R4-AND-QA-BILLING-LEAD-REVIEW-20261109.md)｜[Bug最新主审与收尾](evidence/BUG3-R5-LOCK-RECOVERY-LEAD-REVIEW-20261109.md)｜[完整范围](R34-FINAL-ALL8-RELEASE-SCOPE-20261109.md)。
 作者交付、独立主审、集成、本地验证、正式部署、同版QA与真实供应商验收继续分别记账。C01/C02/C03仍按下方两人交接队列，不改派为本轮Gemini返修。
 
 ## 2026-11-06 Claude10包：增量范围与两人下发
