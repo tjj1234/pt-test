@@ -1,0 +1,5 @@
+REPRODUCED: independent store with cached persisted null overwrites already stamped firstConnectedAt
+REPRODUCED: two real workers read initially absent metadata; later stale writer overwrites first committed timestamp
+REPRODUCED: stopped current turn with zero output is labeled retained partial based only on prior assistant history
+REPRODUCED: actual schedule loader maps 503 service failure to not-connected/no-upload state
+ZERO NETWORK; actual production store and extracted actual UI expression; fixture directory removed

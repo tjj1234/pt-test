@@ -1,5 +1,7 @@
 # R34最终包：全量范围与发布门禁（2026-11-09用户指令）
 
+第三批Bug最新交接a69bcaf（源码ee30815）已复核：HTTP/磁盘库9场景与相关10测试单元通过，但firstConnectedAt跨worker覆盖、当前轮保留提示误判、503伪装未接通三项状态问题已重现；完整生命周期及原媒体/预览反馈的验收证据仍待补。新patch e051f51机械检查通过，未合并部署；见[主审报告与一次性收尾清单](evidence/BUG3-R4-HTTP-AND-STATE-LEAD-REVIEW-20261109.md)。下方“仅发现待审”是历史状态。
+
 最新04候选33fc6240：native fetch与已报时序修复确认；真实transport、读取/资源销毁及公开错误脱敏三项原门禁仍未闭环，整包BLOCKED。QA两份文档双轨计费定义修订已确认，计费门禁仍未过。详见[本轮复审及完整剩余交付要求](evidence/WEB04-R4-AND-QA-BILLING-LEAD-REVIEW-20261109.md)。第三批Bug新tip ee30815已发现，尚未复审。
 
 最新04候选已更新至d3de8d0，主审复跑作者5/28/3/10通过但真实native web_fetch输出渲染及取消时序等仍失败，未放行；QA报告主要纠偏已确认，正式根因仍待核验。详见[本轮独立复审](evidence/WEB04-R3-AND-QA-LEAD-REVIEW-20261109.md)。下方旧tip为历史快照。
