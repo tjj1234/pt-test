@@ -42,7 +42,7 @@ function conversationDocument(conversation) {
 function exportDocumentInWorker({document, format = 'docx', signal, timeoutMs = 10000} = {}) {
   if (signal?.aborted) return Promise.reject(fail('DOCUMENT_EXPORT_CANCELLED'));
   if (active >= 2) return Promise.reject(fail('DOCUMENT_EXPORT_BUSY'));
-  if (!['docx','xlsx'].includes(format)) return Promise.reject(fail('DOCUMENT_EXPORT_FORMAT_INVALID'));
+  if (!['docx','xlsx','pdf'].includes(format)) return Promise.reject(fail('DOCUMENT_EXPORT_FORMAT_INVALID'));
   try { if (Buffer.byteLength(JSON.stringify(document)) > 4 * 1024 * 1024) return Promise.reject(fail('DOCUMENT_EXPORT_INPUT_LIMIT')); } catch { return Promise.reject(fail('DOCUMENT_EXPORT_INPUT_LIMIT')); }
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 15000) return Promise.reject(fail('DOCUMENT_EXPORT_LIMIT_INVALID'));
   const sourceSha256 = createHash('sha256').update(JSON.stringify(document)).digest('hex');
@@ -62,7 +62,7 @@ function exportDocumentInWorker({document, format = 'docx', signal, timeoutMs = 
       if (failure) return reject(failure);
       if (code !== 0 || !response?.ok || !(response.bytes instanceof Uint8Array) || response.bytes.length > 5 * 1024 * 1024) return reject(fail('DOCUMENT_EXPORT_FAILED'));
       const bytes = Buffer.from(response.bytes);
-      resolve({bytes, sourceSha256, sha256: createHash('sha256').update(bytes).digest('hex'), mime: format==='xlsx'?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+      resolve({bytes, sourceSha256, sha256: createHash('sha256').update(bytes).digest('hex'), mime: format==='pdf'?'application/pdf':format==='xlsx'?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
     });
     if (signal?.aborted) cancel();
   });
@@ -75,4 +75,8 @@ function exportCsvWorkbook({csv,signal,timeoutMs} = {}) {
   if (typeof csv !== 'string' || csv.length>2*1024*1024 || Buffer.byteLength(csv)>2*1024*1024) return Promise.reject(fail('DOCUMENT_EXPORT_INPUT_LIMIT'));
   return exportDocumentInWorker({document:{csv},format:'xlsx',signal,timeoutMs});
 }
-module.exports = {exportConversationDocx, conversationDocument, exportCsvWorkbook};
+function exportConversationPdf(options={}){
+  try{return exportDocumentInWorker({...options,format:'pdf',document:conversationDocument(options.conversation)});}
+  catch(error){return Promise.reject(error);}
+}
+module.exports = {exportConversationDocx,exportConversationPdf, conversationDocument, exportCsvWorkbook};

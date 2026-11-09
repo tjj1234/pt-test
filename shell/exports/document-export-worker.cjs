@@ -1,8 +1,11 @@
 'use strict';
 const {parentPort, workerData} = require('node:worker_threads');
-try {
+(async()=>{try {
   const {document,format}=workerData;
-  if(format==='xlsx'){
+  if(format==='pdf'){
+    const bytes=Uint8Array.from(await require('./pdf-document.cjs').renderPdf(document));
+    parentPort.postMessage({ok:true,bytes},[bytes.buffer]);
+  }else if(format==='xlsx'){
     const {parseCsv}=require('../attachments/csv-parser.cjs');
     const rows=parseCsv(document.csv,{maxBytes:2*1024*1024,maxRows:5000,maxColumns:100,maxCells:50000}).rows;
     const result=require('./portable-xlsx-candidate.cjs').generatePortableXlsx({sheets:[{name:'CSV 分析',cells:rows.map(row=>row.map(cell=>cell.value))}]},{maxBytes:5*1024*1024});
@@ -18,4 +21,4 @@ try {
   parentPort.postMessage({ok: true, bytes}, [bytes.buffer]);
   }
 } catch { parentPort.postMessage({ok: false}); }
-finally { parentPort.close(); }
+finally { parentPort.close(); }})();

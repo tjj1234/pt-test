@@ -10,7 +10,9 @@ const {inspectOfficeZip}=require('./office-zip-guard.cjs');
    const bytes=Buffer.from(source.data),format=source.format==='md'?'markdown':source.format;
    if(createHash('sha256').update(bytes).digest('hex')!==source.sha256)throw Error('snapshot');
    let blocks;
-   if(['docx','xlsx','pptx'].includes(format)){
+   if(format==='pdf'){
+    blocks=(await require('./pdf-text-parser.cjs').extractPdfText(bytes)).blocks;
+   }else if(['docx','xlsx','pptx'].includes(format)){
     const archive=inspectOfficeZip(bytes);
     if(format==='docx'){
      const parsed=await require('mammoth').extractRawText({buffer:bytes});

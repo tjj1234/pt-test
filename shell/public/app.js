@@ -945,11 +945,13 @@ function openMenu(c, anchor) {
   expJ.addEventListener("click", () => { closeMenu(); exportConversation(c, "json"); });
   const expW = document.createElement("button"); expW.textContent = "导出 Word";
   expW.addEventListener("click", () => { closeMenu(); exportConversation(c, "docx"); });
+  const expP=document.createElement('button');expP.textContent='导出 PDF';
+  expP.addEventListener('click',()=>{closeMenu();exportConversation(c,'pdf');});
   const compact=document.createElement('button');compact.textContent='压缩上下文';compact.disabled=c.archived||chatRunsByConversation.has(c.id);
   compact.addEventListener('click',async()=>{closeMenu();if(c.id!==state.activeId||state.loadedId!==c.id)await openConversation(c.id);if(!modelContextReady||chatRunsByConversation.has(c.id))return composerNotice('请等待当前模型或运行就绪。','err');await runChat({conversationId:c.id,message:'/compact'});});
   const del = document.createElement("button"); del.className = "danger"; del.textContent = "删除";
   del.addEventListener("click", () => { closeMenu(); deleteConversation(c); });
-  pop.appendChild(ren); pop.appendChild(arc); pop.appendChild(expM); pop.appendChild(expJ); pop.appendChild(expW);pop.appendChild(compact); pop.appendChild(del);
+  pop.appendChild(ren); pop.appendChild(arc); pop.appendChild(expM); pop.appendChild(expJ); pop.appendChild(expW);pop.appendChild(expP);pop.appendChild(compact); pop.appendChild(del);
   document.body.appendChild(pop);
   const r = anchor.getBoundingClientRect();
   pop.style.top = (r.bottom + 4) + "px";
@@ -1565,20 +1567,20 @@ if (archRestoreBtn) archRestoreBtn.addEventListener("click", async () => {
 
 /* ---- ⑧ 导出（Content-Disposition 触发下载） ---- */
 async function exportConversation(c, fmt) {
-  if (fmt === 'docx') {
+  if (fmt === 'docx'||fmt==='pdf') {
     let url;
     try {
-      const response = await fetch('/api/conversations/' + encodeURIComponent(c.id) + '/export?fmt=docx', {credentials: 'same-origin'});
+      const response = await fetch('/api/conversations/' + encodeURIComponent(c.id) + '/export?fmt='+encodeURIComponent(fmt), {credentials: 'same-origin'});
       if (!response.ok) throw Error('export failed');
       const blob = await response.blob();
       url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url; link.download = 'conversation-' + String(c.id).slice(0, 8) + '.docx';
+      link.href = url; link.download = 'conversation-' + String(c.id).slice(0, 8) + '.' + fmt;
       document.body.appendChild(link); link.click(); link.remove();
       setTimeout(() => URL.revokeObjectURL(url), 30000);
     } catch {
       if (url) URL.revokeObjectURL(url);
-      composerNotice('Word 导出失败，请稍后重试；超长对话可先导出 Markdown。', 'err');
+      composerNotice('文档导出失败，请稍后重试；超长对话可先导出 Markdown。', 'err');
     }
     return;
   }
@@ -1834,7 +1836,7 @@ async function uploadImageDataUrl(b64) {
  * 走基座已合并的 POST /api/upload-doc，只把返回的 url 存下来，
  * 发消息时作为 documents 数组提交；正文由后端读出来注入上下文（URL 本身不给模型）。
  * 下面的扩展名 / 体积校验只是「早点给提示」，后端还会按内容再判一次纯文本，两道都在。 */
-const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx"]);
+const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx", "pdf"]);
 const DOC_MAX_BYTES = 5 * 1024 * 1024;
 let pendingDocs = [];   // [{ url, name, size, chars, csvSelection? }]
 
@@ -1961,11 +1963,11 @@ async function uploadDocFile(f) {
   if (!f) return false;
   const name = f.name || "未命名文件";
   if (!DOC_EXT_WHITELIST.has(docExtOf(name))) {
-    composerNotice("支持 .txt / .md / .csv / .docx / .xlsx / .pptx，「" + name + "」暂不支持", "err");
+    composerNotice("支持 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf，「" + name + "」暂不支持", "err");
     return false;
   }
   if (!f.size) { composerNotice("「" + name + "」是空文件，没有可读取的内容", "err"); return false; }
-  const maxBytes=['docx','xlsx','pptx'].includes(docExtOf(name))?20*1024*1024:DOC_MAX_BYTES;
+  const maxBytes=['docx','xlsx','pptx','pdf'].includes(docExtOf(name))?20*1024*1024:DOC_MAX_BYTES;
   if (f.size > maxBytes) {
     composerNotice("文档太大：单文件上限 "+Math.round(maxBytes/1048576)+"MB，「" + name + "」是 " + fmtSize(f.size), "err");
     return false;
@@ -2348,7 +2350,7 @@ async function handleComposerFile(f) {
   if (isDocFile(f)) { await uploadDocFile(f); return; }          // 文档 → /api/upload-doc
   if (mediaKindOf(f)) { await uploadMediaFile(f); return; }      // 音视频 → /api/upload-media
   if (!/^image\//.test(f.type || "")) {
-    composerNotice("只支持图片（参考素材）、音视频，或 .txt / .md / .csv / .docx / .xlsx / .pptx 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
+    composerNotice("只支持图片（参考素材）、音视频，或 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
     return;
   }
   if (f.size > 15 * 1024 * 1024) { composerNotice("素材太大（≤15MB）", "err"); return; }

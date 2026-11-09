@@ -38,7 +38,7 @@ const {nativeImageCandidates}=require('./models/native-image-qualification.cjs')
 const {reviewedImageOverrides}=require('./models/reviewed-image-facts.cjs');
 const {parseOfficeDocument}=require('./attachments/office-document-parser.cjs');
 const {buildDocxEvidenceIndex}=require('./attachments/docx-evidence-index.cjs');
-const {exportConversationDocx}=require('./exports/conversation-docx.cjs');
+const {exportConversationDocx,exportConversationPdf}=require('./exports/conversation-docx.cjs');
 const { parseCsv } = require("./attachments/csv-parser.cjs");
 const { buildCsvSource, renderCsvSource } = require("./attachments/csv-source.cjs");
 const { renderCsvColumnProfile } = require("./attachments/csv-column-profile.cjs");
@@ -371,7 +371,7 @@ const HEARTBEAT_PROMPT = process.env.PT_HEARTBEAT_PROMPT || "ping";
 // ---- 文档上传（纯文本 v1：.txt/.md/.csv）与上下文注入限制 ----
 const DOC_UPLOAD_MAX_BYTES = Number(process.env.PT_DOC_UPLOAD_MB || 5) * 1024 * 1024;
 const DOC_CONTEXT_MAX_CHARS = Number(process.env.PT_DOC_CONTEXT_CHARS || 100000);
-const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx"]);
+const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx", "pdf"]);
 const DOCX_UPLOAD_MAX_BYTES=20*1024*1024;
 
 // ---- 视频/音频上传（mp4/webm/mov/mp3/wav/m4a；单文件上限默认 50MB，PT_MEDIA_UPLOAD_MB 覆盖）----
@@ -564,7 +564,7 @@ async function docsToNote(urls, tenantId, evidence = [], { maxChars = DOC_CONTEX
     if (!match || match[1] !== tenantId) throw fail("DOCUMENT_SCOPE_INVALID");
     const filename = match[2];
     const absolute = path.join(dir, filename);
-    const byteLimit=['.docx','.xlsx','.pptx'].includes(path.extname(filename).toLowerCase())?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
+    const byteLimit=['.docx','.xlsx','.pptx','.pdf'].includes(path.extname(filename).toLowerCase())?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
     let bytes;
     try {
       const directory = fs.lstatSync(dir), stat = fs.lstatSync(absolute);
@@ -593,7 +593,7 @@ async function docsToNote(urls, tenantId, evidence = [], { maxChars = DOC_CONTEX
     const header = "\n\nDOCUMENT ref=" + JSON.stringify(ref) + "; sha256=" + sha256 + "\n";
     const remaining = maxChars - note.length - header.length - footerReserve;
     if (remaining <= 0) { omittedDocuments++; continue; }
-    if(['.docx','.xlsx','.pptx'].includes(path.extname(filename).toLowerCase())){
+    if(['.docx','.xlsx','.pptx','.pdf'].includes(path.extname(filename).toLowerCase())){
       const format=path.extname(filename).slice(1).toLowerCase();
       const parsed=await parseOfficeDocument({bytes,format,signal,timeoutMs:Math.max(1,Math.floor(Math.min(10000,contextDeadline-performance.now())))});
       const coverageHash=format==='docx'?buildDocxEvidenceIndex({tenantId,documentId:filename,sourceSha256:sha256,blocks:parsed.blocks}).summary.coverageHash:crypto.createHash('sha256').update(JSON.stringify({format,sourceSha256:sha256,blocks:parsed.blocks})).digest('hex');
@@ -606,7 +606,7 @@ async function docsToNote(urls, tenantId, evidence = [], { maxChars = DOC_CONTEX
       const parsedChars=parsed.blocks.reduce((sum,b)=>sum+b.text.length,0),truncated=shownBlocks<parsed.blocks.length||shownChars<parsedChars;
       note+=header+format.toUpperCase()+'_UNTRUSTED_EXTRACT; locator='+(format==='docx'?'extracted-text-block-not-original-page':parsed.locatorKind)+'; warnings='+parsed.warningCount+(parsed.limitations?'\nLIMITATIONS '+parsed.limitations:'')+excerpt+
         `\n${format.toUpperCase()}_COVERAGE blocks=${shownBlocks}/${parsed.blocks.length}; chars=${shownChars}/${parsedChars}; truncated=${truncated}`;
-      sources.push({kind:format,ref,sha256,extractor:format==='docx'?'mammoth@1.13.0':'ooxml-structured-text@1',locatorKind:parsed.locatorKind,limitations:parsed.limitations||null,coverageHash,characterUnit:'utf16-code-unit-blocks-concatenated-without-separators',totalBlocks:parsed.blocks.length,shownBlocks,shownChars,parsedChars,truncated,warningCount:parsed.warningCount});
+      sources.push({kind:format,ref,sha256,extractor:format==='pdf'?'pdfjs-dist@6.5.438':format==='docx'?'mammoth@1.13.0':'ooxml-structured-text@1',locatorKind:parsed.locatorKind,limitations:parsed.limitations||null,coverageHash,characterUnit:'utf16-code-unit-blocks-concatenated-without-separators',totalBlocks:parsed.blocks.length,shownBlocks,shownChars,parsedChars,truncated,warningCount:parsed.warningCount});
     }else if (path.extname(filename).toLowerCase() === ".csv") {
       const source = buildCsvSource({ bytes, ref, limits: { maxBytes: DOC_UPLOAD_MAX_BYTES } });
       // Reserve a bounded prefix for column evidence before the literal cells.
@@ -2301,21 +2301,21 @@ async function handle(req, res) {
       const fmt = (u.searchParams.get("fmt") || "md").toLowerCase();
       const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
       const shortId = String(conv.id).slice(0, 8);
-      if (fmt === 'docx') {
+      if (fmt === 'docx'||fmt==='pdf') {
         const controller = new AbortController();
         const cancel = () => controller.abort();
         res.once('close', cancel);
         try {
-          const result = await exportConversationDocx({conversation: conv, signal: controller.signal});
+          const result = await (fmt==='pdf'?exportConversationPdf:exportConversationDocx)({conversation: conv, signal: controller.signal});
           if (res.destroyed) return;
           res.setHeader('X-Content-SHA256', result.sha256);
           res.setHeader('X-Export-Source-SHA256', result.sourceSha256);
           res.setHeader('X-Content-Type-Options', 'nosniff');
-          return exportResponse(res, 'conversation-' + shortId + '-' + stamp + '.docx', result.bytes, result.mime);
+          return exportResponse(res, 'conversation-' + shortId + '-' + stamp + '.' + fmt, result.bytes, result.mime);
         } catch (error) {
           if (res.destroyed) return;
           const code = /^DOCUMENT_EXPORT_[A-Z_]+$/.test(error.code || '') ? error.code : 'DOCUMENT_EXPORT_FAILED';
-          return json(res, code === 'DOCUMENT_EXPORT_BUSY' ? 503 : 400, {ok: false, code, error: 'Word 导出失败：对话内容超限、格式不受支持或解析繁忙，请稍后重试。'});
+          return json(res, code === 'DOCUMENT_EXPORT_BUSY' ? 503 : 400, {ok: false, code, error: '文档导出失败：对话内容超限、格式不受支持或解析繁忙，请稍后重试。'});
         } finally { res.removeListener('close', cancel); }
       }
       if (fmt === "json") {
@@ -2360,7 +2360,7 @@ async function handle(req, res) {
       const conversation=await conversations.get(me.user.id,conversationId);if(!conversation)return json(res,404,{ok:false,code:'NOT_FOUND'});
       let imported=0;for(const message of conversation.messages){for(const evidence of message.documentEvidence||[]){
         if(imported>=8)break;if(await sources.byRef(identity,evidence.ref))continue;
-        const format=path.extname(evidence.ref).slice(1);if(!['txt','md','csv','docx','xlsx','pptx'].includes(format))continue;
+        const format=path.extname(evidence.ref).slice(1);if(!['txt','md','csv','docx','xlsx','pptx','pdf'].includes(format))continue;
         await sources.register(identity,{ref:evidence.ref,sha256:evidence.sha256,size:evidence.size,format,name:path.basename(evidence.ref)});imported++;
       }}
     }
@@ -2563,18 +2563,18 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
     // 扩展名白名单（先粗筛，最终以内容解码为准）
     const ext = path.extname(String(rawName).trim()).slice(1).toLowerCase();
     if (!DOC_EXT_WHITELIST.has(ext)) {
-      return json(res, 400, { ok: false, error: "支持 .txt / .md / .csv / .docx / .xlsx / .pptx；旧版 .doc / .xls / .ppt 暂未接入。" });
+      return json(res, 400, { ok: false, error: "支持 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf；旧版 .doc / .xls / .ppt 暂未接入。" });
     }
     if (!buf.length) return json(res, 400, { ok: false, error: "文档数据无效" });
-    const uploadLimit=['docx','xlsx','pptx'].includes(ext)?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
+    const uploadLimit=['docx','xlsx','pptx','pdf'].includes(ext)?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
     if (buf.length > uploadLimit) {
       return json(res, 400, { ok: false, error: "文档过大（单文件上限 " + Math.round(uploadLimit / 1048576) + "MB）" });
     }
     // 按内容判断是否纯文本（不看扩展名）：UTF-8 严格解码，NUL/非法字节一律拒绝
     let text,office;
-    if(['docx','xlsx','pptx'].includes(ext)){
+    if(['docx','xlsx','pptx','pdf'].includes(ext)){
       try{office=await parseOfficeDocument({bytes:buf,format:ext});text=office.text;}
-      catch(error){return json(res,error.code==='OFFICE_PARSER_BUSY'?503:400,{ok:false,code:error.code||'OFFICE_PARSE_FAILED',error:error.code==='OFFICE_PARSER_BUSY'?'文档解析繁忙，请稍后重试。':'Office文档解析失败、含不支持内容或超过资源限制。'});}
+      catch(error){return json(res,error.code==='OFFICE_PARSER_BUSY'?503:400,{ok:false,code:error.code||'OFFICE_PARSE_FAILED',error:error.code==='OFFICE_PARSER_BUSY'?'文档解析繁忙，请稍后重试。':error.code==='OFFICE_PDF_OCR_REQUIRED'?'此 PDF 没有可提取的文字层，需要先进行 OCR 识别。':'文档解析失败、含不支持内容或超过资源限制。'});}
     }else text = decodeTextBuffer(buf);
     if (text == null) return json(res, 400, { ok: false, error: "不是有效的纯文本文件" });
     if (ext === "csv") {

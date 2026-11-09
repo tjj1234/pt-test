@@ -1148,3 +1148,7 @@ Context阻断证据提交f186f34后继续独立XLSX链，不等待其他包。�
 
 ### 2026-11-05：R30已部署待QA，用户要求总结后/new
 唯一恢复入口docs/refactor/HANDOFF-20261105-R30-QA-AND-PENDING-REVIEWS.md。R30已实际切换，PID339125、217源码/公网健康核实，273Run/29迁移备份隔离恢复通过；Bug-12降级，独立QA未完成。第二批Bug d3325a4待分诊，Gemini88dd344(23/23作者自测)待主审，不混线。部署误检查/app.js401触发回滚的主程责任及后续门禁已入PROJECT-REVIEW-LESSONS.md；实际正确路径/assets/app.js。无后台测试/部署/付费任务，当前主线仍bbd9997且脏工作保留，不重复部署或清理他人工作。等待用户/new后按交接队列恢复。
+
+
+## 2026-11-09 R34 deadline execution: PDF slice
+本地PDF文字层输入/页码引用/资料检索及中文PDF会话导出已接入，18/18同版回归、实际中文渲染核验通过。详见 evidence/R34-PDF-INTEGRATION-20261109.md。OCR与通用结构化工具未完成，不标02/03全通过；生产未变。新031扩展来源格式，DSH信任清单只更新lock SHA。继续ACL受控修复及05/06共享接线。

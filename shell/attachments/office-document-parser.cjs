@@ -4,7 +4,7 @@ const fail=code=>Object.assign(new Error('Office document could not be parsed'),
 let activeWorkers=0;
 function parseOfficeDocument({bytes,format,signal,timeoutMs=10000}={}){
  if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>20*1024*1024)return Promise.reject(fail('OFFICE_INPUT_LIMIT'));
- if(!['docx','xlsx','pptx'].includes(format))return Promise.reject(fail('OFFICE_FORMAT_UNSUPPORTED'));
+ if(!['docx','xlsx','pptx','pdf'].includes(format))return Promise.reject(fail('OFFICE_FORMAT_UNSUPPORTED'));
  if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>15000)return Promise.reject(fail('OFFICE_LIMIT_INVALID'));
  if(signal?.aborted)return Promise.reject(fail('OFFICE_CANCELLED'));
  if(activeWorkers>=2)return Promise.reject(fail('OFFICE_PARSER_BUSY'));

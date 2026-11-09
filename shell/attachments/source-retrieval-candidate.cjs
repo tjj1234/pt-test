@@ -42,7 +42,7 @@ const REGEX = Object.freeze({
   TENANT_ID: /^[a-zA-Z0-9_-]{1,128}$/,
   DOCUMENT_ID: /^[a-zA-Z0-9_./-]{1,256}$/,
   SHA256_HEX: /^[0-9a-f]{64}$/i,
-  SUPPORTED_FORMATS: /^(docx|xlsx|pptx|csv|txt|markdown)$/,
+  SUPPORTED_FORMATS: /^(docx|xlsx|pptx|pdf|csv|txt|markdown)$/,
 });
 
 function fail(code, message) {
@@ -99,6 +99,10 @@ function computeCoverageHash({ tenantId, documentId, sourceSha256, version, form
  * 校验块定位器并规范化
  */
 function normalizeLocator(rawLocator, format, blockIndex) {
+  if(format==='pdf'){
+    if(!rawLocator||!Number.isSafeInteger(rawLocator.page)||rawLocator.page<1||rawLocator.page>200)throw fail('LOCATOR_INVALID','PDF requires a real page locator');
+    return {kind:'pdf-page',page:rawLocator.page};
+  }
   if (format === 'docx') {
     // DOCX 必须明确声明不是页码
     return {
@@ -287,7 +291,7 @@ function buildSourceIndex({
     sourceSha256: normSha256,
     format: normFormat,
     locatorKind:
-      normFormat === 'docx'
+      normFormat === 'pdf' ? 'pdf-page' : normFormat === 'docx'
         ? 'extracted-text-block-not-page'
         : normFormat === 'xlsx'
         ? 'sheet-cell-raw-value'

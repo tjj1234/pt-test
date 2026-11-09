@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import crypto from 'node:crypto';import {spawn} from 'node:child_process';import {createServer} from 'node:net';import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url),shellRequire=createRequire(new URL('../../shell/package.json',import.meta.url));
 const {createStorage}=require('../../shell/storage/index.cjs');const root=path.resolve('.'),sha=x=>crypto.createHash('sha256').update(x).digest('hex');
-test('same-version Office upload reaches native DSH, completes its Run, exports Word and reopens history',{timeout:40000},async()=>{
+test('same-version Office/PDF upload reaches native DSH, exports Word/PDF and reopens owned history',{timeout:40000},async()=>{
  const temp=fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()),'office-http-sdk-')),runtime=path.join(temp,'runtime'),dataDir=path.join(temp,'db'),masterKeyFile=path.join(temp,'key'),trace=path.join(temp,'trace'),pid=path.join(temp,'pid');
  let storage,child,logs='';
  try{
@@ -21,7 +21,7 @@ const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[
 ctx.provide('loader',{await:async()=>{}});ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-office'})});ctx.provide('appExit',code=>process.exit(code));
 class Adapter extends LlmAdapter{
  async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:['text','image']};}
- async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');const office=text.includes('XLSX_UNTRUSTED_EXTRACT')||text.includes('PPTX_UNTRUSTED_EXTRACT');if(!office)throw Error('Office source did not reach native request');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({office,xlsx:text.includes('编号00123中文'),pptx:text.includes('中文演示第一段')})+'\\n');yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:'OFFICE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
+ async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');const office=text.includes('XLSX_UNTRUSTED_EXTRACT')||text.includes('PPTX_UNTRUSTED_EXTRACT')||text.includes('PDF_UNTRUSTED_EXTRACT');if(!office)throw Error('Office source did not reach native request');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({office,xlsx:text.includes('编号00123中文'),pptx:text.includes('中文演示第一段'),pdf:text.includes('PDF original page 2')})+'\\n');yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:'OFFICE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
 }
 ctx.llm.registerAdapter(['fixture'],new Adapter());fs.writeFileSync(${JSON.stringify(pid)},String(process.pid));const {apply}=await import(pathToFileURL(path.join(process.env.DSH_HOME,'profiles/run-persistent/persistent-runner.mjs')));apply(ctx);
 `);
@@ -43,7 +43,10 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
   const {spreadsheet,presentation}=require('../helpers/office-structured-fixtures.cjs');
   const conversationId=(await json('/api/conversations',{method:'POST'})).id;
   await json('/api/models/select',{method:'POST',body:{conversationId,model:'fixture-office'}});
-  for(const [format,bytes] of [['xlsx',spreadsheet()],['pptx',presentation()]]){
+  const PDF=shellRequire('pdfkit'),pdf=new PDF(),parts=[];
+  const pdfBytes=new Promise((resolve,reject)=>{pdf.on('data',b=>parts.push(b));pdf.on('end',()=>resolve(Buffer.concat(parts)));pdf.on('error',reject);});
+  pdf.text('PDF original page 1');pdf.addPage().text('PDF original page 2');pdf.end();
+  for(const [format,bytes] of [['xlsx',spreadsheet()],['pptx',presentation()],['pdf',await pdfBytes]]){
    const upload=await json('/api/upload-doc',{method:'POST',body:{name:'source.'+format,data:bytes.toString('base64')}});
    const response=await req('/api/chat',{method:'POST',body:{conversationId,message:'Read the supplied Office source',documents:[upload.url]}});
    const text=await response.text();assert.match(text,/OFFICE_CHAIN_OK/,text+logs);
@@ -57,14 +60,26 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
    assert.equal(budget?.payload?.snapshot?.modelCalls,1);assert.equal(budget?.payload?.snapshot?.toolCalls,0);
   }
   const calls=fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(calls.length,2);assert.ok(calls.every(c=>c.office));assert.equal(calls[0].xlsx,true);assert.equal(calls[1].pptx,true);
+  assert.equal(calls.length,3);assert.ok(calls.every(c=>c.office));assert.equal(calls[0].xlsx,true);assert.equal(calls[1].pptx,true);assert.equal(calls[2].pdf,true);
   const history=(await json('/api/conversations/'+conversationId)).conversation.messages;
-  assert.equal(history.filter(m=>m.role==='assistant'&&m.text==='OFFICE_CHAIN_OK').length,2);
+  assert.equal(history.filter(m=>m.role==='assistant'&&m.text==='OFFICE_CHAIN_OK').length,3);
   const exported=await req('/api/conversations/'+conversationId+'/export?fmt=docx');assert.equal(exported.status,200);
   const bytes=Buffer.from(await exported.arrayBuffer());assert.equal(sha(bytes),exported.headers.get('x-content-sha256'));
   const {parseOfficeDocument}=require('../../shell/attachments/office-document-parser.cjs');
   assert.ok((await parseOfficeDocument({bytes,format:'docx'})).text.includes('OFFICE_CHAIN_OK'));
   assert.equal((await req('/api/conversations/'+conversationId+'/export?fmt=docx',{user:1})).status,404);
+  const pdfResponse=await req('/api/conversations/'+conversationId+'/export?fmt=pdf');assert.equal(pdfResponse.status,200,await pdfResponse.clone().text());
+  assert.equal(pdfResponse.headers.get('content-type'),'application/pdf');
+  const pdfExport=Buffer.from(await pdfResponse.arrayBuffer());assert.equal(sha(pdfExport),pdfResponse.headers.get('x-content-sha256'));
+  assert.ok((await parseOfficeDocument({bytes:pdfExport,format:'pdf'})).text.includes('OFFICE_CHAIN_OK'));
+  assert.equal((await req('/api/conversations/'+conversationId+'/export?fmt=pdf',{user:1})).status,404);
+  const allSources=(await json('/api/sources')).sources;
+  const pdfSource=allSources.find(s=>s.format==='pdf');assert.ok(pdfSource);
+  const found=await json('/api/sources/search',{method:'POST',body:{sourceIds:[pdfSource.id],query:'original'}});
+  assert.ok(found.results.some(hit=>hit.locator.kind==='pdf-page'&&hit.locator.page===2));
+  assert.equal((await req('/api/sources/search',{user:1,method:'POST',body:{sourceIds:[pdfSource.id],query:'original'}})).status,404);
+
+
 
  }finally{
   if(child&&child.exitCode===null){const end=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await end;}

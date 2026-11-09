@@ -3,7 +3,12 @@ const {parentPort,workerData}=require('node:worker_threads');
 const {inspectOfficeZip}=require('./office-zip-guard.cjs');
 (async()=>{
  try{
-  const bytes=Buffer.from(workerData.bytes),archive=inspectOfficeZip(bytes);
+  const bytes=Buffer.from(workerData.bytes);
+  if(workerData.format==='pdf'){
+   const result=await require('./pdf-text-parser.cjs').extractPdfText(bytes);
+   parentPort.postMessage({ok:true,result});return;
+  }
+  const archive=inspectOfficeZip(bytes);
   if(['xlsx','pptx'].includes(workerData.format)){
    const result=require('./ooxml-structured-text.cjs').extractStructuredOffice(bytes,workerData.format,archive);
    parentPort.postMessage({ok:true,result});return;

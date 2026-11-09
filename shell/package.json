@@ -40,6 +40,8 @@
     "koffi": "3.3.3",
     "mammoth": "1.13.0",
     "nodemailer": "^6.10.1",
+    "pdfjs-dist": "6.5.438",
+    "pdfkit": "0.20.2",
     "pg": "8.23.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
