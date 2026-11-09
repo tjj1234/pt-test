@@ -1,0 +1,5 @@
+REPRODUCED DNS outside request deadline: pending after 40ms with timeoutMs=5
+REPRODUCED deadline settles wrapper but supplies no aborted backend signal
+REPRODUCED customFetcher HTTP 500 accepted as ok=true
+REPRODUCED constructor maxBytes=Infinity bypasses 10MB hard cap
+ZERO NETWORK; synthetic backend; all pending fixture promises released
