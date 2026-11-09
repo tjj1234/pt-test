@@ -1,0 +1,23 @@
+"use strict";
+const assert = require("node:assert/strict");
+const {createWebResearcher} = require(process.env.WEB04_REVIEW_MODULE);
+const input={runId:"r",tenantId:"t",url:"https://safe.example",timeoutMs:5};
+(async()=>{
+ let releaseDns;
+ const dns=createWebResearcher({trustedDomains:["safe.example"],customDnsResolver:()=>new Promise(r=>releaseDns=r),customFetcher:async()=>({content:"x"})});
+ const pending=dns.fetchPage(input);
+ const result=await Promise.race([pending.then(()=>"SETTLED"),new Promise(r=>setTimeout(()=>r("PENDING_AFTER_40MS"),40))]);
+ assert.equal(result,"PENDING_AFTER_40MS"); releaseDns(["8.8.8.8"]);await pending;
+ console.log("REPRODUCED DNS outside request deadline: pending after 40ms with timeoutMs=5");
+ let backendSignal,releaseBackend;
+ const timeout=createWebResearcher({trustedDomains:["safe.example"],customFetcher:({signal})=>{backendSignal=signal;return new Promise(r=>releaseBackend=r)}});
+ const timed=await timeout.fetchPage(input);assert.equal(timed.code,"FETCH_TIMEOUT");assert.ok(!backendSignal || !backendSignal.aborted);releaseBackend({content:"late"});
+ console.log("REPRODUCED deadline settles wrapper but supplies no aborted backend signal");
+ const status=createWebResearcher({trustedDomains:["safe.example"],customFetcher:async()=>({statusCode:500,content:"error body"})});
+ const failed=await status.fetchPage(input);assert.equal(failed.ok,true);
+ console.log("REPRODUCED customFetcher HTTP 500 accepted as ok=true");
+ const defaults=createWebResearcher({trustedDomains:["safe.example"],maxBytes:Infinity,customFetcher:async()=>({content:"a".repeat(11*1024*1024)})});
+ const large=await defaults.fetchPage({...input,timeoutMs:1000});assert.equal(large.ok,true);assert.ok(large.byteLength>10*1024*1024);
+ console.log("REPRODUCED constructor maxBytes=Infinity bypasses 10MB hard cap");
+ console.log("ZERO NETWORK; synthetic backend; all pending fixture promises released");
+})().catch(e=>{console.error(e);process.exitCode=1});

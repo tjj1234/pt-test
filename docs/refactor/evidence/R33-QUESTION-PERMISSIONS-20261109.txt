@@ -1,0 +1,5 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/r33-permission-52hEDS/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+REPRODUCED: admin migration marker present; runtime list permission denied 42501, ask STORE_UNAVAILABLE, no question card
+{"owners":[{"tablename":"agent_question_scopes","tableowner":"postgres"},{"tablename":"agent_run_questions","tableowner":"postgres"},{"tablename":"agent_runs","tableowner":"qa_runtime"}]}
+PASS: least privilege grants restore pending question, owned answer and durable terminal; no import-path or RPC rename change

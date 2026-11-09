@@ -1,0 +1,20 @@
+'use strict';
+const fs=require('node:fs'),os=require('node:os'),path=require('node:path'),assert=require('node:assert/strict');
+const root=process.env.R33_SOURCE_ROOT;if(!root)throw Error('R33_SOURCE_ROOT required');
+const {Pool}=require(process.env.PT_PG_LIB);const admin=new Pool({host:process.env.PT_PG_HOST,port:Number(process.env.PT_PG_PORT),user:'postgres',database:process.env.PT_PG_DATABASE});
+const {createStorage}=require(path.join(root,'shell/storage/index.cjs')),{createTaskStore}=require(path.join(root,'shell/tasks/store.cjs')),{createQuestionService}=require(path.join(root,'shell/questions/service.cjs')),dbmod=require(path.join(root,'shell/db.cjs'));
+(async()=>{const dir=fs.mkdtempSync(path.join(os.tmpdir(),'r33-permission-'));let storage;
+try{
+await admin.query('CREATE ROLE qa_runtime LOGIN');await admin.query('GRANT USAGE,CREATE ON SCHEMA public TO qa_runtime');
+const old=path.join(dir,'old-migrations');fs.mkdirSync(old);for(const f of fs.readdirSync(path.join(root,'shell/db-migrations')).filter(f=>f.endsWith('.sql')&&f!=='029_user_questions.sql'))fs.copyFileSync(path.join(root,'shell/db-migrations',f),path.join(old,f));
+process.env.PT_PG_USER='qa_runtime';const opts={dataDir:path.join(dir,'unused'),masterKeyFile:path.join(dir,'key'),migrationsDir:old};storage=await createStorage(opts);
+const user=(await storage.repositories.auth.register({username:'permission-fixture',password:'FixturePass123'})).user;const identity={userId:user.id,tenantId:user.tenant_id};const conv=await storage.repositories.conversations.create(identity.userId);const store=createTaskStore(storage.adapter);let {run}=await store.createRun(identity,{conversationId:conv.id,idempotencyKey:'fixture',policyVersion:'v1',request:{question:'fixture',attachments:[]}},{owner:'worker',ttlMs:60000});run=await store.transition(identity,run.runId,'running',run.revision,'worker');await storage.close();storage=null;
+process.env.PT_PG_USER='postgres';const opened=await dbmod.open({});await dbmod.migrate(opened.db,path.join(root,'shell/db-migrations'));await opened.close();
+process.env.PT_PG_USER='qa_runtime';storage=await createStorage({...opts,migrationsDir:path.join(root,'shell/db-migrations')});const service=createQuestionService({db:storage.db});
+const args={callId:'call-country',questions:[{id:'sea_country',question:'你计划优先投放哪个国家？',options:['印尼','泰国','越南']}]};
+await assert.rejects(service.list(identity,run.runId),{code:'42501'});await assert.rejects(service.ask({identity,runId:run.runId,leaseOwner:'worker',args}),{code:'STORE_UNAVAILABLE'});console.log('REPRODUCED: admin migration marker present; runtime list permission denied 42501, ask STORE_UNAVAILABLE, no question card');
+const owners=(await admin.query("SELECT tablename,tableowner FROM pg_tables WHERE schemaname='public' AND tablename IN ('agent_runs','agent_run_questions','agent_question_scopes') ORDER BY tablename")).rows;console.log(JSON.stringify({owners}));
+await admin.query('GRANT SELECT,INSERT,UPDATE ON agent_run_questions,agent_question_scopes TO qa_runtime');
+const promise=service.ask({identity,runId:run.runId,leaseOwner:'worker',args});let listed;for(let i=0;i<50;i++){listed=await service.list(identity,run.runId);if(listed.questions.length)break;await new Promise(r=>setTimeout(r,10));}assert.equal(listed.questions[0].status,'pending');
+await service.answer(identity,run.runId,'sea_country',{callId:'call-country',answer:{selected:['印尼']}});const result=await promise;assert.deepEqual(result.answers,[{id:'sea_country',selected:['印尼']}]);assert.equal((await service.list(identity,run.runId)).questions[0].status,'answered');console.log('PASS: least privilege grants restore pending question, owned answer and durable terminal; no import-path or RPC rename change');
+}finally{if(storage)await storage.close();await admin.end();fs.rmSync(dir,{recursive:true,force:true});}})().catch(e=>{console.error(e);process.exitCode=1});
