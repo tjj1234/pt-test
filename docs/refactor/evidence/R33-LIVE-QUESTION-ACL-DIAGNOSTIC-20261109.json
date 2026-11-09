@@ -1,0 +1,84 @@
+{
+  "evidenceOrigin": "user-executed SHA-verified read-only diagnostic; assistant independently read service metadata over restored SSH",
+  "script": "/tmp/pt-r33-readonly-20261109-6f751bc18e7b.cjs",
+  "scriptSha256": "6f751bc18e7b5a46d29583a39b15c870a4070dc5b27d20d20d221dcaf06ade21",
+  "service": {
+    "ActiveState": "active",
+    "SubState": "running",
+    "MainPID": "367662",
+    "NRestarts": "0",
+    "WorkingDirectory": "/opt/northstar/releases/controlled-trial-20261106-candidate-34-r33-questions-m1-draft/shell"
+  },
+  "sourcesMatched": 4,
+  "diagnostic": {
+    "scope": "R33_QUESTION_ACL_DIAGNOSTIC_ONLY",
+    "role": "northstar_app",
+    "database": "northstar",
+    "observedAt": "2026-11-09T08:54:07.205Z",
+    "runtimeSuperuser": false,
+    "schemaUsage": true,
+    "questionMigrationRecorded": true,
+    "tables": [
+      {
+        "table": "agent_runs",
+        "exists": true,
+        "owner": "northstar_app",
+        "rls": false,
+        "privileges": {
+          "SELECT": true,
+          "INSERT": true,
+          "UPDATE": true
+        }
+      },
+      {
+        "table": "agent_run_questions",
+        "exists": true,
+        "owner": "postgres",
+        "rls": false,
+        "privileges": {
+          "SELECT": false,
+          "INSERT": false,
+          "UPDATE": false
+        }
+      },
+      {
+        "table": "agent_question_scopes",
+        "exists": true,
+        "owner": "postgres",
+        "rls": false,
+        "privileges": {
+          "SELECT": false,
+          "INSERT": false,
+          "UPDATE": false
+        }
+      },
+      {
+        "table": "schema_migrations",
+        "exists": true,
+        "owner": "northstar_app",
+        "rls": false,
+        "privileges": {
+          "SELECT": true,
+          "INSERT": true,
+          "UPDATE": true
+        }
+      }
+    ],
+    "runs": [
+      {
+        "run_id": "58653c59-d6ad-49e2-8846-134bfaad1b0c",
+        "state": "failed",
+        "revision": 2
+      },
+      {
+        "run_id": "5db2efd9-02ee-4ce6-9052-723261f979a5",
+        "state": "failed",
+        "revision": 2
+      }
+    ],
+    "questionCounts": null,
+    "aclSufficient": false,
+    "conclusion": "ACL evidence only; does not prove complete historical RPC/model retry causality"
+  },
+  "productionMutations": []
+}
