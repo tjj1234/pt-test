@@ -296,6 +296,31 @@ function createTaskStore(db, opts = {}) {
     }); }
     catch (error) { if (error.code === "23505") throw fail("EVENT_ID_CONFLICT", "Event ID already exists"); throw error; }
   }
+  async function reserveModelRequest(identity, runId, owner, payload) {
+    c.assertContract("identity",identity); boundedText(owner,"lease owner",256);
+    c.fingerprint(payload);
+    const purpose=payload?.purpose || 'chat';
+    if(payload?.action!=='model_request_intent' || !['chat','compaction'].includes(purpose) ||
+       !Number.isSafeInteger(payload.turn) || payload.turn<0 || !Number.isSafeInteger(payload.step) || payload.step<0 ||
+       typeof payload.attemptId!=='string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(payload.attemptId) ||
+       typeof payload.selectedModel!=='string' || !payload.selectedModel.trim() || payload.selectedModel.length>256 || typeof payload.provider!=='string' || !payload.provider.trim() || payload.provider.length>256)throw fail('MODEL_INTENT_INVALID','Invalid model request intent');
+    return db.transaction(async tx=>{
+      const row=await owned(tx,identity,runId,true);
+      const lease=await tx.query("SELECT lease_owner,lease_expires_at>clock_timestamp() AS active FROM agent_runs WHERE run_id=$1",[runId]);
+      if(row.state!=='running' || lease.rows[0]?.lease_owner!==owner || !lease.rows[0]?.active)throw fail('LEASE_LOST','Model request Run is no longer active');
+      const unresolved=await tx.query("SELECT 1 FROM model_request_attempts WHERE run_id=$1 AND lease_owner<>$2 LIMIT 1",[runId,owner]);
+      if(unresolved.rows.length)throw fail('MODEL_ATTEMPT_RECOVERY_REQUIRED','A previous worker may have submitted; automatic recovery denied');
+      const prior=await tx.query("SELECT attempt_id FROM model_request_attempts WHERE run_id=$1 AND ((purpose=$2 AND turn=$3 AND step=$4) OR attempt_id=$5)",[runId,purpose,payload.turn,payload.step,payload.attemptId]);
+      // Never re-authorize an attempt after a lost RPC acknowledgement or process restart.
+      if(prior.rows.length)throw fail('MODEL_ATTEMPT_ALREADY_RESERVED','Prior submission may have started; automatic resubmission denied');
+      const total=await tx.query('SELECT count(*)::int AS count FROM model_request_attempts WHERE run_id=$1',[runId]);
+      if(total.rows[0].count>=100)throw fail('MODEL_INTENT_LIMIT','Run request limit reached');
+      const record={...payload,submission:'reserved_submission_unknown'};
+      await tx.query("INSERT INTO model_request_attempts(run_id,purpose,turn,step,attempt_id,signature,lease_owner,record) VALUES($1,$2,$3,$4,$5,$6,$7,$8::jsonb)",[runId,purpose,payload.turn,payload.step,payload.attemptId,c.fingerprint({purpose,turn:payload.turn,step:payload.step,model:payload.selectedModel,provider:payload.provider,parameters:payload.parameters}),owner,JSON.stringify(record)]);
+      await append(tx,row,{type:'state',payload:record,attemptId:payload.attemptId});
+      return {recorded:true};
+    });
+  }
   async function transition(identity, runId, next, expectedRevision, leaseOwner = null, options = {}) {
     return db.transaction(async (tx) => {
       const row = await owned(tx, identity, runId, true);
@@ -570,6 +595,6 @@ function createTaskStore(db, opts = {}) {
       await append(tx, row, { type, payload: { ...payload, state: row.state, reconciliation: row.reconciliation } });
     },
   });
-  return { createRun, getRun, getRunByIdempotencyKey, listRuns, eventsAfter, appendEvent, transition, acquireLease, renewLease, releaseLease, acquireConversationLease, renewConversationLease, releaseConversationLease, saveConversationMessages, recordExternalIntent, recordExternalTaskId, recordExternalSubmissionResult, listDueExternalReconciliations, claimExternalReconciliation, recordExternalReconciliation, recoverExpiredExternalReconciliationClaims, recoverInterrupted, recoverAllInterrupted, recoverExpiredLeases, claimReplayableQueuedRuns, externalOperations };
+  return { reserveModelRequest, createRun, getRun, getRunByIdempotencyKey, listRuns, eventsAfter, appendEvent, transition, acquireLease, renewLease, releaseLease, acquireConversationLease, renewConversationLease, releaseConversationLease, saveConversationMessages, recordExternalIntent, recordExternalTaskId, recordExternalSubmissionResult, listDueExternalReconciliations, claimExternalReconciliation, recordExternalReconciliation, recoverExpiredExternalReconciliationClaims, recoverInterrupted, recoverAllInterrupted, recoverExpiredLeases, claimReplayableQueuedRuns, externalOperations };
 }
 module.exports = { createTaskStore };

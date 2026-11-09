@@ -37,12 +37,13 @@ ctx.llm.registerAdapter(['powertokens'],new Adapter());fs.writeFileSync(${JSON.s
 if(parent?.filename.endsWith('/server.cjs')&&name==='./models/dsh-configured-catalog.cjs')return {...value,configuredModels:()=>['fixture-office','fixture-plain']};
 if(parent?.filename.endsWith('/server.cjs')&&name==='./model-catalog.cjs')return {...value,getCatalog:async opts=>{
 const {normalizePtRecord}=require(${JSON.stringify(path.join(root,'shell/models/capabilities.cjs'))});const scopeId=value.resolveScopeId(opts),at=new Date().toISOString(),prior=value.readScopedCache(scopeId);
-const models=['fixture-office','fixture-plain'].map(id=>normalizePtRecord({id,supported_tasks:['textChat','imageUnderstanding'],supported_endpoint_types:['openai-response'],input_modalities:['text','image'],output_modalities:['text']},{scopeId,observedAt:at,sourceVersion:'fixture',permission:true,localPolicy:{enabled:true,source:'fixture',version:'1',tasks:['textChat']},adaptations:{textChat:{adapterId:'fixture',version:'1',endpoint:'openai-chat-completions',source:'fixture'}},verifications:prior?.models.find(m=>m.id===id)?.verifications||{}})).map(model=>({...model,chat:model.tasks.textChat.value,kind:'chat',capabilityStatus:'supported',runtimeStatus:model.states.textChat.verified?'verified':'adapted_unverified'}));
+const models=['fixture-office','fixture-plain'].map(id=>normalizePtRecord({id,supported_tasks:['textChat','imageUnderstanding'],supported_endpoint_types:['openai-response'],input_modalities:['text','image'],output_modalities:['text']},{scopeId,observedAt:at,sourceVersion:'fixture',permission:true,localPolicy:{enabled:true,source:'fixture',version:'1',tasks:['textChat']},adaptations:{textChat:{adapterId:'fixture',version:'1',endpoint:'openai-chat-completions',source:'fixture'}},verifications:prior?.models.find(m=>m.id===id)?.verifications||{}})).map(model=>({...model,chat:model.tasks.textChat.value,kind:'chat',capabilityStatus:'supported',runtimeStatus:model.states.textChat.verified?'verified':'adapted_unverified',...(process.env.AUTO08_POLICY_TEST==='1'?{states:{...model.states,textChat:{...model.states.textChat,verified:true,autoEligible:true}}}:{})}));
 value.writeScopedCache(scopeId,{scopeId,models,lastSuccessfulAt:at,lastCompleteAt:null,nextSyncAt:null,syncFailureCount:0});
 return {models,scopeId,availability:{status:'available',modelIds:models.map(m=>m.id)},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts)};return value;};`);
   const profiles=path.join(runtime,'dsh-home/profiles');fs.mkdirSync(profiles,{recursive:true});fs.symlinkSync(path.join(root,'shell/node_modules'),path.join(profiles,'node_modules'),'dir');
-  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0'},stdio:['ignore','pipe','pipe']});
+  const auto08PolicyFile=path.join(temp,'auto08-policy.json');fs.writeFileSync(auto08PolicyFile,JSON.stringify({version:'fixture-auto08-v1',routes:{textChat:['fixture-office']}}));
+  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0',AUTO08_POLICY_TEST:process.env.AUTO08_POLICY_TEST||'',...(process.env.AUTO08_POLICY_TEST==='1'?{PT_AUTO08_ROUTE_CONFIG_FILE:auto08PolicyFile}:{})},stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',b=>logs+=b);child.stderr.on('data',b=>logs+=b);
   const req=(url,{user=0,method='GET',body}={})=>fetch('http://127.0.0.1:'+port+url,{method,headers:{Cookie:cookies[user],...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
   const json=async(url,opts)=>{const r=await req(url,opts);assert.equal(r.status,200,await r.clone().text());return r.json();};
@@ -83,6 +84,15 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
   assert.equal((await json('/api/runs/'+stoppedId+'/questions')).questions[0].status,'cancelled');
   assert.equal(calls().length,beforeStop,'cancelled clarification must not start another model request');
 
+  if(process.env.AUTO08_POLICY_TEST==='1'){
+    const autoConv=(await json('/api/conversations',{method:'POST'})).id;
+    await json('/api/models/select',{method:'POST',body:{conversationId:autoConv,model:'AUTO'}});
+    const autoResponse=await req('/api/chat',{method:'POST',body:{conversationId:autoConv,message:'Offline AUTO route fixture'}});
+    assert.equal(autoResponse.status,200,await autoResponse.clone().text());const autoRun=autoResponse.headers.get('x-agent-run-id');assert.match(await autoResponse.text(),/QUESTION_DISABLED_OK/);
+    const autoEvents=await json('/api/runs/'+autoRun+'/events?after=0&limit=200');
+    const selected=autoEvents.events.find(e=>e.payload?.action==='model_selection');assert.equal(selected.payload.resolvedModelId,'fixture-office');assert.equal(selected.payload.routePolicy.version,'fixture-auto08-v1');
+    const autoIntent=autoEvents.events.find(e=>e.payload?.action==='model_request_intent');assert.equal(autoIntent.payload.submission,'reserved_submission_unknown');assert.equal(autoIntent.payload.routeBinding.routePolicy.version,'fixture-auto08-v1');assert.match(autoIntent.payload.routeBinding.capabilityRevision,/^[a-f0-9]{64}$/);
+  }
   if(process.env.NORTHSTAR_QUESTIONS_BROWSER==='1'){
     const {chromium}=require(process.env.PLAYWRIGHT_CORE_PATH||'playwright-core');const browser=await chromium.launch({headless:true,channel:'chrome'});
     try{

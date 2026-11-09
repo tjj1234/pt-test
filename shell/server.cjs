@@ -32,6 +32,8 @@ const reviewedMediaCatalog = process.env.PT_MEDIA_REVIEW_FILE
   ? createReviewedMediaCatalogGetter({getCatalog:modelCatalog.getCatalog,readReviews:()=>readHostMediaReviews(process.env.PT_MEDIA_REVIEW_FILE)})
   : process.env.PT_MEDIA_GENERATION !== "off" ? async options => require("./models/standard-media-catalog.cjs").standardMediaCatalog(await modelCatalog.getCatalog(options)) : modelCatalog.getCatalog;
 const { routeTextTask, routeChatTask } = require("./models/task-router.cjs");
+const {readAutoRoutePolicy,routeWithPolicy}=require('./models/auto-route-policy.cjs');
+const autoRoutePolicy=readAutoRoutePolicy(process.env.PT_AUTO08_ROUTE_CONFIG_FILE);
 const {nativeImageCandidates}=require('./models/native-image-qualification.cjs');
 const {reviewedImageOverrides}=require('./models/reviewed-image-facts.cjs');
 const {parseOfficeDocument}=require('./attachments/office-document-parser.cjs');
@@ -215,12 +217,13 @@ function catalogInternalFallback(error, failureStage) {
 }
 
 function selectChatModel(catalog, requestedModelId, task='textChat') {
-  let routed = routeChatTask({
+  let routed = routeWithPolicy({
+    policy:autoRoutePolicy,
     candidates: task==='imageUnderstanding'?nativeImageCandidates(catalog):(catalog?.models || []), requirements: { task },
     selection: requestedModelId === modelCatalog.AUTO_ID ? { mode: "auto" } : { mode: "manual", modelId: requestedModelId },
     availability: catalog?.availability,
   });
-  if (!routed.ok && requestedModelId === modelCatalog.AUTO_ID && task === 'imageUnderstanding') {
+  if (!autoRoutePolicy && !routed.ok && requestedModelId === modelCatalog.AUTO_ID && task === 'imageUnderstanding') {
     const visionCandidates = nativeImageCandidates(catalog).filter(m => m.tasks?.imageUnderstanding?.value === true && m.availability === 'present' && m.permission === true);
     if (visionCandidates.length) {
       routed = routeChatTask({
@@ -879,7 +882,10 @@ async function handleChat(req, res, me, body, taskRun = null) {
   const routed=selectChatModel(cat,requestedModelId,understandsImages?'imageUnderstanding':'textChat');
   if(!routed.ok)return rejectChat(requestedModelId===modelCatalog.AUTO_ID?503:409,routeFailurePayload(routed,requestedModelId,understandsImages?'imageUnderstanding':'textChat'));
   const selectedModel=routed.resolvedModelId;
-  if(taskRun)await taskRun.emit('state',{action:'model_selection',requestedModelId,resolvedModelId:selectedModel,upstreamModelId:null,task:routed.task,reasoningEffort:taskRun?.modelSelection?.reasoningEffort ?? null});
+  const selectedCatalogModel=(understandsImages?nativeImageCandidates(cat):(cat.models||[])).find(m=>m.id===selectedModel);
+  const modelRouteBinding={catalogScope:cat.scopeId??null,capabilityRevision:selectedCatalogModel?.capabilityRevision??null,
+    routePolicy:routed.routePolicy??null};
+  if(taskRun)await taskRun.emit('state',{action:'model_selection',requestedModelId,resolvedModelId:selectedModel,upstreamModelId:null,task:routed.task,reasoningEffort:taskRun?.modelSelection?.reasoningEffort ?? null,...(routed.routePolicy?{routePolicy:routed.routePolicy}:{})});
 
   // 未绑 key 预检：先友好提示，不落库「悬空问题」
   let preKey = null;
@@ -1141,6 +1147,15 @@ async function handleChat(req, res, me, body, taskRun = null) {
   const hostToolHandler = createHostToolHandler({ registry: toolsRegistry, context: permCtx, mediaHandler: mediaRunHandler, csvHandler: csvRunHandler });
   const modelIntentHandler = taskRun ? createModelIntentHandler({
     priceStore: textPriceCatalogs, selectedModel, emit: taskRun.emit,
+    reserve: async payload => {
+      const fresh=await ensureModelCatalog(uid,{force:false});
+      const candidates=understandsImages?nativeImageCandidates(fresh):(fresh.models||[]);
+      const admitted=routeChatTask({candidates:candidates.filter(m=>m.id===selectedModel),requirements:{task:understandsImages?'imageUnderstanding':'textChat'},selection:routed.mode==='auto'?{mode:'auto'}:{mode:'manual',modelId:selectedModel},availability:fresh.availability});
+      const currentModel=candidates.find(m=>m.id===selectedModel);
+      if((fresh.scopeId??null)!==modelRouteBinding.catalogScope || (currentModel?.capabilityRevision??null)!==modelRouteBinding.capabilityRevision)throw Object.assign(Error('Model scope or revision changed'),{code:'MODEL_ROUTE_REVISION_CHANGED'});
+      if(!admitted.ok)throw Object.assign(Error('Selected model no longer eligible'),{code:'MODEL_ELIGIBILITY_CHANGED'});
+      return taskStore.reserveModelRequest({userId:uid,tenantId:me.tenant.id},taskRun.runId,taskRun.leaseOwner,{...payload,routeBinding:modelRouteBinding});
+    },
   }) : null;
 
   let r;

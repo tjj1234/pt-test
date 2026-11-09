@@ -4,7 +4,7 @@ const { fingerprint } = require('../contracts/phase1.cjs');
 const fail = code => Object.assign(new Error(code), { code });
 const RPC_NAME = 'northstar.model_request_intent';
 
-function createModelIntentHandler({ priceStore, selectedModel, emit }) {
+function createModelIntentHandler({ priceStore, selectedModel, emit, reserve }) {
   if (!priceStore || typeof priceStore.selectNow !== 'function' || typeof emit !== 'function') throw new TypeError('Model intent dependencies are required');
   const pending = new Map();
   async function handle(request) {
@@ -20,6 +20,7 @@ function createModelIntentHandler({ priceStore, selectedModel, emit }) {
     const existing = pending.get(requestId);
     if (existing) {
       if (existing.signature !== signature) throw fail('MODEL_INTENT_CONFLICT');
+      if(reserve)throw fail('MODEL_ATTEMPT_ALREADY_RESERVED');
       return existing.promise;
     }
     if (pending.size >= 100) throw fail('MODEL_INTENT_LIMIT');
@@ -28,13 +29,15 @@ function createModelIntentHandler({ priceStore, selectedModel, emit }) {
       const price = await priceStore.selectNow(selectedModel);
       if (signal?.aborted) throw fail('MODEL_INTENT_CANCELLED');
       // Persist the exact capture and rates before allowing the SDK request to proceed.
-      await emit('state', { action: 'model_request_intent', attemptId: requestId,
+      const payload = { action: 'model_request_intent', attemptId: requestId,
         requestedAt: price.requestedAt, selectedModel, provider: args.provider,
         turn: args.turn, step: args.step, ...(args.purpose?{purpose:args.purpose}:{}), parameters: { maxOutputTokens: args.maxTokens },
         parametersCoverage: 'partial', submission: 'intent_only',
         price: { catalogId: price.catalogId, sourceSha256: price.sourceSha256, snapshot: price.snapshot,
           coverage: price.coverage, reasonCode: price.reasonCode },
-      }, { attemptId: requestId });
+      };
+      if (reserve) await reserve(payload);
+      else await emit('state',payload,{attemptId:requestId});
       return { recorded: true };
     })();
     pending.set(requestId, { signature, promise });
