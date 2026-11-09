@@ -19,5 +19,16 @@ await storage.close();storage=await createStorage(opts);store=createTaskStore(st
 await storage.db.query("UPDATE agent_runs SET lease_expires_at=now()-interval '1 second' WHERE run_id=$1",[run.runId]);await store.acquireLease(idn,run.runId,'b',60000);
 await assert.rejects(store.reserveModelRequest(idn,run.runId,'a',{...payload,step:2,attemptId:randomUUID()}),{code:'LEASE_LOST'});
 await assert.rejects(store.reserveModelRequest(idn,run.runId,'b',{...payload,step:2,attemptId:randomUUID()}),{code:'MODEL_ATTEMPT_RECOVERY_REQUIRED'});
+if(process.env.PT_PG_DATABASE){
+ const slow=await mk('slow-lock'),newPayload={...payload,attemptId:randomUUID(),turn:8};let unlock,locked;
+ const acquired=new Promise(r=>locked=r),release=new Promise(r=>unlock=r);
+ const holder=storage.db.transaction(async tx=>{await tx.query("UPDATE agent_runs SET lease_expires_at=clock_timestamp()+interval '250 milliseconds' WHERE run_id=$1",[slow.runId]);locked();await release;});
+ await acquired;
+ const waiting=store.reserveModelRequest(idn,slow.runId,'a',newPayload);let rejected=assert.rejects(waiting,{code:'LEASE_LOST'});
+ let confirmed=false;for(let n=0;n<30;n++){const q=await storage.db.query("SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock'");if(q.rows[0].n){confirmed=true;break;}await new Promise(r=>setTimeout(r,10));}
+ await new Promise(r=>setTimeout(r,350));unlock();await holder;await rejected;assert(confirmed,'actual PostgreSQL waiter observed');
+ assert.equal((await storage.db.query('SELECT count(*)::int AS n FROM model_request_attempts WHERE run_id=$1',[slow.runId])).rows[0].n,0);
+ console.log('AUTO08_POSTGRES_LOCK_WAIT_PASS: held Run lock crossed lease expiry; no permit/event created');
+}
 const events=(await store.eventsAfter(idn,run.runId)).events.filter(e=>e.payload.action==='model_request_intent');assert.equal(events.length,2);assert(events.every(e=>e.payload.submission==='reserved_submission_unknown'));
 }finally{if(storage)await storage.close();fs.rmSync(tmp,{recursive:true,force:true});}});

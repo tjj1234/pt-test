@@ -1,0 +1,24 @@
+✖ model attempt authority fences duplicate RPCs, two owners, reopen and transactional failure (40.609833ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 75.926083
+
+✖ failing tests:
+
+test at tests/regression/auto08-attempt-authority-test.mjs:3:1
+✖ model attempt authority fences duplicate RPCs, two owners, reopen and transactional failure (40.609833ms)
+  Error: PostgreSQL connection failed
+      at Object.openPg (/private/tmp/pt-auto08-integration-20261109/shell/db-pg.cjs:120:25)
+      at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+      at async initAuth (/private/tmp/pt-auto08-integration-20261109/shell/auth.cjs:86:25)
+      at async createStorage (/private/tmp/pt-auto08-integration-20261109/shell/storage/index.cjs:35:16)
+      at async TestContext.<anonymous> (file:///private/tmp/pt-auto08-integration-20261109/tests/regression/auto08-attempt-authority-test.mjs:4:85)
+      at async Test.run (node:internal/test_runner/test:1125:7)
+      at async startSubtestAfterBootstrap (node:internal/test_runner/harness:358:3) {
+    code: 'PG_CONNECTION_FAILED'
+  }

@@ -1,0 +1,390 @@
+{"archiveSha256":"70361b6ed893ae440650e3d7dce37058efa0633ea7f1b8f936b91026d359ee5d","node":"v22.23.4","platform":"linux","arch":"x64"}
+npm warn deprecated node-domexception@1.0.0: Use your platform's native DOMException instead
+npm warn deprecated glob@10.5.0: Old versions of glob are not supported, and contain widely publicized security vulnerabilities, which have been fixed in the current version. Please update. Support for old versions may be purchased (at exorbitant rates) by contacting i@izs.me
+
+added 643 packages in 1m
+npm notice
+npm notice New major version of npm available! 10.9.9 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
+{
+  "result": "PASS",
+  "target": {
+    "platform": "linux",
+    "arch": "x64",
+    "gate": "enforced"
+  },
+  "packageCount": 495,
+  "fileCount": 31007,
+  "arborist": "8.0.5",
+  "packageLockSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+  "generatedWithNode": "v22.23.4",
+  "checkedWithNode": "v22.23.4"
+}
+TAP version 13
+# Subtest: Bug-10: CSP allows same-origin iframe embedding and prevents third-party clickjacking
+ok 1 - Bug-10: CSP allows same-origin iframe embedding and prevents third-party clickjacking
+  ---
+  duration_ms: 4.66725
+  type: 'test'
+  ...
+# Subtest: Bug-05 & Bug-09: inferMediaTaskType correctly detects media intent
+ok 2 - Bug-05 & Bug-09: inferMediaTaskType correctly detects media intent
+  ---
+  duration_ms: 6.162791
+  type: 'test'
+  ...
+# Subtest: Bug-05 & Bug-09: get_current_time is exempt from tool call limits
+ok 3 - Bug-05 & Bug-09: get_current_time is exempt from tool call limits
+  ---
+  duration_ms: 0.772
+  type: 'test'
+  ...
+# Subtest: Bug-08: Clipboard file paste filter supports images, docs and media
+ok 4 - Bug-08: Clipboard file paste filter supports images, docs and media
+  ---
+  duration_ms: 8.29375
+  type: 'test'
+  ...
+# Subtest: Bug-17: Empty text with image attachment is accepted and given a fallback question
+ok 5 - Bug-17: Empty text with image attachment is accepted and given a fallback question
+  ---
+  duration_ms: 2.06025
+  type: 'test'
+  ...
+# Subtest: Bug-01: Run draining allows cancelled/transitioned runs without throwing Run not drained
+ok 6 - Bug-01: Run draining allows cancelled/transitioned runs without throwing Run not drained
+  ---
+  duration_ms: 0.518916
+  type: 'test'
+  ...
+# Subtest: Bug-20: AUTO mode resolves to qualified vision model (qwen3.8-flash) for imageUnderstanding
+ok 7 - Bug-20: AUTO mode resolves to qualified vision model (qwen3.8-flash) for imageUnderstanding
+  ---
+  duration_ms: 37.1685
+  type: 'test'
+  ...
+# Subtest: Bug-16 & Bug-18: standardMediaCatalog qualifies wan2.7-t2v and seedream-5-0-260128 for media tasks
+ok 8 - Bug-16 & Bug-18: standardMediaCatalog qualifies wan2.7-t2v and seedream-5-0-260128 for media tasks
+  ---
+  duration_ms: 5.742167
+  type: 'test'
+  ...
+# Subtest: Bug-19: Media candidates filtering logic for media authorization modal
+ok 9 - Bug-19: Media candidates filtering logic for media authorization modal
+  ---
+  duration_ms: 1.238208
+  type: 'test'
+  ...
+# Subtest: Batch 4 Bug-03: task store listRuns orders by created_at DESC and paginates without loss
+ok 10 - Batch 4 Bug-03: task store listRuns orders by created_at DESC and paginates without loss
+  ---
+  duration_ms: 73.964791
+  type: 'test'
+  ...
+# Subtest: Batch 4 Bug-04: GET /api/models and model select do not force sync unconditionally
+ok 11 - Batch 4 Bug-04: GET /api/models and model select do not force sync unconditionally
+  ---
+  duration_ms: 4.470375
+  type: 'test'
+  ...
+# Subtest: Batch 4 Bug-13 & Bug-14: runner evicts poisoned agent session on failure and server closes session
+ok 12 - Batch 4 Bug-13 & Bug-14: runner evicts poisoned agent session on failure and server closes session
+  ---
+  duration_ms: 5.130084
+  type: 'test'
+  ...
+# Subtest: Batch 4 Bug-12 & Bug-07: HTML code block materialization & persona upload constraints
+ok 13 - Batch 4 Bug-12 & Bug-07: HTML code block materialization & persona upload constraints
+  ---
+  duration_ms: 5.09975
+  type: 'test'
+  ...
+# Subtest: Bug-2.6: Toolbar button aria-pressed active styling is present in styles.css
+ok 14 - Bug-2.6: Toolbar button aria-pressed active styling is present in styles.css
+  ---
+  duration_ms: 28.327875
+  type: 'test'
+  ...
+# Subtest: Bug-2.8: Memory scope checks activeId, guards against missing conversationId, and prevents silent scope expansion
+ok 15 - Bug-2.8: Memory scope checks activeId, guards against missing conversationId, and prevents silent scope expansion
+  ---
+  duration_ms: 10.801125
+  type: 'test'
+  ...
+# Subtest: Bug-2.4: Chat submission maps SKILL_NOT_AVAILABLE with friendly notice, marks unavailable without silent unbinding
+ok 16 - Bug-2.4: Chat submission maps SKILL_NOT_AVAILABLE with friendly notice, marks unavailable without silent unbinding
+  ---
+  duration_ms: 12.780959
+  type: 'test'
+  ...
+# Subtest: real DSH CLI boots isolated run-persistent profile and reaches runner ready without model calls
+ok 17 - real DSH CLI boots isolated run-persistent profile and reaches runner ready without model calls
+  ---
+  duration_ms: 3053.385251
+  type: 'test'
+  ...
+# Subtest: native pinned launcher records the final selected model before both warm-session requests
+ok 18 - native pinned launcher records the final selected model before both warm-session requests
+  ---
+  duration_ms: 7623.777254
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/memory-provenance-PiPhas/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: memory host confirmation scope source lifecycle and failed cleanup survive database reopen
+ok 19 - memory host confirmation scope source lifecycle and failed cleanup survive database reopen
+  ---
+  duration_ms: 7575.545295
+  type: 'test'
+  ...
+# Subtest: native DSH web_search honors explicit Run admission and warm policy revocation
+ok 20 - native DSH web_search honors explicit Run admission and warm policy revocation
+  ---
+  duration_ms: 1035.268043
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/questions-authority-BLrt3R/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: production question authority: scope, transactions, deadline, workers and cleanup
+    # Subtest: another worker answers; original waiter follows DB terminal
+    ok 1 - another worker answers; original waiter follows DB terminal
+      ---
+      duration_ms: 198.347333
+      type: 'test'
+      ...
+    # Subtest: same question IDs across Runs are independent and foreign owner cannot read
+    ok 2 - same question IDs across Runs are independent and foreign owner cannot read
+      ---
+      duration_ms: 154.201542
+      type: 'test'
+      ...
+    # Subtest: expiry persists; late answer is rejected and reopening retains timeout
+    ok 3 - expiry persists; late answer is rejected and reopening retains timeout
+      ---
+      duration_ms: 66.8975
+      type: 'test'
+      ...
+    # Subtest: cancel tombstone blocks later creation, without changing another Run
+    ok 4 - cancel tombstone blocks later creation, without changing another Run
+      ---
+      duration_ms: 35.509459
+      type: 'test'
+      ...
+    # Subtest: concurrent answer CAS has exactly one winner
+    ok 5 - concurrent answer CAS has exactly one winner
+      ---
+      duration_ms: 129.724959
+      type: 'test'
+      ...
+    # Subtest: host service uses durable owner API and closes approval early
+    ok 6 - host service uses durable owner API and closes approval early
+      ---
+      duration_ms: 148.918875
+      type: 'test'
+      ...
+    # Subtest: same ID across native calls is isolated; changed arguments conflict
+    ok 7 - same ID across native calls is isolated; changed arguments conflict
+      ---
+      duration_ms: 181.191334
+      type: 'test'
+      ...
+    # Subtest: completed Run and expired worker lease cannot accept answers
+    ok 8 - completed Run and expired worker lease cannot accept answers
+      ---
+      duration_ms: 283.633917
+      type: 'test'
+      ...
+    # Subtest: answer committed before cancellation remains the waiter terminal
+    ok 9 - answer committed before cancellation remains the waiter terminal
+      ---
+      duration_ms: 63.49825
+      type: 'test'
+      ...
+    # Subtest: storage outage fails closed without inventing a cancelled authority
+    ok 10 - storage outage fails closed without inventing a cancelled authority
+      ---
+      duration_ms: 56.350458
+      type: 'test'
+      ...
+    1..10
+ok 21 - production question authority: scope, transactions, deadline, workers and cleanup
+  ---
+  duration_ms: 8299.043128
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-zYrrsM/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: native questions cross owned HTTP, durable authority, reload and real SDK
+ok 22 - native questions cross owned HTTP, durable authority, reload and real SDK
+  ---
+  duration_ms: 10898.39163
+  type: 'test'
+  ...
+# Subtest: native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch
+ok 23 - native reasoning rejects unsupported effort atomically and cancels metadata before model dispatch
+  ---
+  duration_ms: 809.389751
+  type: 'test'
+  ...
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-qNDZbM/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: published Skill passes owned HTTP publication, durable Run pins and native skill loading
+ok 24 - published Skill passes owned HTTP publication, durable Run pins and native skill loading
+  ---
+  duration_ms: 11067.361713
+  type: 'test'
+  ...
+# Subtest: media consent never posts on render; only explicit selection and click submit the owned Run/model
+ok 25 - media consent never posts on render; only explicit selection and click submit the owned Run/model
+  ---
+  duration_ms: 131.651959
+  type: 'test'
+  ...
+# Subtest: pending authorization follows its conversation across repaint and cannot render in another conversation
+ok 26 - pending authorization follows its conversation across repaint and cannot render in another conversation
+  ---
+  duration_ms: 55.433958
+  type: 'test'
+  ...
+# Subtest: failed confirmation stays visible and never renders untrusted server errors
+ok 27 - failed confirmation stays visible and never renders untrusted server errors
+  ---
+  duration_ms: 42.509834
+  type: 'test'
+  ...
+# Subtest: refresh replay restores pending consent without submitting or calling a model
+ok 28 - refresh replay restores pending consent without submitting or calling a model
+  ---
+  duration_ms: 57.465791
+  type: 'test'
+  ...
+# 模型切换（B3）回归：
+# [1] loadModels：AUTO 置顶 + 能力/runtime状态显式
+#   ok   渲染出 9 个选项（AUTO + 8 个模型）
+#   ok   第一个是 AUTO
+#   ok   AUTO 文案含「智能选模型」
+#   ok   AUTO 默认选中
+#   ok   对话模型不带不可聊天后缀
+#   ok   视频模型标不支持聊天
+#   ok   视频模型标了类型
+#   ok   图片模型标了类型
+#   ok   语音模型标了类型
+#   ok   chat:null 显示能力未确认且禁用
+#   ok   未适配模型标状态并禁用
+#   ok   已获手动资格的适配模型可首调
+#   ok   removed 模型标下架并禁用
+#   ok   modelCaps 记了 8 个模型
+#   ok   modelCaps 里 seedance 不可聊
+#   ok   modelCaps 里对话模型可聊
+#   ok   Key缺失诊断明确且不暴露凭据
+#   ok   目录内部错误显示安全诊断码
+#   ok   目录状态unknown仍阻止请求并指向目录排障
+# [2] currentModelChat 四种情况
+#   ok   AUTO -> 可聊
+#   ok   已验证且可用的对话模型 -> 可聊
+#   ok   视频模型 -> 不可聊
+#   ok   语音模型 -> 不可聊
+#   ok   chat:null -> 不可执行
+#   ok   服务端准许手动首调的模型 -> 可聊
+#   ok   目录中查不到的模型 fail-closed
+#   ok   modelKindLabel
+# [3] runChat 守卫：选中不可聊天模型时不发请求
+#   ok   不可聊天模型：没有发出 /api/chat
+#   ok   给出了明确不可执行提示
+#   ok   能力未知/运行时未验证/下架模型均不发 chat
+#   ok   已获手动首调资格的模型发出一次 /api/chat
+#   ok   对话模型正常放行（发了 /api/chat）
+#   ok   AUTO 正常放行
+# [4] 切换模型时的提示与回退
+#   ok   选择生成类模型 -> 提示不可执行
+#   ok   无效模型选择未发送持久化请求
+#   ok   无效模型选择恢复到 AUTO
+#   ok   切回对话模型 -> 清掉提示
+# [5] AUTO 无候选展示服务端错误
+#   ok   AUTO 无候选呈现服务端原始错误
+#   ok   AUTO 错误后仍保持 AUTO
+# [6] 对话模型请求与异步回包隔离
+#   ok   模型未加载期间禁止发送
+#   ok   GET携带所属对话ID
+#   ok   A迟到响应不覆盖B模型
+#   ok   POST绑定发起时的对话ID（success）
+#   ok   模型选择未持久化前禁止发送（success）
+#   ok   A迟到success不污染B选择或提示
+#   ok   POST绑定发起时的对话ID（failure）
+#   ok   模型选择未持久化前禁止发送（failure）
+#   ok   A迟到failure不污染B选择或提示
+#   ok   同步失败明确进入可重试状态
+#   ok   发送可恢复目录但不会自动提交付费聊天
+# [7] 原生元数据推理档位与保存/回包隔离
+#   ok   仅显示原生档位并恢复已存偏好
+#   ok   档位保存绑定当前会话与模型
+#   ok   档位未保存前阻止发送
+#   ok   档位保存期间保留未发送文本
+#   ok   保存成功后采用已确认档位
+#   ok   保存失败保留已接受档位
+#   ok   旧会话元数据晚到不污染新会话
+# 模型切换（B3）回归：57 通过 / 57 项
+# Subtest: tests/regression/ui-model-switch-test.mjs
+ok 15 - tests/regression/ui-model-switch-test.mjs
+  ---
+  duration_ms: 6859.639587
+  type: 'test'
+  ...
+1..29
+# tests 39
+# suites 0
+# pass 39
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 12212.957422
+TAP version 13
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/auto08-authority-6BWpk4/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: model attempt authority fences duplicate RPCs, two owners, reopen and transactional failure
+ok 1 - model attempt authority fences duplicate RPCs, two owners, reopen and transactional failure
+  ---
+  duration_ms: 3394.120168
+  type: 'test'
+  ...
+# Subtest: host policy orders only eligible candidates, pins bytes, preserves manual and fails closed
+ok 2 - host policy orders only eligible candidates, pins bytes, preserves manual and fails closed
+  ---
+  duration_ms: 28.738875
+  type: 'test'
+  ...
+1..2
+# tests 2
+# suites 0
+# pass 2
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3738.648461
+TAP version 13
+# [安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/tmp/reasoning-http-sdk-ymUdWz/key
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+# Subtest: native questions cross owned HTTP, durable authority, reload and real SDK
+ok 1 - native questions cross owned HTTP, durable authority, reload and real SDK
+  ---
+  duration_ms: 6222.337878
+  type: 'test'
+  ...
+1..1
+# tests 1
+# suites 0
+# pass 1
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 6591.126503
+R34_EXACT_LINUX_VALIDATION_PASS

@@ -1,0 +1,22 @@
+[安全警告] 非 Windows：master key 以文件权限 0600 保护，请勿提交/共享该文件：/var/folders/r2/6qtmx0xj6hg83v8n5ydt_81m0000gn/T/auto08-intent-bdZovj/key
+B14 警告：PT_DASH_INTERNAL_KEY 未配置，跳过租户 token 签发
+PASS same handler duplicate RPC emits one durable intent
+GAP_CONFIRMED recreated handler accepts same attemptId and persists second intent; Map dedup is not a durable submission fence
+PASS stored evidence says intent_only; no upstream send or charge result proven
+PASS old owner intent emit rejected after lease takeover
+AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
++ actual - expected
+
+  Comparison {
++   code: '22P02'
+-   code: 'NOT_FOUND'
+  }
+
+    at async /Users/mmdn/Downloads/pt项目/tests/probes/auto08-host-intent-boundary-20261109.cjs:24:57 {
+  generatedMessage: true,
+  code: 'ERR_ASSERTION',
+  actual: [me],
+  expected: [Object],
+  operator: 'rejects',
+  diff: 'simple'
+}

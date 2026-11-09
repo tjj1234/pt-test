@@ -68,3 +68,7 @@ Gemini04：按既有主审修订为DSH ctx.web/tool-web provider候选，交源�
 ## 已完成的接缝探针（2026-11-09）
 
 实际R33意图处理器+生产Run仓库/PGlite：同handler去重通过，重建handler相同attemptId产生两条意图；旧租约被拒、跨tenant读取被拒。确认intent_only不是跨重启提交栅栏，尚未修改实现。详见 evidence/AUTO08-HOST-INTENT-REVIEW-20261109.md。下一步冻结逻辑attempt标识/唯一约束/租约代次和CAS提交态，不能依靠RPC内存Map。
+
+## 2026-11-09后续接入完成状态
+
+上文为冻结前阶段契约。现已完成调用前M1独立接入：生产代码f5fa39a；R34归档70361b6ed893ae440650e3d7dce37058efa0633ea7f1b8f936b91026d359ee5d；272/272与Linux42项通过，PG锁后过期拒绝通过。详见AUTO08-M1-INTEGRATION-REVIEW-20261109.md。未部署、未获独立QA、未实现发送后降级/零费用保证。
