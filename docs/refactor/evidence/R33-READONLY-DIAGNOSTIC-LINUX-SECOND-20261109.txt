@@ -1,0 +1,14 @@
+AssertionError [ERR_ASSERTION]: {"ok":false,"code":"R33_DIAG_FAILED"}
+
+
+1 !== 0
+
+    at /test.cjs:42:12
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5) {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

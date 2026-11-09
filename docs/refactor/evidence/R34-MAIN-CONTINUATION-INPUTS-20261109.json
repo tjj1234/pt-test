@@ -1,0 +1,33 @@
+{
+  "baseCommit": "8fbe07b",
+  "diagnosticSha256": "6f751bc18e7b5a46d29583a39b15c870a4070dc5b27d20d20d221dcaf06ade21",
+  "sourceFiles": {
+    "scripts/northstar-r33-readonly-diagnostic.cjs": "6f751bc18e7b5a46d29583a39b15c870a4070dc5b27d20d20d221dcaf06ade21",
+    "tests/probes/r33-readonly-diagnostic-pg-20261109.cjs": "493c90ba71b4b9e2891661120d1fb60b8ab717c7065b7beaa433cc4f930287b0",
+    "tests/probes/r33-readonly-diagnostic-linux-20261109.cjs": "e669a4bb2aa5955775292cbda7d45c4e2df46fc6a402c9935d39de47a915bb4e",
+    "tests/probes/r34-web-host-characterization-20261109.mjs": "95c2bc7016d73a68063439534d55365bdece85b60ea5169cc084f04d620943d3",
+    "shell/persistent-runner.mjs": "d4372805ebf8197891ff8d27b591a49c380eaf3a4957c8f933f1bf4ad6952d58",
+    "shell/runtime/native-question-provider.mjs": "0de578753406cc3ea845b784500c93540e732fc7f6e65e0ca1227399e662cb70",
+    "shell/runtime/run-budget.json": "0738c6baabbac8fb69f4c3391f0d70e8c68b18cf6b68d681ce9463d3dde0e714",
+    "shell/runtime/run-budget-questions.json": "12ff7c63cb3e8163c8f042f5a0d4045fc5439e44a315e3c702f4f7e0095e3aeb",
+    "shell/usage/price-snapshot-selection-candidate.cjs": "2842a40d55cb7e3c6d79a18228d3dbfa2ce334304af7231db79a6708495e30ed",
+    "shell/usage/price-catalog-store.cjs": "ce421a125215d84fc9abc6f2e676cef60792f91cb820e34a871f3d1a68062090",
+    "scripts/northstar-price-catalog.cjs": "cdf30a77b59bf5f3330afed9b4b01396d07485246d15b12474915b2c20146729"
+  },
+  "providerApiDocumentSha256": "cd0da420c0c38a6a0b3e8ca3fa0cdc0b235cbd5a04fe7b020b4af6bab7a43411",
+  "sshReadOnlyAttempt": {
+    "authenticated": false,
+    "reason": "Permission denied (publickey,password)",
+    "controlSocketExists": false,
+    "productionChanged": false
+  },
+  "verification": {
+    "pgDiagnosticGroups": 5,
+    "linuxFullWrapperGroups": 3,
+    "linuxNode": "v22.23.4",
+    "linuxSystemd": "mocked metadata only; actual proc, OS uid/gid 65534 and PG",
+    "nativeWebHostTestUnits": 1,
+    "nativeWebHostMeaning": "Existing web_search gate works; web_fetch still unconnected; native provider request lacks trusted Run/tenant IDs",
+    "productionDiagnosticExecuted": false
+  }
+}

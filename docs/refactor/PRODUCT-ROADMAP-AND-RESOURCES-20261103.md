@@ -1,26 +1,19 @@
 # 北极星完整产品路线图与资源需求
 
 ## 2026-11-09 R34全量范围与最新复审
-
-第三批Bug交接a69bcaf（源码ee30815）已独立复核：9场景HTTP/持久库及相关10单元通过，三项状态问题仍失败，不能按作者“全部修复”放行；[主审结论、基线纠偏与收尾指令](evidence/BUG3-R4-HTTP-AND-STATE-LEAD-REVIEW-20261109.md)。
-
-最新04候选33fc6240：原生fetch及同步取消等修复本地通过，整体仍BLOCKED于实际transport、流式限额/资源终止证据和公开错误脱敏。QA双轨计费定义修订确认，官方逐笔结论仍是QA报告证据，主程未独立核验。见[最新复审与三项剩余要求](evidence/WEB04-R4-AND-QA-BILLING-LEAD-REVIEW-20261109.md)。第三批Bug ee30815已发现待复审，以下旧tip保留历史。
-
-最新04为d3de8d0，独立复审仍未放行：真实DSH web_fetch的body契约/渲染失败、同步取消漏监听，以及transport/流式完整证据未闭环。QA报告主要纠偏确认，仅本地存储复现、非正式根因确认；见[最新复审与返修指令](evidence/WEB04-R3-AND-QA-LEAD-REVIEW-20261109.md)。
-
-主程增量：[运行账号数据库门禁](R34-RUNTIME-DB-RELEASE-GATE-20261109.md)已实现并通过真实PostgreSQL隔离及CLI测试，检查029/030三表权限、实际身份与目标；未接入最终部署脚本、未运行生产，整包仍阻断。价格PG导入方式及缺失费率/时段证据继续待审核。
-本节覆盖下方相关历史状态。R34范围为Gemini原01–08包、当前全部Bug与R33 QA整改统一发布；此前AUTO08 M1部分候选已被扩大范围取代，不能单独上线。当前仍暂停部署，未宣告八包完成。本分支仅同步文档；生产候选代码与接线在 `integration/r34-final-all8-20261109`，不以本文档分支的旧代码判断实现是否存在。
+本节覆盖下方同项历史状态。R34为Gemini原01–08包、全部当前Bug及R33 QA整改统一发布；旧AUTO M1草稿已取代，当前不部署。本分支仅同步文档；代码与主程接线位于integration/r34-final-all8-20261109，不以本分支旧代码推定生产实现。
 
 | 项目 | 当前真实状态 | 下一门禁 |
 |---|---|---|
-| 第三批Bug | 交接a69bcaf/源码ee30815；HTTP9场景通过，三项状态问题重现；未整体放行 | 真实HTTP/Run/server停止落库、刷新/重开、故障/并发矩阵；审核价格导入 |
-| 04可信联网 | 作者33fc6240；native fetch及时序修复确认，实际transport/资源/脱敏仍阻断；未接入上线 | 全生命周期deadline/取消、可信transport与逐跳连接、配置硬限额、HTTP状态 |
-| 问答QA故障 | 首次有效参数、STORE_UNAVAILABLE；隔离PG复现管理员迁移后运行账号缺权 | 核验正式DB role/表权限/错误；运行权限下恢复问答；不能照QA推测改profile import |
-| 主程问答/表格整改 | e72bff8本地修复及测试；不等于本次线上存储问题已修复 | 同候选回归与独立QA |
-| 原01/02/03/07及05/06/08边界 | 按全量范围文档保持未闭环项，不升级为整体完成 | 按包原生复用、真实接线、权限隔离与费用证据逐项验收 |
+| 主程R33只读核验 | 诊断PG5组及Linux入口3组通过，未运行生产；SSH认证失效、旧socket不存在 | 用户恢复连接，主程执行SHA绑定只读核验；不迁移/授权/重启 |
+| 04可信联网 | 候选33fc6240的native fetch与时序修复确认；实际transport、读取/资源终止及错误脱敏仍阻断；主程宿主web_fetch/可信上下文未接 | Gemini补backend原矩阵；Codex按冻结共享契约接Run/预算/来源与产品链 |
+| 第三批Bug | 交接a69bcaf、后续文档e4b6bd6；已跑源码ee30815：HTTP9场景及相关10单元通过，三项状态问题复现 | 首值跨worker覆盖、当前轮partial误判、503伪装未接通，以及实际断连/双活/lease/close证据收尾 |
+| QA与计费 | 双轨计费定义在两份QA文档已修订确认；本地估算缺价格、官方逐笔结果仍属QA报告证据 | 审核定价及PG导入、同scope官方记录与本地关联；USD/credits无官方规则保持unknown |
+| 08及其余八包范围 | 保留调用前M1持久预留与问答/列宽本地修复；01/02/03/07及05审批/06隔离等缺口仍按全量scope阻断 | 真实DSH/后端/权限/恢复与费用证据逐项验收；不能把关闭功能或partial候选称整包完成 |
+| 最终发布 | 无r34-final-all8最终归档，旧M1指纹保留但禁止作为最终包上线；Bug-12保持DEGRADED_PREVIEW | 同版本集成/浏览器/Linux闭包、数据恢复/迁移/ACL与回退后，按有效指令正式切换及独立QA |
 
-[全量范围与责任](R34-FINAL-ALL8-RELEASE-SCOPE-20261109.md)｜[作者回复独立复审](evidence/R34-REPLIES-INDEPENDENT-REVIEW-20261109.md)｜[问答预算与列宽本地修复](R34-QA-QUESTION-AND-TABLE-FIX-20261109.md)。阶段仍区分作者交付、主审、集成、本地验证、上线、独立QA与真实业务验收；Bug-12保持DEGRADED_PREVIEW。C01/C02/C03仍由原两位程序员按下方交接领取，不改派Gemini原八包。
-
+[主程剩余任务与依赖](R34-MAIN-REMAINING-WORK-20261109.md)｜[只读诊断准备](R33-READONLY-QUESTION-DIAGNOSTIC-RUNBOOK-20261109.md)｜[04共享接线契约](R34-WEB-HOST-INTEGRATION-CONTRACT-20261109.md)｜[最新04主审](evidence/WEB04-R4-AND-QA-BILLING-LEAD-REVIEW-20261109.md)｜[Bug主审与收尾](evidence/BUG3-R4-HTTP-AND-STATE-LEAD-REVIEW-20261109.md)｜[完整范围](R34-FINAL-ALL8-RELEASE-SCOPE-20261109.md)。
+作者交付、独立主审、集成、本地验证、正式部署、同版QA与真实供应商验收继续分别记账。C01/C02/C03仍按下方两人交接队列，不改派为本轮Gemini返修。
 
 ## 2026-11-06 Claude10包：增量范围与两人下发
 
