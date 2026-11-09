@@ -1,0 +1,9 @@
+REPRODUCED native web_fetch: execute loses body kind; real output renderer throws
+REPRODUCED native web_fetch HTTP 500: provider omits required body; real execute throws TypeError
+REPRODUCED deadline reports RUN_CANCELLED, while backend signal is aborted; no resource-close evidence for noncooperative backend
+REPRODUCED search deadline loses FETCH_TIMEOUT classification at provider boundary
+REPRODUCED synchronous cancellation during backend start misses abort listener, pending past deadline
+REPRODUCED invalid status NaN accepted as successful content
+REPRODUCED fetchBackend marks provider available but is never used by fetchPage
+REPRODUCED error sanitizer retains synthetic Cookie and local path; no real credentials used
+ZERO NETWORK; exact author module and real locked native SDK; all fixture promises released

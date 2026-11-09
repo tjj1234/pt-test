@@ -1,0 +1,26 @@
+{
+  "candidateCommit": "d3de8d07e5978997feb68322911267f57b6c6d7b",
+  "candidateSourceSha256": "1e8a5b8053e092cb4405ff9416849783301226932ee10bc2fc4db2e24747e28f",
+  "lockSha256": "eb54f12313941e09c569058836b5662b2db82069a1fa721ae1a8b6c0113610d4",
+  "sdkSourceSha256": {
+    "dsh-web/lib/index.js": "21d6d99d6b826937e6aabbcb0b32c91bd1f214586c6fd3ada538f15737eec8d7",
+    "dsh-web/lib/types/types.d.ts": "6dd019710aa46136ab2399ca2e61254c34b0224b490298eb65bb7b6a3ca760b8",
+    "dsh-tool-web/lib/index.js": "4e137deacb32fb7e963d60c379f5593ae79bba76b978135df661688157cd30ee"
+  },
+  "qaReportSha256": "bf63b554321ecc9e357d597ef9ae2a3ef8b344f67dea8257ce0c5a825bc19653",
+  "verification": {
+    "authorLifecycleGroups": 5,
+    "authorWebAssertions": 28,
+    "authorNativeSeamChecks": 10,
+    "nativeProbePathAdaptation": "Only dependency-root variable changed to existing locked install; candidate import and assertions unchanged",
+    "newLeadProbeExitCode": 0,
+    "newLeadProbeMeaning": "Characterization assertions reproduced remaining failures; not feature acceptance",
+    "networkCalls": 0,
+    "deployment": false,
+    "mergedCandidate": false,
+    "authorInitialCounterexamples": 3,
+    "cumulativePatchMatchesExactCommitFiles": 7
+  },
+  "deliveryReportSha256": "d23cb93e25844258c71e5abe2bdb9cf9b57b55e450a9d58fbe6101bdaadbaadd",
+  "patchSha256": "553b5470aa33ee7af4fcff60eebcf84c0a42ccfe265df8eee5f226977b198004"
+}
