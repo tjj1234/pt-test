@@ -1,9 +1,11 @@
 {
-  "status": "DRAFT_NOT_FOR_DEPLOYMENT",
+  "status": "SUPERSEDED_NOT_FOR_DEPLOYMENT",
   "builder": "scripts/package-northstar-candidate34-r34-draft.py",
   "audit": "scripts/audit-northstar-candidate34-r34-draft.py",
   "archive": "northstar-controlled-trial-20261109-candidate-34-r34-auto08-m1-draft.tar.gz",
   "sha256": "70361b6ed893ae440650e3d7dce37058efa0633ea7f1b8f936b91026d359ee5d",
   "boundSources": 225,
-  "members": 428
+  "members": 428,
+  "supersededByScope": "docs/refactor/R34-FINAL-ALL8-RELEASE-SCOPE-20261109.md",
+  "replacementArchive": null
 }

@@ -1,0 +1,5 @@
+PASS: runtime identity, migration and ownership mismatch visible; missing ACL reported; no prompt read/output
+PASS: necessary grants change diagnosis; wrong role rejected
+PASS: only PG settings forwarded; duplicate/role overrides/wrong target rejected without echoing secrets
+PASS: actual stdin child CLI emits bounded diagnostic JSON only; no staging-directory access needed
+PASS: effective schema denial reported; diagnostic created zero question rows

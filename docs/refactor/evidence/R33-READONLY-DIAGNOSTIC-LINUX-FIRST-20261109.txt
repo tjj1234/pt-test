@@ -1,0 +1,14 @@
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+Error: 找不到 pg（node-postgres）。请二选一：
+  ① 在 shell 目录执行：npm install pg
+  ② 设 PT_PG_LIB 指向 pg 的 lib/index.js 绝对路径
+    at resolvePg (/opt/northstar/releases/controlled-trial-20261106-candidate-34-r33-questions-m1-draft/shell/db-pg.cjs:65:9)
+    at openPg (/opt/northstar/releases/controlled-trial-20261106-candidate-34-r33-questions-m1-draft/shell/db-pg.cjs:105:14)
+    at /test.cjs:21:23
+    at Object.<anonymous> (/test.cjs:70:3)
+    at Module._compile (node:internal/modules/cjs/loader:1781:14)
+    at Object..js (node:internal/modules/cjs/loader:1913:10)
+    at Module.load (node:internal/modules/cjs/loader:1505:32)
+    at Function._load (node:internal/modules/cjs/loader:1309:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)
+    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)

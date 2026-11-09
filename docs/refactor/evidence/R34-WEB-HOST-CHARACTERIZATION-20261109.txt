@@ -1,0 +1,12 @@
+BASE_FIXTURE_SHA256=85be0b683d50879e95b85326f83373bce3e9e382d2f99241bdfd28847eb8a407
+CONFIRMED current host web_fetch is not wired: denied before provider body and budget debit
+CONFIRMED native search request carries query fields without Run/tenant identity; trusted execution binding required
+✔ native DSH web_search honors explicit Run admission and warm policy revocation (238.179625ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 271.036875

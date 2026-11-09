@@ -1,0 +1,4 @@
+PASS Linux: real /proc environment + cwd + source hashes + OS uid/gid 65534 child diagnose missing ACL
+PASS Linux: minimal grants visible under service identity; full wrapper writes zero question rows
+PASS Linux: source and release drift rejected with bounded error JSON
+FIXTURE_ONLY Node=v22.23.4; systemctl metadata mocked, /proc/uid/PG real; no formal target accessed
