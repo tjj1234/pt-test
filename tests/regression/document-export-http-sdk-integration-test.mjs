@@ -21,7 +21,7 @@ const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[
 ctx.provide('loader',{await:async()=>{}});ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-documents'})});ctx.provide('appExit',code=>process.exit(code));
 class Adapter extends LlmAdapter{
  counts=new Map();async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:['text']};}
- async *stream(options){const format=/EXPORT_FORMAT_(docx|pdf|xlsx)/.exec(JSON.stringify(options.messages))?.[1]||'docx',key=String(options.sessionId)+format,n=(this.counts.get(key)||0)+1;this.counts.set(key,n);fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({n})+'\\n');
+ async *stream(options){const format=/EXPORT_FORMAT_(docx|pdf|xlsx)/.exec(JSON.stringify(options.messages))?.[1]||'docx',key=/EXPORT_TEST_ID_([a-z0-9]+)/.exec(JSON.stringify(options.messages))?.[1]||(String(options.sessionId)+format),n=(this.counts.get(key)||0)+1;this.counts.set(key,n);fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({n})+'\\n');
  const block=n===1?{type:'tool-call',id:'document-export-1',name:'document_export',arguments:{format,document:{title:'中文报告00123',sections:[{heading:'测试章节',paragraphs:['保留文字 <&>'],table:{headers:['编号','内容'],rows:[['00123','=SUM(A1:A2)'],['2','中文表格']]}}]}}}:{type:'text',text:'DOCUMENT_CHAIN_OK'};
  yield {type:'block-start',index:0,blockType:block.type};yield {type:'block-end',index:0,block};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:block.type==='tool-call'?'tool-calls':'stop'}};
  }
@@ -61,6 +61,13 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
    const saved=assistant.artifacts.find(a=>a.rel===artifact.rel);assert.equal(saved.sha256,artifact.sha256);assert.equal((await req(saved.url)).status,200);
   }
   assert.equal(fs.readFileSync(trace,'utf8').trim().split('\n').length,6);
+  if(process.env.NORTHSTAR_DOCUMENT_BROWSER==='1'){
+   const session='r34doc'+crypto.randomBytes(4).toString('hex'),cli=(...args)=>execFileSync('playwright-cli',['-s='+session,...args],{cwd:root,env:{...process.env,TMPDIR:'/private/tmp'},encoding:'utf8',timeout:45000,maxBuffer:2*1024*1024});
+   const driver=fs.readFileSync(path.join(root,'tests/probes/document-export-browser-driver-20261110.js'),'utf8').trim(),script=path.join(root,'.playwright-cli',session+'-driver.js');fs.mkdirSync(path.dirname(script),{recursive:true});
+   fs.writeFileSync(script,'async page => ('+driver+')(page,'+JSON.stringify({baseURL:'http://127.0.0.1:'+port,cookie:cookies[0].slice(11),screenshot:path.join(root,'docs/refactor/evidence/R34-DOCUMENT-BROWSER-20261110.png')})+')');
+   try{cli('open');const result=cli('--raw','run-code','--filename='+script);assert.ok(result.trim().startsWith('{'),result.replaceAll(cookies[0].slice(11),'[FIXTURE_SESSION]'));assert.equal(JSON.parse(result).status,'DOCUMENT_BROWSER_CHAIN_PASS');console.log('DOCUMENT_BROWSER_CHAIN_PASS');}finally{try{cli('close');}catch{}fs.rmSync(script,{force:true});}
+  }
+
 
  }finally{
   if(child&&child.exitCode===null){const end=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await end;}

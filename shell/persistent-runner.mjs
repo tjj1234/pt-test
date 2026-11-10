@@ -9,6 +9,7 @@ import { apply as installAskUserTool } from "@deepseek-ai/dsh-tool-ask-user";
 import {installPublishedSkillProvider} from './published-skill-provider.mjs';
 import {installNativeContextGateR4} from './dsh-native-context-r4-candidate.mjs';
 import {nativeImageMessage} from './native-image-message.mjs';
+let withNativeAnalysisExecution=(_active,_execution,next)=>next();
 let withNativeWebExecution=(_active,_execution,next)=>next();
 let withNativeQuestionExecution = (_active,_execution,next) => next();
 
@@ -20,7 +21,7 @@ const { listStylePresets, stylePresetSummary } = require("./presets.cjs");
 const crypto = require("node:crypto");
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "billing_query", "document_export", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit", "skill_resource"]);
+const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "billing_query", "document_export", "analysis_list", "analysis_read", "run_script", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit", "skill_resource"]);
 const NATIVE_RUN_TOOL_NAMES = new Set(['ask_user_question', 'skill', 'web_search','web_fetch']);
 const RUN_TOOL_NAMES = new Set([...HOST_RUN_TOOL_NAMES, ...NATIVE_RUN_TOOL_NAMES]);
 const MEDIA_TASK_TYPES = new Set(["text2image", "image2image", "text2video", "image2video"]);
@@ -97,8 +98,8 @@ function loadRunBudgetPolicy(profile = "default") {
   if (!dshHome) throw Object.assign(new Error("Run budget configuration root is unavailable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
   const mediaTask = /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.exec(profile)?.[1] || null;
   const withSkill=profile==='skill'||profile==='skill-csv'||profile.startsWith('skill-media:');
-  if (profile !== "default" && profile!=="billing" && profile!=="documents" && profile !== "web" && profile !== "questions" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
-  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "documents"?"run-budget-documents.json":profile === "billing"?"run-budget-billing.json":profile === "web" ? "run-budget-web.json" : profile === "questions" ? "run-budget-questions.json" : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
+  if (profile !== "default" && profile!=="billing" && profile!=="documents" && profile!=="analysis" && profile !== "web" && profile !== "questions" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "analysis"?"run-budget-analysis.json":profile === "documents"?"run-budget-documents.json":profile === "billing"?"run-budget-billing.json":profile === "web" ? "run-budget-web.json" : profile === "questions" ? "run-budget-questions.json" : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
   let text;
   try { text = readFileSync(configPath, "utf8"); }
   catch {
@@ -202,7 +203,7 @@ const MEDIA_NO_LINK_NOTE =
  */
 
 const name = "persistent-runner";
-const inject = ["agentDefaultModel", "agents", "sessions", "attachments", "userQuestions", "tools", "systemPrompt", "web"];
+const inject = ["agentDefaultModel", "agents", "sessions", "attachments", "userQuestions", "tools", "systemPrompt", "web", "fs", "subprocess", "approval"];
 const RPC_PROTOCOL_VERSION = 1;
 const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1", "native-context-v1", "skill-pins-v1"]);
 const CONTROL_ERROR_MESSAGES = Object.freeze({
@@ -268,7 +269,7 @@ async function guardNativeToolExecution(active, execution, next) {
   if (!active.budget || active.configured !== true) throw deny('RUN_BUDGET_CONFIG_INVALID');
   // Existing host tool wrappers own their admission and durable RPC. Never
   // debit them twice. All other dispatches must pass the native tool policy.
-  if (HOST_RUN_TOOL_NAMES.has(execution.name)) return next();
+  if (HOST_RUN_TOOL_NAMES.has(execution.name)) return withNativeAnalysisExecution(active,execution,next);
   if (!NATIVE_RUN_TOOL_NAMES.has(execution.name) || !Array.isArray(active.toolPolicy?.allowedTools) || !active.toolPolicy.allowedTools.includes(execution.name)) {
     throw deny('RUN_TOOL_NOT_ALLOWED');
   }
@@ -284,7 +285,7 @@ async function guardNativeToolExecution(active, execution, next) {
   finally { admission.settle(); }
 }
 
-function apply(ctx) {
+function apply(ctx,compositionOptions={}) {
   let setupStage="initial";
   (async () => {
     await ctx.get("loader")?.await();
@@ -314,6 +315,11 @@ function apply(ctx) {
       getActiveTurn:agent=>[...activeTurns.values()].find(turn=>turn.agent===agent),
       ask:(active,args)=>requestParentTool(active.sessionId,'northstar.user_question',args),
     });
+    }
+    let nativeAnalysis=null;
+    if(ctx.get('fs')&&ctx.get('subprocess')&&ctx.get('approval')){
+      const provider=await import('./native-analysis-provider.mjs');withNativeAnalysisExecution=provider.withNativeAnalysisExecution;
+      nativeAnalysis=provider.installNativeAnalysisProvider(ctx,{getActiveTurn:agent=>[...activeTurns.values()].find(turn=>turn.agent===agent),requestApproval:(active,args)=>requestParentTool(active.sessionId,'northstar.operation_approval',args),consumeApproval:(active,args)=>requestParentTool(active.sessionId,'northstar.operation_approval_consume',args),...(typeof compositionOptions.analysisArgumentsFactory==='function'?{argumentsFactory:compositionOptions.analysisArgumentsFactory}:{})});
     }
     if(ctx.get('web')?.registerFetchProvider){
       setupStage='web-provider-import';
@@ -498,7 +504,7 @@ function apply(ctx) {
           || (cmd.compact!==undefined&&typeof cmd.compact!=='boolean')
           || (cmd.runId!==undefined&&(typeof cmd.runId!=='string'||!cmd.runId.trim()||cmd.runId.length>128))
           || (cmd.recordModelIntents !== undefined && typeof cmd.recordModelIntents !== "boolean")
-          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv","questions","web","billing","documents"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
+          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv","questions","web","billing","documents","analysis"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
         emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
           code: cmd.protocolVersion !== RPC_PROTOCOL_VERSION ? "PROTOCOL_VERSION_MISMATCH" : "TASK_FRAME_INVALID",
           message: "Parent task frame is invalid" });
@@ -517,6 +523,7 @@ function apply(ctx) {
         auxiliaryAdmissions:0,
         primaryModelCalls:0,
         preflightQuestion:execution=>preflightNativeQuestionExecution(turn,execution),
+        analysisWorkspace:cmd.budgetProfile==='analysis'?cmd.analysisWorkspace:null,
         pinnedSkills:cmd.pinnedSkills||{skills:[]},
         recordModelIntents: cmd.recordModelIntents === true,
         tenantId: String(cmd.tenantId || "").trim(),
@@ -663,6 +670,12 @@ function apply(ctx) {
                 execute:args=>requestParentTool(sid,'northstar.skill_resource',args),
               });
               // M1 探针：注册一个与业务线无关的 demo 工具，验证「对话 → 真实 tool/call → tool/result」链路
+              for(const [tool,parameters,description,method]of [
+                ['analysis_list',{},'列出本次任务已验证的只读输入文件。','list'],
+                ['analysis_read',{name:{type:'string',required:true}},'读取本次任务中的 UTF-8 文本输入文件。','read'],
+                ['run_script',{language:{type:'string',required:true,enum:['python']},code:{type:'string',required:true}},'经用户对精确代码批准后执行 Python 只读分析。禁止网络、写文件、派生进程；最多5秒，输出有上限。','run']]){
+                registerRunTool(agentCtx,sid,tool,{name:tool,description,parameters,output:{schema:{type:'object',additionalProperties:true},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},execute:args=>{if(!nativeAnalysis)throw Object.assign(Error('Analysis unavailable'),{code:'ISOLATION_BACKEND_UNAVAILABLE'});return nativeAnalysis[method](args);}});
+              }
               registerRunTool(agentCtx,sid,'document_export',{
                 name:'document_export',description:'生成本次任务的 Word、PDF 或 Excel 文件。传入标题、章节文字和表格；生成结果是可下载文件。仅在用户明确要求生成文件时使用；不执行脚本，不访问外部链接。',
                 parameters:{"format": {"type": "string", "required": true, "enum": ["docx", "pdf", "xlsx"]}, "document": {"type": "object", "required": true, "properties": {"title": {"type": "string", "required": true}, "author": {"type": "string"}, "date": {"type": "string"}, "sections": {"type": "array", "items": {"type": "object", "properties": {"heading": {"type": "string"}, "paragraphs": {"type": "array", "items": {"type": "string"}}, "table": {"type": "object", "properties": {"headers": {"type": "array", "items": {"type": "string"}}, "rows": {"type": "array", "items": {"type": "array", "items": {"type": "json"}}}}, "additionalProperties": false}}, "additionalProperties": false}}, "table": {"type": "object", "properties": {"headers": {"type": "array", "items": {"type": "string"}}, "rows": {"type": "array", "items": {"type": "array", "items": {"type": "json"}}}}, "additionalProperties": false}}, "additionalProperties": false}},
@@ -973,7 +986,8 @@ function apply(ctx) {
         turn.agent = agent;
         if(ctx.get('userQuestions')){
           rec.questionMaskDispose?.();
-          rec.questionMaskDispose=turn.toolPolicy?.allowedTools?.includes('ask_user_question')?null:agent.ctx.tools.restrict({deny:['ask_user_question']});
+          const visibleTools=new Set(turn.toolPolicy?.allowedTools||['get_current_time']);
+          rec.questionMaskDispose=agent.ctx.tools.restrict({deny:[...RUN_TOOL_NAMES].filter(name=>!visibleTools.has(name))});
         }
         publishedSkillProvider.invalidate();
         firstSeq = agent.session.seq;

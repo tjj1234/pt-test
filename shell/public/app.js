@@ -1519,6 +1519,7 @@ async function ask(msg) {
   const effectiveMsg = msg.trim() || (pendingImage ? "请分析这张图片" : (pendingDocs.length ? "请分析附件内容" : (readyMedia.length ? "请分析音视频内容" : "请分析引用的资料内容")));
   ta.value = ""; ta.style.height = "auto";
   const payload = { conversationId: state.activeId, message: effectiveMsg };
+  if ($('#allowAnalysis')?.checked) payload.allowAnalysis=true;
   if ($('#allowDocuments')?.checked) payload.allowDocuments=true;
   if ($('#allowBilling')?.checked) payload.allowBilling=true;
   if ($('#allowWeb')?.checked) payload.allowWeb=true;
@@ -4337,7 +4338,7 @@ function addWebSourceHistoryControl(host,runId){
 
 for(const [a,b]of [['allowWeb','allowQuestions'],['allowQuestions','allowWeb']]){const input=document.getElementById(a);input?.addEventListener('change',()=>{if(input.checked){const other=document.getElementById(b);if(other)other.checked=false;}});}
 
-for(const id of ['allowWeb','allowQuestions','allowBilling','allowDocuments'])document.getElementById(id)?.addEventListener('change',event=>{if(event.target.checked)for(const other of ['allowWeb','allowQuestions','allowBilling','allowDocuments'])if(other!==id)document.getElementById(other).checked=false;});
+for(const id of ['allowWeb','allowQuestions','allowBilling','allowDocuments','allowAnalysis'])document.getElementById(id)?.addEventListener('change',event=>{if(event.target.checked)for(const other of ['allowWeb','allowQuestions','allowBilling','allowDocuments','allowAnalysis'])if(other!==id)document.getElementById(other).checked=false;});
 
 function observeWebSources(conversationId,value){
  if(!validRunReviewId(value?.runId)||!Array.isArray(value.sources)||value.sources.length>10)return;

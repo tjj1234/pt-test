@@ -420,9 +420,10 @@ background:#1a1a1a;color:#fff;font-size:15px;font-weight:600;font-family:inherit
 
 /* 底部栏：模型胶囊 + 发送按钮 */
 .empty-input .foot-bar{
-  display:flex;align-items:center;justify-content:flex-end;
+  display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;
   gap:6px;padding-top:2px;
 }
+.empty-input .foot-bar>label{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;flex-shrink:0}
 
 /* 模型切换胶囊 */
 .model-switcher{position:relative;display:inline-block}

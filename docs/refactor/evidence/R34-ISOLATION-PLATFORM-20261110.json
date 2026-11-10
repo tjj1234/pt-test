@@ -1,0 +1,7 @@
+{
+  "scope": "R34_TEMPORARY_ISOLATION_PROBE_ONLY",
+  "helperSha256": "1641b251b3dcac6baf18816b3dd2dc57ace858f9bd4c740ffea2af0b30ed0835",
+  "exitCode": 0,
+  "stdout": "/tmp/pt-r34-isolation-1641b251b3dc-efa63d/offline-analysis: OK\nISOLATION_SECCOMP_ENFORCED\nR34_NATIVE_ISOLATION_MATRIX {\"owned_input\": true, \"environment\": true, \"outside_input\": true, \"system_secret\": true, \"parent_environment\": true, \"tcp\": true, \"udp\": true, \"unix_socket\": true, \"fork\": true, \"foreign_signal\": true, \"metadata_chmod\": true, \"cross_process_rlimit\": true, \"write\": true, \"hard_link\": true, \"soft_link\": true}\nMEMORY_BOUND_PASS\nINDEPENDENT_WALL_BOUND_PASS\nCPU_BOUND_PASS\nBOUNDED_CANCEL_PASS\nNATIVE_DSH_ISOLATED_PROCESS_PASS\nNATIVE_DSH_CANCEL_AND_JOIN_PASS\nOWNER_SIGKILL_NO_LIVE_GUEST_PASS\n",
+  "stderr": ""
+}

@@ -1,6 +1,7 @@
 'use strict';
 
 const PRICE_SOURCE = 'https://powertokens.ai/pricing';
+const {isOfficialPriceSource}=require('./price-snapshot-selection-candidate.cjs');
 const UNKNOWN = Object.freeze({ amount: null, currency: null, coverage: 'unknown' });
 
 function nonnegative(value) { return Number.isSafeInteger(value) && value >= 0; }
@@ -8,7 +9,7 @@ function nonnegative(value) { return Number.isSafeInteger(value) && value >= 0; 
 /** Explicit requested-model estimates preserve unknown upstream identity. */
 function estimateTextResponseCost({ requestedModel, providerModel, usage, price, allowRequestedModelEstimate = false } = {}) {
   const requestedBasis = providerModel == null && allowRequestedModelEstimate === true;
-  if (!price || price.sourceUrl !== PRICE_SOURCE || typeof price.version !== 'string' || !price.version.trim() ||
+  if (!price || !isOfficialPriceSource(price.sourceUrl,requestedModel) || typeof price.version !== 'string' || !price.version.trim() ||
       !Number.isFinite(Date.parse(price.capturedAt)) || price.currency !== 'USD' ||
       typeof requestedModel !== 'string' || !requestedModel.trim() ||
       (!requestedBasis && (typeof providerModel !== 'string' || providerModel !== requestedModel)) || price.model !== requestedModel ||
@@ -26,7 +27,7 @@ function estimateTextResponseCost({ requestedModel, providerModel, usage, price,
   if (!Number.isFinite(amount)) return UNKNOWN;
   return Object.freeze({ amount, currency: 'USD', coverage: 'estimated',
     ...(requestedBasis ? { pricingBasis: 'requested_model' } : {}),
-    priceVersion: price.version, priceCapturedAt: price.capturedAt, priceSourceUrl: PRICE_SOURCE });
+    priceVersion: price.version, priceCapturedAt: price.capturedAt, priceSourceUrl: price.sourceUrl });
 }
 
 module.exports = { estimateTextResponseCost };

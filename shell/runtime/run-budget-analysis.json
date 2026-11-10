@@ -1,0 +1,1 @@
+{"maxDurationMs":180000,"maxModelCalls":5,"maxToolCalls":3,"maxToolCallsPerKey":1,"maxRetries":0,"maxOutputTokens":2048,"contextModelCalls":1,"allowedTools":["analysis_list","analysis_read","run_script"]}

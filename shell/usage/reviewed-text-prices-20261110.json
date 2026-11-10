@@ -1,0 +1,83 @@
+{
+  "sourceEvidence": "{\"kind\": \"REVIEWED_PUBLIC_PRICE_CAPTURE\", \"sources\": [{\"model\": \"deepseek-v4-pro\", \"url\": \"https://powertokens.ai/models/deepseek-v4-pro\", \"rawHtmlSha256\": \"2f204cd011baf9025ab34d12a323eb2f66b1ced8229200f83b4ae12dd60eca03\", \"observedAt\": \"2026-11-10T07:29:46Z\", \"baseUsdPerMillion\": {\"input\": 0.66, \"output\": 1.98, \"cacheRead\": 0.022, \"cacheWrite\": null}, \"cacheWriteEvidence\": \"Rendered Cache Creation is --; embedded numeric zero is not treated as a confirmed zero tariff.\", \"timeRule\": \"Weekday UTC+8 09:00-12:00 and 14:00-18:00 multiplier 2; otherwise 1.\"}, {\"model\": \"glm-4.7\", \"url\": \"https://powertokens.ai/models/glm-4.7\", \"rawHtmlSha256\": \"c62c738625214272cfd038556a3a194d8ea20c10e48791e676ff295d58730536\", \"observedAt\": \"2026-11-10T07:29:46Z\", \"baseUsdPerMillion\": {\"input\": 0.6, \"output\": 2.2, \"cacheRead\": 0.11, \"cacheWrite\": null}, \"cacheWriteEvidence\": \"Rendered Cache Creation is --; embedded numeric zero is not treated as a confirmed zero tariff.\", \"timeRule\": null}], \"policy\": \"Adopt observed prices only for future requests after catalog recording. Review horizon is 24h; do not backdate historic Runs. USD estimates are independent from official credits. No conversion rate inferred.\"}",
+  "snapshots": [
+    {
+      "sourceUrl": "https://powertokens.ai/models/deepseek-v4-pro",
+      "version": "pt-live-20261110-2f204cd011ba-0",
+      "capturedAt": "2026-11-10T07:29:46Z",
+      "effectiveFrom": "2026-11-10T07:29:46Z",
+      "effectiveUntil": "2026-11-10T10:00:00Z",
+      "currency": "USD",
+      "model": "deepseek-v4-pro",
+      "inputUsdPerMillion": 1.32,
+      "outputUsdPerMillion": 3.96,
+      "cacheReadUsdPerMillion": 0.044,
+      "cacheWriteUsdPerMillion": null
+    },
+    {
+      "sourceUrl": "https://powertokens.ai/models/deepseek-v4-pro",
+      "version": "pt-live-20261110-2f204cd011ba-1",
+      "capturedAt": "2026-11-10T07:29:46Z",
+      "effectiveFrom": "2026-11-10T10:00:00Z",
+      "effectiveUntil": "2026-11-11T01:00:00Z",
+      "currency": "USD",
+      "model": "deepseek-v4-pro",
+      "inputUsdPerMillion": 0.66,
+      "outputUsdPerMillion": 1.98,
+      "cacheReadUsdPerMillion": 0.022,
+      "cacheWriteUsdPerMillion": null
+    },
+    {
+      "sourceUrl": "https://powertokens.ai/models/deepseek-v4-pro",
+      "version": "pt-live-20261110-2f204cd011ba-2",
+      "capturedAt": "2026-11-10T07:29:46Z",
+      "effectiveFrom": "2026-11-11T01:00:00Z",
+      "effectiveUntil": "2026-11-11T04:00:00Z",
+      "currency": "USD",
+      "model": "deepseek-v4-pro",
+      "inputUsdPerMillion": 1.32,
+      "outputUsdPerMillion": 3.96,
+      "cacheReadUsdPerMillion": 0.044,
+      "cacheWriteUsdPerMillion": null
+    },
+    {
+      "sourceUrl": "https://powertokens.ai/models/deepseek-v4-pro",
+      "version": "pt-live-20261110-2f204cd011ba-3",
+      "capturedAt": "2026-11-10T07:29:46Z",
+      "effectiveFrom": "2026-11-11T04:00:00Z",
+      "effectiveUntil": "2026-11-11T06:00:00Z",
+      "currency": "USD",
+      "model": "deepseek-v4-pro",
+      "inputUsdPerMillion": 0.66,
+      "outputUsdPerMillion": 1.98,
+      "cacheReadUsdPerMillion": 0.022,
+      "cacheWriteUsdPerMillion": null
+    },
+    {
+      "sourceUrl": "https://powertokens.ai/models/deepseek-v4-pro",
+      "version": "pt-live-20261110-2f204cd011ba-4",
+      "capturedAt": "2026-11-10T07:29:46Z",
+      "effectiveFrom": "2026-11-11T06:00:00Z",
+      "effectiveUntil": "2026-11-11T07:29:46Z",
+      "currency": "USD",
+      "model": "deepseek-v4-pro",
+      "inputUsdPerMillion": 1.32,
+      "outputUsdPerMillion": 3.96,
+      "cacheReadUsdPerMillion": 0.044,
+      "cacheWriteUsdPerMillion": null
+    },
+    {
+      "sourceUrl": "https://powertokens.ai/models/glm-4.7",
+      "version": "pt-live-20261110-c62c73862521-0",
+      "capturedAt": "2026-11-10T07:29:46Z",
+      "effectiveFrom": "2026-11-10T07:29:46Z",
+      "effectiveUntil": "2026-11-11T07:29:46Z",
+      "currency": "USD",
+      "model": "glm-4.7",
+      "inputUsdPerMillion": 0.6,
+      "outputUsdPerMillion": 2.2,
+      "cacheReadUsdPerMillion": 0.11,
+      "cacheWriteUsdPerMillion": null
+    }
+  ]
+}

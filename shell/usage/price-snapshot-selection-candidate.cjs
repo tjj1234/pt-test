@@ -25,6 +25,7 @@ const { types: { isProxy } } = require('node:util');
  */
 
 const OFFICIAL_PRICE_SOURCE = 'https://powertokens.ai/pricing';
+function isOfficialPriceSource(source,model){return source===OFFICIAL_PRICE_SOURCE||(typeof model==='string'&&source==='https://powertokens.ai/models/'+encodeURIComponent(model));}
 const OFFICIAL_CURRENCY = 'USD';
 
 /**
@@ -304,7 +305,7 @@ function selectTextPriceSnapshot(params, options = {}) {
 
     // 针对目标模型的快照，进行严格字段模式与类型校验
     // 来源检查
-    if (!desc.sourceUrl || desc.sourceUrl.value !== OFFICIAL_PRICE_SOURCE) {
+    if (!desc.sourceUrl || !isOfficialPriceSource(desc.sourceUrl.value,targetModel)) {
       return fail(REASON_CODES.INVALID_SOURCE_URL, 'Snapshot sourceUrl must be official pricing source');
     }
 
@@ -371,6 +372,9 @@ function selectTextPriceSnapshot(params, options = {}) {
     let priceValidationError = null;
     for (const f of priceFields) {
       const isCache = f.startsWith('cache');
+      // Explicit null preserves an unpriced cache dimension. The estimator
+      // still refuses it whenever actual usage in that dimension is nonzero.
+      if(isCache&&desc[f]?.value===null)continue;
       if (!desc[f] || desc[f].value === undefined || desc[f].value === null) {
         priceValidationError = {
           code: isCache ? REASON_CODES.MISSING_CACHE_DIMENSION : REASON_CODES.MISSING_FIELD,
@@ -443,6 +447,7 @@ function selectTextPriceSnapshot(params, options = {}) {
 module.exports = {
   selectTextPriceSnapshot,
   OFFICIAL_PRICE_SOURCE,
+  isOfficialPriceSource,
   OFFICIAL_CURRENCY,
   HARD_LIMITS,
   REASON_CODES,

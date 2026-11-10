@@ -21,9 +21,9 @@ export function installNativeOperationApproval(ctx,{getActiveTurn,requestApprova
   return ['rejected','cancelled','unavailable'].includes(receipt?.outcome)?receipt.outcome:'unavailable';
  });
  async function execute(active,execution,operation,next){
-  if(!active||!execution?.agent||typeof next!=='function'||execution.name!=='bash'||!execution.callId||!execution.signal||!active.stepNames?.has(execution.rootCallId||execution.callId))throw fail('APPROVAL_CONTEXT_INVALID');
+  if(!active||!execution?.agent||typeof next!=='function'||!['bash','run_script'].includes(execution.name)||!execution.callId||!execution.signal||!active.stepNames?.has(execution.rootCallId||execution.callId))throw fail('APPROVAL_CONTEXT_INVALID');
   const root=execution.rootCallId||execution.callId;
-  if((root===execution.callId&&active.stepNames.get(root)!==execution.name)||!active.toolPolicy?.allowedTools?.includes('bash'))throw fail('APPROVAL_CONTEXT_INVALID');
+  if((root===execution.callId&&active.stepNames.get(root)!==execution.name)||!active.toolPolicy?.allowedTools?.includes(execution.name))throw fail('APPROVAL_CONTEXT_INVALID');
   const copy=JSON.parse(JSON.stringify(operation));Object.freeze(copy);
   const binding={active,execution,operation:copy,receipt:null};
   if(!current(binding))throw fail('APPROVAL_CANCELLED');

@@ -731,6 +731,8 @@ function toMarkdown(messages) {
  * /api/chat 核心流程（异步，事件循环不阻塞）
  * ========================================================================== */
 async function handleChat(req, res, me, body, taskRun = null) {
+  let analysisWorkspace=null;
+  try{
   const uid = me.user.id;
   const conversationId = String(body.conversationId || "").trim();
   const regenerate = body.regenerate === true;
@@ -988,6 +990,13 @@ async function handleChat(req, res, me, body, taskRun = null) {
     }
   }
 
+  if(body.allowAnalysis===true){
+    try{
+      if(!taskRun)throw Object.assign(Error('Run required'),{code:'RUN_REQUIRED'});
+      analysisWorkspace=await require('./tasks/analysis-workspace.cjs').prepareAnalysisWorkspace({workspaceRoot:path.join(RUNTIME,'workspaces'),uploadsRoot:path.join(RUNTIME,'_uploads'),identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,refs:lastUser?.documents||[],evidence:taskRun.attachmentEvidence||[],signal:taskRun.signal,runtimeRoot:process.env.PT_ISOLATION_RUNTIME||path.join(__dirname,'isolation/vendor')});
+      docNote+='\nREAD_ONLY_ANALYSIS_INPUTS '+JSON.stringify(analysisWorkspace.files)+'\nOnly the listed immutable inputs are available to analysis tools. Python analysis requires approval of exact code; output is bounded text, not filesystem writes.';
+    }catch(error){return rejectChat(409,{ok:false,code:/^(ANALYSIS|ISOLATION|RUN)_[A-Z_]+$/.test(error.code||'')?error.code:'ANALYSIS_UNAVAILABLE',error:'本次只读分析尚不可用，或输入超过8个文件、单文件1MB和合计2MB限制。未调用模型。'});}
+  }
   let processedMedia=null;
   if(lastUser?.media?.length){
     if(taskType||lastUser.media.length!==1)return rejectChat(409,{ok:false,code:'MEDIA_INPUT_LIMIT',error:'每次支持解析一个音视频附件，请单独发送。'});
@@ -1237,7 +1246,8 @@ async function handleChat(req, res, me, body, taskRun = null) {
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
     reasoningEffort: taskRun?.modelSelection?.reasoningEffort,
-    budgetProfile: body.allowDocuments===true?"documents":body.allowBilling===true?"billing":body.allowWeb===true ? "web" : body.allowQuestions === true && !controlledMediaGrant && !pinnedSkills.skills.length && !lastUser?.csvSelections?.length ? "questions" : controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
+    analysisWorkspace,
+    budgetProfile: body.allowAnalysis===true?"analysis":body.allowDocuments===true?"documents":body.allowBilling===true?"billing":body.allowWeb===true ? "web" : body.allowQuestions === true && !controlledMediaGrant && !pinnedSkills.skills.length && !lastUser?.csvSelections?.length ? "questions" : controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
       : taskRun && Array.isArray(lastUser?.csvSelections) && lastUser.csvSelections.length === 1 ? (pinnedSkills.skills.length?"skill-csv":"csv") : pinnedSkills.skills.length?"skill":undefined,
     pinnedSkills,
     runId:taskRun?.runId,
@@ -1246,7 +1256,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     recordModelIntents: Boolean(modelIntentHandler),
     timeoutMs: taskTimeoutMs,
     onToolRequest: request => request.name === MODEL_INTENT_RPC && modelIntentHandler
-      ? modelIntentHandler.handle(request) : request.name==='northstar.document_export'?(()=>{if(!taskRun||body.allowDocuments!==true)throw Object.assign(Error('Document mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return documentExportHandler.handle(request);})(): request.name==='northstar.billing'?(()=>{if(!taskRun||body.allowBilling!==true)throw Object.assign(Error('Billing mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return billingAccountService.query({userId:uid,tenantId:me.tenant.id},request.args,{signal:request.signal,runId:taskRun.runId,leaseOwner:taskRun.leaseOwner});})():request.name==='northstar.web'?(()=>{
+      ? modelIntentHandler.handle(request) : ['northstar.operation_approval','northstar.operation_approval_consume'].includes(request.name)?(()=>{if(!taskRun||body.allowAnalysis!==true||!analysisWorkspace)throw Object.assign(Error('Approval scope unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});const scope={identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,leaseOwner:taskRun.leaseOwner,args:request.args,signal:request.signal};return request.name==='northstar.operation_approval'?operationApprovalService.ask(scope):operationApprovalService.consume(scope);})(): request.name==='northstar.document_export'?(()=>{if(!taskRun||body.allowDocuments!==true)throw Object.assign(Error('Document mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return documentExportHandler.handle(request);})(): request.name==='northstar.billing'?(()=>{if(!taskRun||body.allowBilling!==true)throw Object.assign(Error('Billing mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return billingAccountService.query({userId:uid,tenantId:me.tenant.id},request.args,{signal:request.signal,runId:taskRun.runId,leaseOwner:taskRun.leaseOwner});})():request.name==='northstar.web'?(()=>{
         if(!taskRun||body.allowWeb!==true)throw Object.assign(Error('Web mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});
         return webHostService.execute({identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,leaseOwner:taskRun.leaseOwner,args:request.args,signal:request.signal});
       })(): ['northstar.user_question','northstar.user_question_validate'].includes(request.name) ? (()=>{
@@ -1557,6 +1567,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     ...(DRY_RUN_CHAT ? { dryRun: true, tenantId: r.tenantId, workspace: r.cwd, userId: r.userId, keySha256: r.keySha256 } : {}),
   });
   return taskRun ? undefined : res.end();
+  }finally{if(analysisWorkspace){try{require('./tasks/analysis-workspace.cjs').releaseAnalysisWorkspace(analysisWorkspace);}catch{console.warn('[analysis] input cleanup retained for recovery');}}}
 }
 
 async function executeDurableChat({ identity, run, request, signal, emit, leaseOwner }) {
