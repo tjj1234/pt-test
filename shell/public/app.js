@@ -601,7 +601,7 @@ function pushArtifact(a) {
   if (parts.some((part) => !part || part === "." || part === "..")) return;
   const base = parts[parts.length - 1];
   const ext = base.slice(base.lastIndexOf(".")).toLowerCase();
-  const kind = ext === ".pdf" ? "pdf" : (ext === ".html" || ext === ".htm") ? "html" : (ext === ".md" || ext === ".markdown") ? "md" : ext === ".csv" ? "csv" : ext === ".xlsx" ? "xlsx" : null;
+  const kind = ext === ".pdf" ? "pdf" : (ext === ".html" || ext === ".htm") ? "html" : (ext === ".md" || ext === ".markdown") ? "md" : ext === ".csv" ? "csv" : ext === ".xlsx" ? "xlsx" : ext === ".docx" ? "docx" : null;
   if (!kind) return;
   const normalized = { rel, kind, name: String(a.name || base).slice(0, 255), url: "/api/artifact?p=" + encodeURIComponent(rel), size: Number.isFinite(a.size) ? a.size : 0, mtime: Number.isFinite(a.mtime) ? a.mtime : 0 };
   const i = artItems.findIndex((x) => x.rel === rel);
@@ -645,11 +645,11 @@ function renderArtifactPane() {
 
   if (!body) return;
   body.replaceChildren();
-  if (a.kind === "csv" || a.kind === "xlsx") {
+  if (a.kind === "csv" || a.kind === "xlsx" || a.kind === "docx") {
     const link = document.createElement("a");
     link.href = a.url;
-    link.textContent = a.kind === "xlsx" ? "下载 Excel 文件" : "下载 CSV 文件";
-    link.setAttribute("download", a.kind === "xlsx" ? "result.xlsx" : "result.csv");
+    link.textContent = a.kind === "docx"?"下载 Word 文件":a.kind === "xlsx" ? "下载 Excel 文件" : "下载 CSV 文件";
+    link.setAttribute("download", a.kind === "docx"?"report.docx":a.kind === "xlsx" ? "result.xlsx" : "result.csv");
     body.appendChild(link);
     return;
   }
@@ -1519,6 +1519,7 @@ async function ask(msg) {
   const effectiveMsg = msg.trim() || (pendingImage ? "请分析这张图片" : (pendingDocs.length ? "请分析附件内容" : (readyMedia.length ? "请分析音视频内容" : "请分析引用的资料内容")));
   ta.value = ""; ta.style.height = "auto";
   const payload = { conversationId: state.activeId, message: effectiveMsg };
+  if ($('#allowDocuments')?.checked) payload.allowDocuments=true;
   if ($('#allowBilling')?.checked) payload.allowBilling=true;
   if ($('#allowWeb')?.checked) payload.allowWeb=true;
   if ($('#allowQuestions')?.checked) payload.allowQuestions=true;
@@ -4336,7 +4337,7 @@ function addWebSourceHistoryControl(host,runId){
 
 for(const [a,b]of [['allowWeb','allowQuestions'],['allowQuestions','allowWeb']]){const input=document.getElementById(a);input?.addEventListener('change',()=>{if(input.checked){const other=document.getElementById(b);if(other)other.checked=false;}});}
 
-for(const id of ['allowWeb','allowQuestions','allowBilling'])document.getElementById(id)?.addEventListener('change',event=>{if(event.target.checked)for(const other of ['allowWeb','allowQuestions','allowBilling'])if(other!==id)document.getElementById(other).checked=false;});
+for(const id of ['allowWeb','allowQuestions','allowBilling','allowDocuments'])document.getElementById(id)?.addEventListener('change',event=>{if(event.target.checked)for(const other of ['allowWeb','allowQuestions','allowBilling','allowDocuments'])if(other!==id)document.getElementById(other).checked=false;});
 
 function observeWebSources(conversationId,value){
  if(!validRunReviewId(value?.runId)||!Array.isArray(value.sources)||value.sources.length>10)return;

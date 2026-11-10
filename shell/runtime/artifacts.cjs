@@ -22,7 +22,7 @@ const fs = require("fs");
 const path = require("path");
 
 /** 可预览的扩展名。刻意不含图片/音视频 —— 那些气泡里已经能直接展示了，不抢预览面板。 */
-const ARTIFACT_EXTS = [".pdf", ".html", ".htm", ".md", ".markdown", ".csv", ".xlsx"];
+const ARTIFACT_EXTS = [".pdf", ".html", ".htm", ".md", ".markdown", ".csv", ".xlsx", ".docx"];
 
 /** 扫描时整个跳过的目录：依赖目录 / 配置目录 / 上传目录，量大且不可能有人工产出。 */
 const SKIP_DIRS = new Set([
@@ -35,6 +35,7 @@ function artifactKind(nameOrExt) {
   const s = String(nameOrExt || "").toLowerCase();
   const dot = s.lastIndexOf(".");
   const ext = dot >= 0 ? s.slice(dot) : "." + s.replace(/^\.+/, "");
+  if (ext === ".docx") return "docx";
   if (ext === ".pdf") return "pdf";
   if (ext === ".html" || ext === ".htm") return "html";
   if (ext === ".md" || ext === ".markdown") return "md";
@@ -164,6 +165,7 @@ function collectArtifacts(workspace, sinceMs, opts) {
 /** 扩展名 -> Content-Type（/api/artifact 响应用；PDF 必须给对，否则浏览器不进内置阅读器）。 */
 function artifactContentType(rel) {
   const k = artifactKind(String(rel || ""));
+  if (k === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   if (k === "pdf") return "application/pdf";
   if (k === "html") return "text/html; charset=utf-8";
   if (k === "md") return "text/markdown; charset=utf-8";

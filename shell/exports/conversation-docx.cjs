@@ -62,7 +62,7 @@ function exportDocumentInWorker({document, format = 'docx', signal, timeoutMs = 
       if (failure) return reject(failure);
       if (code !== 0 || !response?.ok || !(response.bytes instanceof Uint8Array) || response.bytes.length > 5 * 1024 * 1024) return reject(fail('DOCUMENT_EXPORT_FAILED'));
       const bytes = Buffer.from(response.bytes);
-      resolve({bytes, sourceSha256, sha256: createHash('sha256').update(bytes).digest('hex'), mime: format==='pdf'?'application/pdf':format==='xlsx'?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+      resolve({bytes, sourceSha256, sha256: createHash('sha256').update(bytes).digest('hex'),degradations:response.degradations||[], mime: format==='pdf'?'application/pdf':format==='xlsx'?'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
     });
     if (signal?.aborted) cancel();
   });
@@ -79,4 +79,4 @@ function exportConversationPdf(options={}){
   try{return exportDocumentInWorker({...options,format:'pdf',document:conversationDocument(options.conversation)});}
   catch(error){return Promise.reject(error);}
 }
-module.exports = {exportConversationDocx,exportConversationPdf, conversationDocument, exportCsvWorkbook};
+module.exports = {exportConversationDocx,exportConversationPdf, conversationDocument, exportCsvWorkbook,exportDocumentInWorker};

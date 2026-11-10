@@ -26,7 +26,7 @@ function tenantUuid(value) { return typeof value === "string" && /^[0-9a-f-]{36}
 
 function normalizeChatRequest(input, tenantId) {
   if (!input || typeof input !== "object" || Array.isArray(input)) throw fail("Chat body must be an object");
-  const allowedInput = new Set(["conversationId", "idempotencyKey", "message", "image", "documents", "csvSelections", "sourceCitations", "skillReleaseIds", "allowQuestions", "allowWeb", "allowBilling", "media", "taskType", "context", "branchFrom", "regenerate"]);
+  const allowedInput = new Set(["conversationId", "idempotencyKey", "message", "image", "documents", "csvSelections", "sourceCitations", "skillReleaseIds", "allowQuestions", "allowWeb", "allowBilling", "allowDocuments", "media", "taskType", "context", "branchFrom", "regenerate"]);
   if (Object.keys(input).some((key) => !allowedInput.has(key))) throw fail("Chat body contains unsupported fields");
   if (!tenantUuid(tenantId)) throw fail("tenantId is invalid");
   const uploadRef = (value) => {
@@ -35,6 +35,7 @@ function normalizeChatRequest(input, tenantId) {
     return Boolean(match && match[1] === tenantId && match[2] !== "." && match[2] !== "..");
   };
   const body = {};
+  if(input.allowDocuments!==undefined){if(typeof input.allowDocuments!=="boolean")throw fail("allowDocuments is invalid");if(input.allowDocuments)body.allowDocuments=true;}
   if(input.allowBilling!==undefined){if(typeof input.allowBilling!=="boolean")throw fail("allowBilling is invalid");if(input.allowBilling)body.allowBilling=true;}
   if(input.allowWeb!==undefined){if(typeof input.allowWeb!=="boolean")throw fail("allowWeb is invalid");if(input.allowWeb)body.allowWeb=true;}
   if(input.allowQuestions!==undefined){if(typeof input.allowQuestions!=="boolean")throw fail("allowQuestions is invalid");if(input.allowQuestions)body.allowQuestions=true;}
@@ -110,6 +111,7 @@ function normalizeChatRequest(input, tenantId) {
     body.regenerate = input.regenerate;
   }
   if (!body.regenerate && body.branchFrom === undefined && !body.message) throw fail("message is required");
+  if(body.allowDocuments&&(body.allowBilling||body.allowWeb||body.allowQuestions||body.taskType||body.skillReleaseIds?.length||body.csvSelections?.length))throw fail("Document export mode cannot be combined with another tool mode");
   if(body.allowBilling&&(body.allowWeb||body.allowQuestions||body.taskType||body.skillReleaseIds?.length||body.csvSelections?.length))throw fail("Billing mode cannot be combined with another tool mode");
   if(body.allowWeb&&(body.allowQuestions||body.taskType||body.skillReleaseIds?.length||body.csvSelections?.length))throw fail("Web mode cannot be combined with another tool mode");
   if(body.allowQuestions&&(body.taskType||body.skillReleaseIds?.length||body.csvSelections?.length))throw fail("Question mode cannot be combined with another tool mode");

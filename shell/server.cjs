@@ -1198,6 +1198,11 @@ async function handleChat(req, res, me, body, taskRun = null) {
     documentRefs: lastUser?.documents || [], confirmedSelections: lastUser?.csvSelections || [],
     attachmentEvidence: taskRun.attachmentEvidence || [],
   }) : null;
+  const documentExportHandler=taskRun?require('./tasks/document-export-handler.cjs').createDocumentExportHandler({
+    workspaceRoot:path.join(RUNTIME,'workspaces'),identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,
+    assertLive:async()=>{const {rows:[row]}=await auth.db.query('SELECT state,lease_owner,lease_expires_at>clock_timestamp() AS active FROM agent_runs WHERE run_id=$1 AND user_id=$2 AND tenant_id=$3',[taskRun.runId,uid,me.tenant.id]);if(row?.state!=='running'||row.lease_owner!==taskRun.leaseOwner||!row.active)throw Object.assign(Error('Run lease lost'),{code:'LEASE_LOST'});},
+    emit:async(type,payload)=>{await taskRun.emit(type,payload);const artifact=artifactsMod.normalizeArtifact(payload.artifact);if(artifact)hostArtifacts.set(artifact.rel,artifact);},
+  }):null;
   const hostToolHandler = createHostToolHandler({ registry: toolsRegistry, context: permCtx, mediaHandler: mediaRunHandler, csvHandler: csvRunHandler });
   const modelIntentHandler = taskRun ? createModelIntentHandler({
     priceStore: textPriceCatalogs, selectedModel, emit: taskRun.emit,
@@ -1232,7 +1237,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
     reasoningEffort: taskRun?.modelSelection?.reasoningEffort,
-    budgetProfile: body.allowBilling===true?"billing":body.allowWeb===true ? "web" : body.allowQuestions === true && !controlledMediaGrant && !pinnedSkills.skills.length && !lastUser?.csvSelections?.length ? "questions" : controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
+    budgetProfile: body.allowDocuments===true?"documents":body.allowBilling===true?"billing":body.allowWeb===true ? "web" : body.allowQuestions === true && !controlledMediaGrant && !pinnedSkills.skills.length && !lastUser?.csvSelections?.length ? "questions" : controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
       : taskRun && Array.isArray(lastUser?.csvSelections) && lastUser.csvSelections.length === 1 ? (pinnedSkills.skills.length?"skill-csv":"csv") : pinnedSkills.skills.length?"skill":undefined,
     pinnedSkills,
     runId:taskRun?.runId,
@@ -1241,7 +1246,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     recordModelIntents: Boolean(modelIntentHandler),
     timeoutMs: taskTimeoutMs,
     onToolRequest: request => request.name === MODEL_INTENT_RPC && modelIntentHandler
-      ? modelIntentHandler.handle(request) : request.name==='northstar.billing'?(()=>{if(!taskRun||body.allowBilling!==true)throw Object.assign(Error('Billing mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return billingAccountService.query({userId:uid,tenantId:me.tenant.id},request.args,{signal:request.signal,runId:taskRun.runId,leaseOwner:taskRun.leaseOwner});})():request.name==='northstar.web'?(()=>{
+      ? modelIntentHandler.handle(request) : request.name==='northstar.document_export'?(()=>{if(!taskRun||body.allowDocuments!==true)throw Object.assign(Error('Document mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return documentExportHandler.handle(request);})(): request.name==='northstar.billing'?(()=>{if(!taskRun||body.allowBilling!==true)throw Object.assign(Error('Billing mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return billingAccountService.query({userId:uid,tenantId:me.tenant.id},request.args,{signal:request.signal,runId:taskRun.runId,leaseOwner:taskRun.leaseOwner});})():request.name==='northstar.web'?(()=>{
         if(!taskRun||body.allowWeb!==true)throw Object.assign(Error('Web mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});
         return webHostService.execute({identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,leaseOwner:taskRun.leaseOwner,args:request.args,signal:request.signal});
       })(): ['northstar.user_question','northstar.user_question_validate'].includes(request.name) ? (()=>{
@@ -2609,6 +2614,11 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
   const artRel = (new URL(req.url, "http://127.0.0.1:" + PORT).searchParams.get("p") || "").trim();
   if (!artifactsMod.isSafeRel(artRel)) return json(res, 400, { ok: false, error: "路径不合法" });
   if (!artifactsMod.isArtifactName(artRel)) return json(res, 400, { ok: false, error: "该类型不支持预览" });
+  if(artRel.startsWith('document-results/')){
+    const match=/^document-results\/([a-f0-9-]{36})\/[a-f0-9-]{36}\.(docx|pdf|xlsx)$/.exec(artRel);
+    if(!match)return json(res,404,{ok:false,code:'NOT_FOUND'});
+    try{await taskStore.getRun({userId:meArt.user.id,tenantId:artTenant},match[1]);}catch{return json(res,404,{ok:false,code:'NOT_FOUND'});}
+  }else if(artifactsMod.artifactKind(artRel)==='docx')return json(res,404,{ok:false,code:'NOT_FOUND'});
   const workspaceRoot = path.join(RUNTIME, "workspaces");
   let artReal, artFd, artSt;
   try {
@@ -2627,7 +2637,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
     "Cache-Control": "no-store",
     "X-Content-Type-Options": "nosniff",
   };
-  if (["csv","xlsx"].includes(artifactsMod.artifactKind(artRel))) {
+  if (["csv","xlsx","docx"].includes(artifactsMod.artifactKind(artRel))) {
     artHeaders["Content-Disposition"] = "attachment; filename=\"result."+artifactsMod.artifactKind(artRel)+"\"";
   }
   // HTML 是 Agent 生成的内容，里面可能有脚本；同源 iframe 里它能读父页面的 storage / cookie。

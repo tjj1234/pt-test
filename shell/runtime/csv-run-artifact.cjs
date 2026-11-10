@@ -23,15 +23,16 @@ function openOrCreate(parent, name) {
 }
 
 /** Atomically publish one immutable CSV file beneath tenant/run-scoped paths. */
-function writeTableRunArtifact({ workspaceRoot, tenantId, runId, bytes, format } = {}) {
-  if (!UUID.test(tenantId) || !UUID.test(runId) || !Buffer.isBuffer(bytes) || !['csv','xlsx'].includes(format)) throw fail('CSV_ARTIFACT_ARGUMENT_INVALID');
+function writeTableRunArtifact({ workspaceRoot, tenantId, runId, bytes, format,documentResult=false } = {}) {
+  if (!UUID.test(tenantId) || !UUID.test(runId) || !Buffer.isBuffer(bytes) || !(documentResult?['docx','pdf','xlsx']:['csv','xlsx']).includes(format)) throw fail('CSV_ARTIFACT_ARGUMENT_INVALID');
   if (!bytes.length || bytes.length > MAX_BYTES) throw fail('CSV_ARTIFACT_SIZE_INVALID');
   const root = pinDirectory(fs.realpathSync(workspaceRoot));
   let tenant, exportsDir, runDir;
   let tempName;
   try {
     tenant = openOrCreate(root, tenantId);
-    exportsDir = openOrCreate(tenant, format==='xlsx'?'spreadsheet-results':'csv-results');
+    const category=documentResult?'document-results':format==='xlsx'?'spreadsheet-results':'csv-results';
+    exportsDir = openOrCreate(tenant,category);
     runDir = openOrCreate(exportsDir, runId);
     const token = crypto.randomUUID();
     tempName = `.pending-${token}`;
@@ -51,8 +52,8 @@ function writeTableRunArtifact({ workspaceRoot, tenantId, runId, bytes, format }
     runDir.unlinkFile(tempName);
     tempName = null;
     return Object.freeze({
-      rel: `${format==='xlsx'?'spreadsheet-results':'csv-results'}/${runId}/${finalName}`,
-      name: 'csv-analysis-result.'+format, kind: format, size: bytes.length,
+      rel: `${category}/${runId}/${finalName}`,
+      name: (documentResult?'report.':'csv-analysis-result.')+format, kind: format, size: bytes.length,
       sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
     });
   } catch (error) {
@@ -69,4 +70,5 @@ function writeCsvRunArtifact(input = {}) {
   return writeTableRunArtifact({...input,format:'csv',bytes:Buffer.from(input.csv,'utf8')});
 }
 function writeXlsxRunArtifact(input = {}) {return writeTableRunArtifact({...input,format:'xlsx'});}
-module.exports = { writeCsvRunArtifact, writeXlsxRunArtifact };
+function writeDocumentRunArtifact(input={}){return writeTableRunArtifact({...input,documentResult:true});}
+module.exports = { writeCsvRunArtifact, writeXlsxRunArtifact,writeDocumentRunArtifact };

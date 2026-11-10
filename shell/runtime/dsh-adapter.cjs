@@ -169,6 +169,7 @@ function normalizeRunnerControlError(frame) {
 const PROFILE_FORMAT_VERSION = 1;
 const PROFILE_MANIFEST = "northstar-profile-manifest.json";
 const PROFILE_SOURCE_FILES = Object.freeze({
+  "run-budget-documents.json":runner=>path.resolve(path.dirname(runner),"runtime/run-budget-documents.json"),
   "run-budget-billing.json":runner=>path.resolve(path.dirname(runner),"runtime/run-budget-billing.json"),
   "native-web-provider.mjs":runner=>path.resolve(path.dirname(runner),'runtime/native-web-provider.mjs'),
   "run-budget-web.json":runner=>path.resolve(path.dirname(runner),'runtime/run-budget-web.json'),
@@ -991,7 +992,7 @@ function createDshRuntime(opts = {}) {
         ...((spec.inputImages !== undefined || (!warm && !resume && spec.historyInputImages?.length))
           ? {inputImages:[...(!warm&&!resume?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
         ...(spec.recordModelIntents === true ? { recordModelIntents: true } : {}),
-        ...(["csv","skill","skill-csv","questions","web","billing"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv","questions","web","billing","documents"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) { waiter.taskDispatched = true; writeJson(proc, taskFrame); }
       else proc.pendingTasks.set(sessionId, taskFrame);
 
@@ -1057,7 +1058,7 @@ function createDshRuntime(opts = {}) {
       };
       proc.waiters.set(sessionId, waiter);
       const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, task, model: spec.model, tenantId,
-        ...(["csv","skill","skill-csv","questions","web","billing"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv","questions","web","billing","documents"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) writeJson(proc, taskFrame);
       else proc.pendingTasks.set(sessionId, taskFrame);
       setTimeout(() => {

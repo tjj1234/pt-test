@@ -20,7 +20,7 @@ const { listStylePresets, stylePresetSummary } = require("./presets.cjs");
 const crypto = require("node:crypto");
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "billing_query", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit", "skill_resource"]);
+const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "billing_query", "document_export", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit", "skill_resource"]);
 const NATIVE_RUN_TOOL_NAMES = new Set(['ask_user_question', 'skill', 'web_search','web_fetch']);
 const RUN_TOOL_NAMES = new Set([...HOST_RUN_TOOL_NAMES, ...NATIVE_RUN_TOOL_NAMES]);
 const MEDIA_TASK_TYPES = new Set(["text2image", "image2image", "text2video", "image2video"]);
@@ -97,8 +97,8 @@ function loadRunBudgetPolicy(profile = "default") {
   if (!dshHome) throw Object.assign(new Error("Run budget configuration root is unavailable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
   const mediaTask = /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.exec(profile)?.[1] || null;
   const withSkill=profile==='skill'||profile==='skill-csv'||profile.startsWith('skill-media:');
-  if (profile !== "default" && profile!=="billing" && profile !== "web" && profile !== "questions" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
-  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "billing"?"run-budget-billing.json":profile === "web" ? "run-budget-web.json" : profile === "questions" ? "run-budget-questions.json" : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
+  if (profile !== "default" && profile!=="billing" && profile!=="documents" && profile !== "web" && profile !== "questions" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "documents"?"run-budget-documents.json":profile === "billing"?"run-budget-billing.json":profile === "web" ? "run-budget-web.json" : profile === "questions" ? "run-budget-questions.json" : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
   let text;
   try { text = readFileSync(configPath, "utf8"); }
   catch {
@@ -498,7 +498,7 @@ function apply(ctx) {
           || (cmd.compact!==undefined&&typeof cmd.compact!=='boolean')
           || (cmd.runId!==undefined&&(typeof cmd.runId!=='string'||!cmd.runId.trim()||cmd.runId.length>128))
           || (cmd.recordModelIntents !== undefined && typeof cmd.recordModelIntents !== "boolean")
-          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv","questions","web","billing"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
+          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv","questions","web","billing","documents"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
         emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
           code: cmd.protocolVersion !== RPC_PROTOCOL_VERSION ? "PROTOCOL_VERSION_MISMATCH" : "TASK_FRAME_INVALID",
           message: "Parent task frame is invalid" });
@@ -663,6 +663,12 @@ function apply(ctx) {
                 execute:args=>requestParentTool(sid,'northstar.skill_resource',args),
               });
               // M1 探针：注册一个与业务线无关的 demo 工具，验证「对话 → 真实 tool/call → tool/result」链路
+              registerRunTool(agentCtx,sid,'document_export',{
+                name:'document_export',description:'生成本次任务的 Word、PDF 或 Excel 文件。传入标题、章节文字和表格；生成结果是可下载文件。仅在用户明确要求生成文件时使用；不执行脚本，不访问外部链接。',
+                parameters:{"format": {"type": "string", "required": true, "enum": ["docx", "pdf", "xlsx"]}, "document": {"type": "object", "required": true, "properties": {"title": {"type": "string", "required": true}, "author": {"type": "string"}, "date": {"type": "string"}, "sections": {"type": "array", "items": {"type": "object", "properties": {"heading": {"type": "string"}, "paragraphs": {"type": "array", "items": {"type": "string"}}, "table": {"type": "object", "properties": {"headers": {"type": "array", "items": {"type": "string"}}, "rows": {"type": "array", "items": {"type": "array", "items": {"type": "json"}}}}, "additionalProperties": false}}, "additionalProperties": false}}, "table": {"type": "object", "properties": {"headers": {"type": "array", "items": {"type": "string"}}, "rows": {"type": "array", "items": {"type": "array", "items": {"type": "json"}}}}, "additionalProperties": false}}, "additionalProperties": false}},
+                output:{schema:{type:'object',additionalProperties:true},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
+                execute:args=>requestParentTool(sid,'northstar.document_export',args),
+              });
               registerRunTool(agentCtx,sid,'billing_query',{
                 name:'billing_query',description:'只读查询用户已授权的PT官方账户余额、账单汇总、协议状态或最新消费记录。官方实扣为credits；不自动关联本Run，不换算USD，不发起模型或支付请求。',
                 parameters:{kind:{type:'string',required:true,enum:['balance','usage','agreement','latest']},startDate:{type:'string'},endDate:{type:'string'}},
