@@ -410,10 +410,11 @@ function createDshRuntime(opts = {}) {
       waiter.timedOut = true;
       proc.draining = true;
     }
+    const currentText = waiter.textBuf || "";
     if (waiter.abortRequested) {
       if (reason === "timeout" && !waiter.taskDispatched) {
         proc.waiters.delete(sessionId);
-        waiter.resolve({ ok: false, code: "TIMEOUT", text: "", stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断", steps: waiter.steps || [] });
+        waiter.resolve({ ok: false, code: "TIMEOUT", text: currentText, stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断", steps: waiter.steps || [] });
         maybeEscalateAbort(proc);
         retireDrainingProcess(proc);
       }
@@ -423,9 +424,9 @@ function createDshRuntime(opts = {}) {
     if (!waiter.taskDispatched) {
       proc.waiters.delete(sessionId);
       if (waiter.timedOut) {
-        waiter.resolve({ ok: false, code: "TIMEOUT", text: "", stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断", steps: waiter.steps || [] });
+        waiter.resolve({ ok: false, code: "TIMEOUT", text: currentText, stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断", steps: waiter.steps || [] });
       } else {
-        waiter.resolve({ ok: false, text: "", stopped: true, stopReason: "user", error: "已停止", steps: waiter.steps || [] });
+        waiter.resolve({ ok: false, text: currentText, stopped: true, stopReason: "user", error: "已停止", steps: waiter.steps || [] });
       }
       if (proc.draining) maybeEscalateAbort(proc);
       retireDrainingProcess(proc);
@@ -515,7 +516,7 @@ function createDshRuntime(opts = {}) {
       proc.waiters.delete(sid);
       if (waiter.timeoutTimer) clearTimeout(waiter.timeoutTimer);
       if (waiter.abortGraceTimer) clearTimeout(waiter.abortGraceTimer);
-      waiter.resolve({ ok: false, code, error, text: "", steps: waiter.steps || [] });
+      waiter.resolve({ ok: false, code, error, text: waiter.textBuf || "", steps: waiter.steps || [] });
     }
     try { proc.child.kill(); } catch { /* process close cleanup follows */ }
   }
@@ -590,7 +591,12 @@ function createDshRuntime(opts = {}) {
       case "tool_request": answerToolRequest(proc, frame); break;
       case "delta": {
         const w = proc.waiters.get(frame.sessionId);
-        if (w && typeof w.onDelta === "function") { try { w.onDelta(frame.text); } catch (e) {} }
+        if (w) {
+          if (typeof frame.text === "string") {
+            w.textBuf = (w.textBuf || "") + frame.text;
+          }
+          if (typeof w.onDelta === "function") { try { w.onDelta(frame.text); } catch (e) {} }
+        }
         break;
       }
       case "step": {
@@ -642,9 +648,10 @@ function createDshRuntime(opts = {}) {
           proc.waiters.delete(frame.sessionId);
           if (w.abortGraceTimer) clearTimeout(w.abortGraceTimer);
           if (w.timeoutTimer) clearTimeout(w.timeoutTimer);
-          if (w.timedOut) w.resolve({ ...frame, ok: false, code: "TIMEOUT", stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断" });
-          else if (w.abortRequested) w.resolve({ ...frame, ok: false, stopped: true, canceled: true, stopReason: "user", error: "已停止" });
-          else w.resolve(frame);
+          const currentText = (frame.text !== undefined && frame.text !== "") ? frame.text : (w.textBuf || "");
+          if (w.timedOut) w.resolve({ ...frame, text: currentText, ok: false, code: "TIMEOUT", stopped: true, canceled: true, stopReason: "timeout", error: "生成超时，已中断" });
+          else if (w.abortRequested) w.resolve({ ...frame, text: currentText, ok: false, stopped: true, canceled: true, stopReason: "user", error: "已停止" });
+          else w.resolve({ ...frame, text: currentText });
           maybeEscalateAbort(proc);
           retireDrainingProcess(proc);
         }
@@ -660,9 +667,10 @@ function createDshRuntime(opts = {}) {
             proc.pendingTasks.delete(sid); clearToolRequests(proc, sid); proc.waiters.delete(sid);
             if (w.timeoutTimer) clearTimeout(w.timeoutTimer);
             if (w.abortGraceTimer) clearTimeout(w.abortGraceTimer);
+            const currentText = (frame.text !== undefined && frame.text !== "") ? frame.text : (w.textBuf || "");
             w.resolve(w.abortRequested
-              ? { ok: false, stopped: true, canceled: true, stopReason: "user", error: "已停止", text: "", steps: w.steps || [] }
-              : { ok: false, code: normalized.code, error: normalized.error, text: "", steps: w.steps || [] });
+              ? { ok: false, stopped: true, canceled: true, stopReason: "user", error: "已停止", text: currentText, steps: w.steps || [] }
+              : { ok: false, code: normalized.code, error: normalized.error, text: currentText, steps: w.steps || [] });
             maybeEscalateAbort(proc);
             retireDrainingProcess(proc);
           } else observeUncorrelatedRunnerError(proc, normalized);
@@ -796,9 +804,9 @@ function createDshRuntime(opts = {}) {
         const byTimeout = w.timedOut === true;
         const byUser = w.abortRequested === true;
         w.resolve({
-          ok: false, text: "",
+          ok: false, text: w.textBuf || "",
           code: byTimeout ? "TIMEOUT" : "DSH_PROCESS_EXIT",
-          error: byTimeout ? "生成超时，已中断" : (byUser ? "已停止" : "常驻 DSH 进程退出"),
+          error: byTimeout ? "生成超时，已中断" : (byUser ? "已停止" : "常驻 DSH进程退出"),
           stopped: byTimeout || byUser,
           stopReason: byTimeout ? "timeout" : (byUser ? "user" : undefined),
           steps: w.steps || [],
@@ -931,6 +939,7 @@ function createDshRuntime(opts = {}) {
       }
 
       waiter = {
+        textBuf: "",
         onToolRequest: typeof spec.onToolRequest === "function"
           ? (request) => spec.onToolRequest(request)
           : null,
@@ -946,10 +955,11 @@ function createDshRuntime(opts = {}) {
           if (waiter.abortGraceTimer) clearTimeout(waiter.abortGraceTimer);
           const stopped = frame.stopped === true || frame.canceled === true || waiter.timedOut === true;
           const stopReason = stopped ? (frame.stopReason || (waiter.timedOut ? "timeout" : "user")) : undefined;
+          const text = (frame.text !== undefined && frame.text !== "") ? frame.text : (waiter.textBuf || "");
           resolve({
             ok: frame.ok !== false,
             code: frame.code || null,
-            text: frame.text || "",
+            text,
             media: Array.isArray(frame.media) ? frame.media : null,
             artifacts: collectRoundArtifacts(workspace, t0),
             report: frame.report || null,

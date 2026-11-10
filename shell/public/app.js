@@ -751,6 +751,14 @@ function renderMessage(m, opts) {
   if (m.report && window.openReportDrawer) window.openReportDrawer(m.report);
   const btxt = document.createElement("span"); btxt.className = "bubtext"; btxt.textContent = m.text == null ? "" : m.text;
   bub.appendChild(btxt);
+  if (m.partial === true) {
+    const pTag = document.createElement("div");
+    pTag.className = "bubdocs";
+    pTag.style.color = "var(--text-muted, #888)";
+    pTag.style.marginTop = "4px";
+    pTag.textContent = m.stopReason === "timeout" ? "⏱️ 回答因超时中断（已保留部分内容）" : "⏹️ 回答已由用户中止（已保留部分内容）";
+    bub.appendChild(pTag);
+  }
   box.appendChild(bub);
 
   // 轨迹：展示 agent 调了哪些工具（可折叠）
@@ -837,20 +845,25 @@ function renderChat(messages) {
 /* 停止 / 超时中断文案。
  * 以前「真超时被强制中断」和「用户手动点停止」走同一个 stopped 分支，都显示「已停止」，
  * 用户分不清是卡死了还是自己停的 —— 现在按服务端下发的 stopReason 区分（timeout / user）。 */
-function stoppedBarText(stopReason, upstreamMayStillRun = false) {
+function stoppedBarText(stopReason, upstreamMayStillRun = false, hasPartialText = false) {
   if (upstreamMayStillRun) return "本地任务已停止；上游任务状态未确认，可能仍在运行，请稍后核对结果。";
+  if (hasPartialText) {
+    return stopReason === "timeout"
+      ? "已超时中断（已保留生成的部分内容）"
+      : "已停止（已保留生成的部分内容）";
+  }
   return stopReason === "timeout"
-    ? "已超时中断（本轮超出时间预算，回答已丢弃）"
-    : "已停止（你的问题已保存，回答已丢弃）";
+    ? "已超时中断（本轮超出时间预算）"
+    : "已停止";
 }
 function stoppedChipText(stopReason) {
   return stopReason === "timeout" ? "已超时中断" : "已停止";
 }
 
-function showStoppedBar(stopReason, upstreamMayStillRun = false) {
+function showStoppedBar(stopReason, upstreamMayStillRun = false, hasPartialText = false) {
   const bar = document.createElement("div");
   bar.className = "stopped-bar";
-  const label = document.createElement("span"); label.textContent = stoppedBarText(stopReason, upstreamMayStillRun);
+  const label = document.createElement("span"); label.textContent = stoppedBarText(stopReason, upstreamMayStillRun, hasPartialText);
   const btn = document.createElement("button"); btn.className = "msgbtn"; btn.title = "重新生成";
   btn.innerHTML = '<span class="ico" data-ico="refresh"></span>';
   btn.addEventListener("click", () => regenerate());
@@ -977,7 +990,7 @@ async function openConversation(id, opts) {
   const force = !!(opts && opts.force);
   if(state.activeId !== id) { state.skillSelection = null; state.skillSelectionOverride = false; renderSelectedSkill(); }
   state.activeId = id;
-  clearSourceCitations();
+  closeSourcePanel();
   syncConversationBusy();
   delete state.unread[id];   // 点进来了，未读标记就没用了
   // 不管这条对话之前是不是已激活，都必须切回对话视图：
@@ -1302,7 +1315,13 @@ async function runChat(payload) {
             // 界面已经不在目标对话上了：只标未读 + 刷列表，一个字都不写进当前视图
             if (!viewing()) { markUnread(targetId); await refreshList(); return; }
             ++conversationLoadSequence; // A pending history read must not overwrite this terminal result.
-            if (obj.stopped) { renderChat(obj.messages); restoreManualCheckHistory(); showStoppedBar(obj.stopReason, upstreamMayRunForRuns.has(runId)); cm.textContent = stoppedChipText(obj.stopReason); }
+            if (obj.stopped) {
+              renderChat(obj.messages);
+              restoreManualCheckHistory();
+              const hasPartial = Array.isArray(obj.messages) && obj.messages.length > 0 && Boolean(obj.messages[obj.messages.length - 1]?.role === "assistant" && (typeof runId !== "undefined" && runId ? (obj.messages[obj.messages.length - 1]?.runId === runId && obj.messages[obj.messages.length - 1]?.partial) : obj.messages[obj.messages.length - 1]?.partial));
+              showStoppedBar(obj.stopReason, upstreamMayRunForRuns.has(runId), hasPartial);
+              cm.textContent = stoppedChipText(obj.stopReason);
+            }
             else if (obj.ok) { renderChat(obj.messages); restoreManualCheckHistory(); cm.textContent = "第 " + obj.turns + " 轮 · 常驻 agent 会话续接"; }
             else if (obj.needKey) { needKeyBubble(); cm.textContent = ""; }
             else {
@@ -1422,7 +1441,10 @@ async function runChat(payload) {
       } else if (!r.ok && r.status === 409 && j && j.busy) {
         bubbleSys(j.error || "上一个还在跑，请先停止或等它结束"); cm.textContent = "";
       } else if (j && j.stopped) {
-        renderChat(j.messages); showStoppedBar(j.stopReason); cm.textContent = stoppedChipText(j.stopReason);
+        renderChat(j.messages);
+        const hasPartial = Array.isArray(j.messages) && j.messages.length > 0 && Boolean(j.messages[j.messages.length - 1]?.role === "assistant" && (typeof runId !== "undefined" && runId ? (j.messages[j.messages.length - 1]?.runId === runId && j.messages[j.messages.length - 1]?.partial) : j.messages[j.messages.length - 1]?.partial));
+        showStoppedBar(j.stopReason, false, hasPartial);
+        cm.textContent = stoppedChipText(j.stopReason);
       } else if (j && j.ok) {
         renderChat(j.messages);
         cm.textContent = "第 " + j.turns + " 轮 · 常驻 agent 会话续接";
@@ -1526,7 +1548,7 @@ async function ask(msg) {
   clearPendingImage();
   clearPendingDocs();
   clearPendingMedia();
-  clearSourceCitations();
+  closeSourcePanel();
   await runChat(payload);
 }
 
@@ -2475,8 +2497,39 @@ async function loadSources(){
   }
  }catch{status.textContent='资料目录无法读取，请重试。';}
 }
-const sourceButton=$("#sourceBtn"),sourceSearch=$("#sourceSearch");
-if(sourceButton)sourceButton.addEventListener('click',()=>{const panel=$("#sourcePanel");panel.hidden=false;panel.open=true;void loadSources();});
+function closeSourcePanel() {
+  const panel = $("#sourcePanel");
+  if (!panel) return;
+  panel.hidden = true;
+  panel.open = false;
+  clearSourceCitations();
+  const btn = $("#sourceBtn");
+  if (btn) {
+    btn.classList.remove("on");
+    btn.setAttribute("aria-pressed", "false");
+  }
+}
+const sourceButton=$("#sourceBtn"),sourceSearch=$("#sourceSearch"),sourceClose=$("#sourcePanelClose");
+if(sourceClose) {
+  sourceClose.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    closeSourcePanel();
+  });
+}
+if(sourceButton)sourceButton.addEventListener('click',()=>{
+  const panel=$("#sourcePanel");
+  if (!panel) return;
+  if (!panel.hidden && panel.open) {
+    closeSourcePanel();
+  } else {
+    panel.hidden = false;
+    panel.open = true;
+    sourceButton.classList.add("on");
+    sourceButton.setAttribute("aria-pressed", "true");
+    void loadSources();
+  }
+});
 if(sourceSearch)sourceSearch.addEventListener('click',async()=>{
  const status=$("#sourceStatus"),results=$("#sourceResults");const ids=Array.from($("#sourceList").querySelectorAll('input:checked')).map(input=>input.value);
  if(!ids.length||ids.length>8){status.textContent='请选择1至8条资料。';return;}sourceSearch.disabled=true;
@@ -3944,7 +3997,7 @@ async function bizLoadFlowStatus() {
     if (seq !== bizFlowStatusRequest) return;
     bizAttributionEnabled = null;
     statusEl.textContent = "启用状态暂时读不到";
-    hintEl.textContent = (e && e.message) ? e.message : "读取失败，请刷新重试";
+    hintEl.textContent = "服务暂时不可达，请刷新重试";
     if (btn) btn.textContent = "启用";
   }
 }
@@ -4033,11 +4086,11 @@ function bizUsageRenderModels(summary) {
     const name = bizNode("div", m.model); name.style.cssText = "flex:0 0 180px;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap";
     const barWrap = bizNode("div"); barWrap.style.cssText = "flex:1;height:14px;background:var(--line);border-radius:7px;overflow:hidden";
     const chartValue = valueForChart(m);
-    const bar = bizNode("div"); bar.style.cssText = "height:100%;width:" + (chartValue == null ? 0 : Math.round(chartValue / max * 100)) + "%;background:var(--accent,#4f7cff);border-radius:7px";
+    const bar = bizNode("div"); bar.style.cssText = "height:100%;width:" + (chartValue == null ? 0 : chartValue === 0 && Number(m.calls) > 0 ? 6 : Math.round(chartValue / max * 100)) + "%;background:var(--accent,#4f7cff);border-radius:7px";
     barWrap.appendChild(bar);
     const label = chartValue == null
       ? (m.coverage === "partial" ? "部分数据" : "暂缺")
-      : chartValue.toLocaleString("zh-CN") + " tok";
+      : chartValue === 0 && Number(m.calls) > 0 ? (Number(m.calls) + " 次生成") : chartValue.toLocaleString("zh-CN") + " tok";
     const num = bizNode("div", label); num.style.cssText = "flex:0 0 110px;font-size:12px;text-align:right";
     row.append(name, barWrap, num); wrap.appendChild(row);
   });
@@ -4147,7 +4200,14 @@ async function bizLoadSchedule() {
       });
       return [bizUploadStatus[j.status] || j.status, j.provider, j.originalName, j.rowCount, j.successRows, fmtTime(j.createdAt), detail];
     }));
-  } catch (e) { if (seq === bizScheduleRequest) { $("#scheduleHistory").replaceChildren(); $("#scheduleConnected").textContent = "暂时无法读取首次接通时间"; $("#scheduleStatus").textContent = e.message; } }
+  } catch (e) {
+    if (seq === bizScheduleRequest) {
+      $("#scheduleHistory").replaceChildren();
+      const code = e && e.status ? "（HTTP " + e.status + "）" : "";
+      $("#scheduleConnected").textContent = "无法读取首次接通时间" + (code ? " " + code : "");
+      $("#scheduleStatus").textContent = "调度与上传记录查询失败" + code + "，服务暂时不可用，请稍后点击「重试」。";
+    }
+  }
 }
 $("#scheduleUpload").addEventListener("click", () => switchView("import"));
 $("#scheduleRetry").addEventListener("click", bizLoadSchedule);

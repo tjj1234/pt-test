@@ -484,10 +484,44 @@ async function ensureTenantAnalytics(tenantId, label = "tenant") {
 function inferMediaTaskType(text, hasImage) {
   if (!text || typeof text !== "string") return null;
   const t = text.trim();
-  const wantsVideo = /^(生成视频|文生视频|制作视频|做个视频|合成视频|帮我做个视频)/i.test(t) || /(生成视频|文生视频)/i.test(t);
-  const wantsImage = /^(生成图片|文生图|画一张|帮我画|绘制一张|生成一张.*图)/i.test(t) || /(生成图片|文生图)/i.test(t);
+  if (!t) return null;
+
+  // 1. 否定与禁止规则拦截：明确表达“不要”、“别”、“不”、“无需”、“禁止”生成或只解释原理的，坚决不触发媒体生成
+  const hasNegation = (
+    /(?:不要|别|不用|无需|不必|禁止|不能|严禁|切勿|免于|不)(?:实际|真的|去)?(?:生成|制作|做|画|绘制|渲染|输出|出|剪辑)(?:任何|一段|个|张|幅)?(?:视频|短片|动画|图片|图|照片|相片|插画|设计图)?/i.test(t) ||
+    /(?:不要|别|不用|无需|不必|禁止|不)实际生成/i.test(t) ||
+    /(?:只|仅)(?:是|要)?(?:解释|说明|讲解|介绍|分析|讨论|探讨|讲讲|写出?|回答)(?:原理|方法|代码|步骤|概念|流程|机制|逻辑)/i.test(t)
+  );
+  if (hasNegation) return null;
+
+  // 2. 纯疑问与教学咨询拦截：询问“如何”、“怎么”、“原理是什么”，且无肯定生成动词/指令词的，不触发媒体生成
+  const isExplanationOrInquiry = (
+    /^(?:如何|怎么|怎样|为什么|啥是|什么是|简述|介绍|解释)(?:去)?(?:生成|制作|做|画|绘制|剪辑)/i.test(t) ||
+    /(?:原理|教程|教学|步骤|流程|区别|机制)(?:是什么|有哪些|怎么写|是怎么样的)?[？?]?$/i.test(t) ||
+    /(?:文生图|图生图|文生视频|图生视频).*(?:原理|机制|概念|教程|算法|流程|实现方式)/i.test(t) ||
+    /^(?:请?解释|请?介绍|请?说明|讲讲|聊聊)(?:一下|下)?(?:如何|怎样|怎么)?(?:生成|制作|做|画|文生图|文生视频)/i.test(t)
+  );
+  const hasExplicitCommand = /(?:帮我|为我|给我|请替我|立刻|马上|现在就)(?:生成|做|画|出|制作)/i.test(t);
+  if (isExplanationOrInquiry && !hasExplicitCommand) {
+    return null;
+  }
+
+  // 3. 视频意图判断
+  const wantsVideo = (
+    /(?:帮我|为我|给我|请|我要|想要|需要|安排)?(?:生成|制作|做|合成|剪辑).*(?:视频|短片|动画|video)/i.test(t) ||
+    /^(?:生成视频|文生视频|制作视频|做个视频|合成视频|帮我做个视频|做视频)/i.test(t) ||
+    /(?:文生视频|图生视频)/i.test(t)
+  );
   if (wantsVideo) return hasImage ? "image2video" : "text2video";
+
+  // 4. 图片意图判断
+  const wantsImage = (
+    /(?:帮我|为我|给我|请|我要|想要|需要|安排)?(?:生成|制作|做|绘制|输出|出|画)(?:一个|一只|一张|幅|幅幅|张张)?(?:黑色|白色|彩色|高清)?.*(?:图片|图|照片|相片|画像|插画|插图|头像|壁纸|海报|设计图|image|photo|picture)/i.test(t) ||
+    /^(?:画一个|画一只|画一张|画幅|帮我画|给我画|画下|画个|来张|来个|出一张|出张|出个)/i.test(t) ||
+    /(?:文生图|图生图)/i.test(t)
+  );
   if (wantsImage) return hasImage ? "image2image" : "text2image";
+
   return null;
 }
 
@@ -1227,6 +1261,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
         // Run cancellation/timeout does not rewrite outcomes already observed
         // from completed tool result frames.
         const status = step.isError === true ? "failed" : "completed";
+        const resolvedStepModel = step.modelName != null ? String(step.modelName) : null;
         const { id } = await toolCalls.start({
           tenantId: me.tenant.id,
           workspaceId: "ws_" + me.tenant.id,
@@ -1234,14 +1269,14 @@ async function handleChat(req, res, me, body, taskRun = null) {
           toolName: String(step.name),
           inputSummary: sanitizeParentRpcStep(step).args != null ? String(sanitizeParentRpcStep(step).args) : "",
           category: toolsRegistry.toolCategory(String(step.name)),
-          modelName: step.modelName != null ? String(step.modelName) : null,
+          modelName: resolvedStepModel,
         });
         await toolCalls.finish(id, {
           outputSummary: sanitizeParentRpcStep(step).result != null ? String(sanitizeParentRpcStep(step).result) : "",
           durationMs: step.durationMs != null ? Number(step.durationMs) : null,
           tokenCount: null,
           status,
-          modelName: step.modelName != null ? String(step.modelName) : null,
+          modelName: resolvedStepModel,
         });
       }
     } catch (e) {
@@ -1344,20 +1379,35 @@ async function handleChat(req, res, me, body, taskRun = null) {
   await persistBudgetUsage();
   await persistModelIdentity();
 
-  // 停止 / 超时中断：问题已保存，没跑完的回答丢弃不保存。
-  // stopReason 区分「真超时被强制中断」与「用户手动点停止」—— 以前两者都只回一句「已停止」，
-  // 前端分不清是卡死被掐断还是自己停的，现在分开（timeout / user）。
+  // 停止 / 超时中断：如果流式阶段已经产生了部分文本内容，予以保留落库（标记 partial: true），
+  // 避免用户亲眼看到流式打出的文字在页面刷新或重新进入对话后凭空消失。
+  // stopReason 区分「真超时被强制中断」与「用户手动点停止」（timeout / user）。
   if (r.stopped) {
     await persistSteps(r.steps);
     await persistUsage();
-    const cur = await conversations.get(uid, conversationId);
     const reason = r.stopReason === "timeout" ? "timeout" : "user";
+    const partialText = typeof r.text === "string" ? r.text.trim() : "";
+    let finalMessages = messages;
+    if (partialText) {
+      const partialMsg = {
+        role: "assistant",
+        text: r.text,
+        ts: new Date().toISOString(),
+        partial: true,
+        stopReason: reason,
+        ...(taskRun?.runId ? { runId: taskRun.runId } : {})
+      };
+      finalMessages = messages.concat([partialMsg]);
+      await persistConversationMessages(finalMessages);
+    }
+    const cur = await conversations.get(uid, conversationId);
     sse({
       done: true, ok: false, stopped: true, stopReason: reason,
       code: reason === "timeout" ? "RUN_DURATION_LIMIT" : "RUN_CANCELLED",
       error: reason === "timeout" ? "生成超时，已中断" : "已停止",
       artifacts: Array.isArray(r.artifacts) ? r.artifacts : [],
-      messages: cur ? cur.messages : messages,
+      messages: cur ? cur.messages : finalMessages,
+      reply: partialText || undefined,
     });
     return taskRun ? undefined : res.end();
   }
@@ -1673,6 +1723,10 @@ async function handle(req, res) {
     return;
   }
 
+  if (p === "/favicon.ico") {
+    res.writeHead(200, { "Content-Type": "image/svg+xml", "Cache-Control": "public, max-age=86400" });
+    return res.end('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" rx="20" fill="#1a1a1a"/><text x="50" y="68" font-size="54" font-weight="bold" fill="#ffffff" text-anchor="middle" font-family="sans-serif">P</text></svg>');
+  }
   if (p === "/login" || p === "/login.html") return serveFile(res, path.join(PUBLIC, "login.html"));
   if (p === "/settings" || p === "/settings.html") return serveFile(res, path.join(PUBLIC, "settings.html"));
   // ---- U3：忘记/重置密码页（登出态公开页，不能套 authed 重定向）----
@@ -2075,13 +2129,13 @@ async function handle(req, res) {
         tenantId: me.tenant.id,
       });
       if (raw.statusCode !== 200) {
-        return json(res, 502, { ok: false, error: "业务线工作区状态查询失败（" + raw.statusCode + "）" });
+        return json(res, 502, { ok: false, code: "UPSTREAM_UNAVAILABLE", error: "业务线工作区状态查询失败（" + raw.statusCode + "）" });
       }
       const status = normalizeEnabledStatus(raw.body);
       return json(res, 200, Object.assign({ ok: true }, status));
     } catch (e) {
-      log.error("workspace_enabled_status_failed", { error: e && e.message ? e.message : String(e) });
-      return json(res, 502, { ok: false, error: "业务线服务不可用" });
+      log.warn("workspace_enabled_status_failed", { error: e && e.message ? e.message : String(e) });
+      return json(res, 502, { ok: false, code: "UPSTREAM_UNAVAILABLE", error: "业务线工作区状态查询不可达" });
     }
   }
 
@@ -2390,7 +2444,9 @@ async function handle(req, res) {
     try {
       const info = await tenantMod.describeModelForUser(me.user.id,model,{tenantId:me.tenant.id,decryptApiKey:keys.decryptApiKey,signal:controller.signal});
       if (res.destroyed) return;
-      return json(res,info.ok?200:503,{...info,...(info.ok?{}:{error:"暂时无法读取推理档位"})});
+      if (info.ok) return json(res, 200, info);
+      if (info.code === "MODEL_INFO_UNSUPPORTED") return json(res, 200, { ok: true, efforts: [], defaultEffort: null });
+      return json(res, 503, { ok: false, code: info.code || "MODEL_INFO_UNAVAILABLE", error: info.error || "暂时无法读取推理档位" });
     } finally { res.removeListener("close",cancel); }
   }
   if (p === "/api/models" && req.method === "GET") {
