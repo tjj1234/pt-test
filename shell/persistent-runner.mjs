@@ -984,10 +984,11 @@ function apply(ctx,compositionOptions={}) {
 
         const agent = rec.agent;
         turn.agent = agent;
-        if(ctx.get('userQuestions')){
+        if(ctx.get('tools')){
           rec.questionMaskDispose?.();
           const visibleTools=new Set(turn.toolPolicy?.allowedTools||['get_current_time']);
-          rec.questionMaskDispose=agent.ctx.tools.restrict({deny:[...RUN_TOOL_NAMES].filter(name=>!visibleTools.has(name))});
+          const inherited=[...agent.ctx.tools.view(agent).restrictableNames];
+          rec.questionMaskDispose=agent.ctx.tools.restrict({deny:inherited.filter(name=>!visibleTools.has(name))});
         }
         publishedSkillProvider.invalidate();
         firstSeq = agent.session.seq;
