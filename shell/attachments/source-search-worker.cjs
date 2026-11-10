@@ -11,7 +11,7 @@ const {inspectOfficeZip}=require('./office-zip-guard.cjs');
    if(createHash('sha256').update(bytes).digest('hex')!==source.sha256)throw Error('snapshot');
    let blocks;
    if(format==='pdf'){
-    blocks=(await require('./pdf-text-parser.cjs').extractPdfText(bytes)).blocks;
+    if(!Array.isArray(source.pdfBlocks))throw Error('PDF parse authority missing');blocks=source.pdfBlocks;
    }else if(['docx','xlsx','pptx'].includes(format)){
     const archive=inspectOfficeZip(bytes);
     if(format==='docx'){

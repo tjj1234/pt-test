@@ -27,7 +27,7 @@ test('Chinese PDF export embeds a real subset font and round-trips literal conte
 test('malformed, excessive-page, image-only, timed out and cancelled PDFs fail closed',async()=>{
  await assert.rejects(parseOfficeDocument({bytes:Buffer.from('private payload'),format:'pdf'}),e=>e.code==='OFFICE_FORMAT_MISMATCH'&&!e.message.includes('private'));
  await assert.rejects(parseOfficeDocument({bytes:await fixture({pages:201}),format:'pdf'}),{code:'OFFICE_PAGE_LIMIT'});
- await assert.rejects(parseOfficeDocument({bytes:await fixture({blank:true}),format:'pdf'}),{code:'OFFICE_PDF_OCR_REQUIRED'});
+ await assert.rejects(parseOfficeDocument({bytes:await fixture({blank:true}),format:'pdf'}),{code:'OFFICE_PDF_OCR_UNAVAILABLE'});
  const bytes=await fixture();await assert.rejects(parseOfficeDocument({bytes,format:'pdf',timeoutMs:1}),{code:'OFFICE_TIMEOUT'});
  const controller=new AbortController(),pending=parseOfficeDocument({bytes,format:'pdf',signal:controller.signal});controller.abort();await assert.rejects(pending,{code:'OFFICE_CANCELLED'});
  assert.equal((await parseOfficeDocument({bytes,format:'pdf'})).pageCount,2);

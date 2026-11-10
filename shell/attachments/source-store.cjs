@@ -20,7 +20,7 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
  async function assertLive(identity,refs){
   for(const ref of refs){const record=await byRef(identity,ref);if(record?.deleted_at)throw fail('SOURCE_DELETED');}
  }
- async function collect(identity,{sourceIds,citations}={}){
+ async function collect(identity,{sourceIds,citations,signal}={}){
   const records=[];
   if(citations){
    for(const item of citations){const record=await byRef(identity,item.sourceRef);if(!record||record.deleted_at)throw fail('SOURCE_DELETED');if(!records.some(row=>row.source_ref===record.source_ref))records.push(record);}
@@ -29,9 +29,10 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
    for(const id of sourceIds){const row=(await db.query('SELECT * FROM document_sources WHERE source_id=$1 AND user_id=$2 AND tenant_id=$3 AND deleted_at IS NULL',[id,identity.userId,identity.tenantId])).rows[0];if(!row)throw fail('SOURCE_NOT_FOUND',404);records.push(row);}
   }
   let total=0;const sources=[];
-  for(const row of records){total+=row.source_bytes;if(total>20*1024*1024)throw fail('SOURCE_TOTAL_LIMIT');
+  for(const row of records){if(signal?.aborted)throw fail('SOURCE_SEARCH_CANCELLED');total+=row.source_bytes;if(total>20*1024*1024)throw fail('SOURCE_TOTAL_LIMIT');
    const bytes=await readVerifiedChatAttachmentBytes(row.source_ref,{ref:row.source_ref,sha256:row.source_sha256,size:row.source_bytes},{uploadsRoot,identity,includeBytes:true,maxBytes:20*1024*1024});
-   sources.push({id:row.source_id,ref:row.source_ref,sha256:row.source_sha256,version:row.source_version,format:row.source_format,data:Uint8Array.from(bytes)});
+   const parsed=row.source_format==='pdf'?await require('./office-document-parser.cjs').parseOfficeDocument({bytes,format:'pdf',signal}):null;
+   sources.push({id:row.source_id,ref:row.source_ref,sha256:row.source_sha256,version:row.source_version,format:row.source_format,...(parsed?{pdfBlocks:parsed.blocks}:{}),data:Uint8Array.from(bytes)});
   }
   return sources;
  }
@@ -39,9 +40,13 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
   if(signal?.aborted)throw fail('SOURCE_SEARCH_CANCELLED');
   if(activeSearches>=2)throw fail('SOURCE_SEARCH_BUSY',503);
   if(!citations&&(typeof query!=='string'||query.length>256||!query.trim()))throw fail('SOURCE_QUERY_INVALID',400);
+  const outerSignal=signal,controller=new AbortController();let timedOut=false;
+  const abort=()=>controller.abort();outerSignal?.addEventListener('abort',abort,{once:true});
+  const deadline=setTimeout(()=>{timedOut=true;controller.abort();},10000);signal=controller.signal;
+  if(outerSignal?.aborted)abort();
   activeSearches++;
   try{
-   const sources=await collect(identity,{sourceIds,citations});
+   const sources=await collect(identity,{sourceIds,citations,signal});
    if(signal?.aborted)throw fail('SOURCE_SEARCH_CANCELLED');
    const result=await new Promise((resolve,reject)=>{
     const worker=new Worker(path.join(__dirname,'source-search-worker.cjs'),{workerData:{tenantId:identity.tenantId,sources,query,citations},transferList:sources.map(source=>source.data.buffer),resourceLimits:{maxOldGenerationSizeMb:128,maxYoungGenerationSizeMb:16,stackSizeMb:4}});
@@ -53,8 +58,9 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
    });
    // Recheck revocation after extraction; bytes/index from a deleted source never leave the request.
    for(const source of sources){const current=await byRef(identity,source.ref);if(!current||current.deleted_at||current.source_version!==source.version||current.source_sha256!==source.sha256)throw fail('SOURCE_CHANGED');}
-   return result;
-  }finally{activeSearches--;}
+   if(signal.aborted)throw fail(timedOut?'SOURCE_SEARCH_TIMEOUT':'SOURCE_SEARCH_CANCELLED');return result;
+  }catch(error){if(signal.aborted)throw fail(timedOut?'SOURCE_SEARCH_TIMEOUT':'SOURCE_SEARCH_CANCELLED');throw error;}
+  finally{activeSearches--;clearTimeout(deadline);outerSignal?.removeEventListener('abort',abort);}
  }
  async function revoke(identity,id){
   if(!UUID.test(id))throw fail('SOURCE_NOT_FOUND',404);

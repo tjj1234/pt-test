@@ -6,7 +6,7 @@ const {inspectOfficeZip}=require('./office-zip-guard.cjs');
   const bytes=Buffer.from(workerData.bytes);
   if(workerData.format==='pdf'){
    const result=await require('./pdf-text-parser.cjs').extractPdfText(bytes);
-   parentPort.postMessage({ok:true,result});return;
+   parentPort.postMessage({ok:true,result},(result.ocrPages||[]).map(page=>page.image.buffer));return;
   }
   const archive=inspectOfficeZip(bytes);
   if(['xlsx','pptx'].includes(workerData.format)){

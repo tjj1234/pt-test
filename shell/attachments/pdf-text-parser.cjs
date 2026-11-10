@@ -10,7 +10,7 @@ async function extractPdfText(bytes){
  try{
   pdf=await task.promise;
   if(!Number.isSafeInteger(pdf.numPages)||pdf.numPages<1||pdf.numPages>200)throw fail('OFFICE_PAGE_LIMIT');
-  const blocks=[];let textBytes=0,emptyPages=0;
+  const blocks=[],ocrPages=[];let textBytes=0,emptyPages=0;
   for(let number=1;number<=pdf.numPages;number++){
    const page=await pdf.getPage(number);let text='';
    try{
@@ -24,12 +24,19 @@ async function extractPdfText(bytes){
       }
      }
     }finally{await reader.cancel().catch(()=>{});reader.releaseLock();}
-   }finally{page.cleanup();}
-   text=text.trim();if(!text)emptyPages++;
+   }finally{}
+   text=text.trim();if(!text){
+    emptyPages++;if(ocrPages.length>=10)throw fail('OFFICE_OCR_PAGE_LIMIT');
+    const viewport=page.getViewport({scale:1.5});if(viewport.width*viewport.height>3000000)throw fail('OFFICE_OCR_PIXEL_LIMIT');
+    const {createCanvas}=require('@napi-rs/canvas'),canvas=createCanvas(Math.ceil(viewport.width),Math.ceil(viewport.height));
+    try{await page.render({canvasContext:canvas.getContext('2d'),viewport}).promise;
+     const image=Uint8Array.from(canvas.toBuffer('image/png'));if(image.length>2*1024*1024)throw fail('OFFICE_OCR_IMAGE_LIMIT');ocrPages.push({page:number,image});
+    }finally{canvas.width=1;canvas.height=1;}
+   }
+   page.cleanup();
    blocks.push({index:number,text,locator:{kind:'pdf-page',page:number}});
   }
-  if(emptyPages===pdf.numPages)throw fail('OFFICE_PDF_OCR_REQUIRED');
-  return {format:'pdf',text:blocks.map(b=>b.text).join('\n\n'),blocks,locatorKind:'pdf-page',pageCount:pdf.numPages,warningCount:emptyPages,
+  return {format:'pdf',text:blocks.map(b=>b.text).join('\n\n'),blocks,locatorKind:'pdf-page',pageCount:pdf.numPages,warningCount:emptyPages,ocrPages,
    limitations:'Text layer only; images, diagrams and scanned pages require OCR. Reading order follows embedded PDF text.'};
  }catch(error){if(/^OFFICE_[A-Z_]+$/.test(error.code||''))throw error;throw fail('OFFICE_PDF_PARSE_FAILED');}
  finally{await task.destroy();}
