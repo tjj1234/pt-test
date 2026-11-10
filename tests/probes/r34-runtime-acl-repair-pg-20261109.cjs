@@ -10,7 +10,7 @@ const {repairRuntimeAcl}=require('../../scripts/northstar-r34-runtime-acl.cjs'),
  try{
   await admin.db.exec('CREATE ROLE r34_acl_runtime LOGIN; GRANT USAGE,CREATE ON SCHEMA public TO r34_acl_runtime');
   const baseline=path.join(temp,'baseline');fs.mkdirSync(baseline);
-  for(const file of fs.readdirSync(path.join(__dirname,'../../shell/db-migrations')).filter(f=>f.endsWith('.sql')&&!['029_user_questions.sql','030_model_request_attempts.sql','032_web_source_evidence.sql','033_billing_login_credentials.sql'].includes(f)))fs.copyFileSync(path.join(__dirname,'../../shell/db-migrations',file),path.join(baseline,file));
+  for(const file of fs.readdirSync(path.join(__dirname,'../../shell/db-migrations')).filter(f=>f.endsWith('.sql')&&!['029_user_questions.sql','030_model_request_attempts.sql','032_web_source_evidence.sql','033_billing_login_credentials.sql','034_run_operation_approvals.sql'].includes(f)))fs.copyFileSync(path.join(__dirname,'../../shell/db-migrations',file),path.join(baseline,file));
   process.env.PT_PG_USER=role;
   storage=await createStorage({migrationsDir:baseline,masterKeyFile:path.join(temp,'key')});
   const user=(await storage.repositories.auth.register({username:'r34-acl-test',password:'FixturePass123'})).user;
@@ -34,7 +34,7 @@ const {repairRuntimeAcl}=require('../../scripts/northstar-r34-runtime-acl.cjs'),
   await assert.rejects(repairRuntimeAcl(fault,{...options,apply:true}));
   assert.ok((await audit()).tables.every(t=>Object.values(t.privileges).every(v=>!v)));
   console.log('PASS late grant failure rolls back earlier grants in real PostgreSQL transaction');
-  const applied=await repairRuntimeAcl(admin.db,{...options,apply:true});assert.deepEqual(applied.tables.map(t=>t.added),[['SELECT','INSERT','UPDATE'],['SELECT','INSERT','UPDATE'],['SELECT','INSERT'],['SELECT','INSERT','UPDATE'],['SELECT','INSERT','UPDATE','DELETE']]);
+  const applied=await repairRuntimeAcl(admin.db,{...options,apply:true});assert.deepEqual(applied.tables.map(t=>t.added),[['SELECT','INSERT','UPDATE'],['SELECT','INSERT','UPDATE'],['SELECT','INSERT'],['SELECT','INSERT','UPDATE'],['SELECT','INSERT','UPDATE','DELETE'],['SELECT','INSERT','UPDATE']]);
   assert.equal((await audit()).ok,true);
   for(const table of applied.tables){const {rows:[row]}=await admin.db.query("SELECT has_table_privilege($1,$2,'DELETE') AS allowed",[role,table.table]);assert.equal(row.allowed,table.table==='public.pt_billing_credentials');}
   assert.ok((await repairRuntimeAcl(admin.db,{...options,apply:true})).tables.every(t=>t.added.length===0));
@@ -46,6 +46,15 @@ const {repairRuntimeAcl}=require('../../scripts/northstar-r34-runtime-acl.cjs'),
   await runtime.close();runtime=await openPg({...env,PT_PG_USER:role});
   assert.equal((await createQuestionService({db:runtime.db}).list(identity,run.runId)).questions[0].status,'answered');
   console.log('PASS actual question pending/answer/durable terminal survives runtime connection reopen');
+  const {createApprovalStore}=require('../../shell/approvals/store.cjs');
+  const approvals=createApprovalStore({db:runtime.db,identity,runId:run.runId,leaseOwner:'acl-worker'});
+  const payload={command:'printf fixture',workdir:'.',timeoutMs:1000,maxOutputBytes:4096,policyRevision:'acl-fixture'};
+  const card=await approvals.request({callId:'approval-fixture',payload});
+  assert.equal((await approvals.decide({approvalId:card.id,callId:card.callId,payloadSha256:card.payloadSha256,decision:'approve'})).ok,true);
+  const consumers=await Promise.all([approvals.consume({approvalId:card.id,callId:card.callId,payload}),approvals.consume({approvalId:card.id,callId:card.callId,payload})]);
+  assert.equal(consumers.filter(value=>value.ok).length,1);
+  assert.equal((await approvals.get(card.callId)).approvalState,'consumed');
+  console.log('PASS real PostgreSQL approval table grants support exact one-time consumption with concurrent consumers');
  }finally{
   process.env.PT_PG_USER=env.PT_PG_USER;await runtime?.close();await storage?.close();await admin.close();fs.rmSync(temp,{recursive:true,force:true});
  }

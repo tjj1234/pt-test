@@ -400,6 +400,7 @@ let controlledMediaGrants = null;
 let mediaReservationRelease = null;
 let mediaAuthorization = null;
 let userQuestionService = null;
+let operationApprovalService = null;
 let webHostService=null;
 let billingAccountService=null;
 let managedMediaFetch = null;
@@ -994,6 +995,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
       const attachment=lastUser.media[0],evidence=lastUser.mediaEvidence?.find(item=>item.ref===attachment.url);
       const bytes=await readVerifiedChatAttachmentBytes(attachment.url,evidence,{uploadsRoot:path.join(RUNTIME,'_uploads'),identity:{userId:uid,tenantId:me.tenant.id},includeBytes:true,maxBytes:50*1024*1024});
       const mimeType={'.wav':'audio/wav','.mp3':'audio/mpeg','.m4a':'audio/mp4','.mp4':'video/mp4','.webm':'video/webm','.mov':'video/quicktime'}[path.extname(attachment.url).toLowerCase()];
+      if(!mimeType?.startsWith(attachment.type+'/'))throw Object.assign(new Error('format mismatch'),{code:'MEDIA_FORMAT_UNSUPPORTED'});
       processedMedia=await require('./media/local-content-runtime.cjs').processMedia({bytes,mimeType,signal:taskRun?.signal});
       if(processedMedia.inputSha256!==evidence.sha256)throw Object.assign(new Error('media changed'),{code:'CHAT_ATTACHMENT_CHANGED'});
       if(JSON.stringify(processedMedia.segments).length>58000)throw Object.assign(new Error('context limit'),{code:'MEDIA_CONTEXT_LIMIT'});
@@ -1911,10 +1913,19 @@ async function handle(req, res) {
   if(managedMediaMatch)return managedMediaReader(req,res,runIdentity,{runId:managedMediaMatch[1],filename:managedMediaMatch[2]});
   const webSourcesMatch=p.match(/^\/api\/runs\/([a-f0-9-]{36})\/web-sources$/i);
   if(webSourcesMatch&&req.method==='GET'){try{return json(res,200,{ok:true,...await webHostService.list(runIdentity,webSourcesMatch[1])});}catch(error){return json(res,error.code==='NOT_FOUND'?404:409,{ok:false,code:error.code==='NOT_FOUND'?'NOT_FOUND':'WEB_STORE_UNAVAILABLE'});}}
+  const approvalMatch=p.match(/^\/api\/runs\/([a-f0-9-]{36})\/approvals(?:\/([a-f0-9-]{36})\/answer)?$/i);
+  if(approvalMatch){
+    try{
+      if(req.method==='GET'&&!approvalMatch[2])return json(res,200,{ok:true,...await operationApprovalService.list(runIdentity,approvalMatch[1])});
+      if(req.method!=='POST'||!approvalMatch[2])return json(res,405,{ok:false,code:'METHOD_NOT_ALLOWED'});
+      const result=await operationApprovalService.decide(runIdentity,approvalMatch[1],approvalMatch[2],JSON.parse(await readBody(req,2048)));
+      return json(res,result.ok?200:409,result);
+    }catch(error){const code=/^APPROVAL_[A-Z_]+$/.test(error.code||'')||error.code==='NOT_FOUND'?error.code:'APPROVAL_STORE_UNAVAILABLE';return json(res,code==='NOT_FOUND'?404:code==='APPROVAL_INPUT_INVALID'?400:409,{ok:false,code});}
+  }
   const userQuestionMatch=p.match(/^\/api\/runs\/([a-f0-9-]{36})\/questions(?:\/([^/]+)\/answer)?$/i);
   if(userQuestionMatch && ['GET','POST'].includes(req.method)){
     try{
-      if(req.method==='GET'&&!userQuestionMatch[2])return json(res,200,{ok:true,...await userQuestionService.list(runIdentity,userQuestionMatch[1])});
+      if(req.method==='GET'&&!userQuestionMatch[2]){const normal=await userQuestionService.list(runIdentity,userQuestionMatch[1]),approvals=await operationApprovalService.list(runIdentity,userQuestionMatch[1]);return json(res,200,{ok:true,questions:[...normal.questions,...approvals.approvals]});}
       if(req.method!=='POST'||!userQuestionMatch[2])return json(res,405,{ok:false,code:'METHOD_NOT_ALLOWED'});
       const result=await userQuestionService.answer(runIdentity,userQuestionMatch[1],decodeURIComponent(userQuestionMatch[2]),JSON.parse(await readBody(req,16384)));
       return json(res,result.ok?200:result.code==='INVALID_ANSWER'?400:409,result.ok?{ok:true,questionId:result.questionId,status:'answered'}:{ok:false,code:result.code});
@@ -2780,7 +2791,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
         else if (event.type === "connecting") frame({ connecting: true });
         else if (event.type === "state" && p.operationStatus === "manual_check") frame({ operationStatus: "manual_check" });
         else if(event.type === "state" && p.action === "web_sources") frame({webSources:{runId:event.runId,sources:p.sources}});
-        else if (event.type === "state" && p.action === "user_question") frame({userQuestion:{runId:event.runId,question:p.question}});
+        else if (event.type === "state" && ["user_question","user_approval"].includes(p.action)) frame({userQuestion:{runId:event.runId,question:p.question}});
         else if (event.type === "state" && p.action === "media_authorization_required") frame({mediaAuthorization:{runId:event.runId,taskType:p.taskType,expiresAt:p.expiresAt,parameterSummary:p.parameterSummary}});
         else if (event.type === "delta") frame({ delta: p.text || "" });
         else if (event.type === "step") frame({ step: p.step });
@@ -2840,7 +2851,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
           if (event.type === "connecting") frame({ connecting: true });
           else if (event.type === "state" && p.operationStatus === "manual_check") frame({ operationStatus: "manual_check" });
           else if(event.type === "state" && p.action === "web_sources") frame({webSources:{runId:event.runId,sources:p.sources}});
-        else if (event.type === "state" && p.action === "user_question") frame({userQuestion:{runId:event.runId,question:p.question}});
+        else if (event.type === "state" && ["user_question","user_approval"].includes(p.action)) frame({userQuestion:{runId:event.runId,question:p.question}});
         else if (event.type === "state" && p.action === "media_authorization_required") frame({mediaAuthorization:{runId:event.runId,taskType:p.taskType,expiresAt:p.expiresAt,parameterSummary:p.parameterSummary}});
           else if (event.type === "delta") frame({ delta: p.text || "" });
           else if (event.type === "step") frame({ step: p.step });
@@ -3064,6 +3075,7 @@ async function main() {
   panelShares = await panelSharesMod.initPanelShares(auth.db);
   taskStore = createTaskStore(auth.db);
   userQuestionService = require("./questions/service.cjs").createQuestionService({db:auth.db});
+  operationApprovalService = require("./approvals/service.cjs").createApprovalService({db:auth.db});
   webHostService=require("./web/host-service.cjs").createWebHostService({db:auth.db});
   publishedSkills=createSkillPublicationStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   memoryProvenance=createMemoryProvenanceStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});

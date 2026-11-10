@@ -21,7 +21,7 @@ const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[
 ctx.provide('loader',{await:async()=>{}});ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-office'})});ctx.provide('appExit',code=>process.exit(code));
 class Adapter extends LlmAdapter{
  async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:['text','image']};}
- async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');const office=text.includes('XLSX_UNTRUSTED_EXTRACT')||text.includes('PPTX_UNTRUSTED_EXTRACT')||text.includes('PDF_UNTRUSTED_EXTRACT');if(!office)throw Error('Office source did not reach native request');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({office,xlsx:text.includes('编号00123中文'),pptx:text.includes('中文演示第一段'),pdf:text.includes('PDF original page 2')})+'\\n');yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:'OFFICE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
+ async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');const nativeImages=options.messages.flatMap(message=>message.content||[]).filter(block=>block.type==='image');for(const block of nativeImages)await ctx.attachments.readImage(block.attachment);const office=text.includes('XLSX_UNTRUSTED_EXTRACT')||text.includes('PPTX_UNTRUSTED_EXTRACT')||text.includes('PDF_UNTRUSTED_EXTRACT');const media=text.includes('UNTRUSTED_MEDIA_CONTENT');if(media&&!text.includes('ask not what your country')&&nativeImages.length!==3)throw Error('Video frames did not reach native attachments');if(!office&&!media)throw Error('Owned source did not reach native request');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({office,xlsx:text.includes('编号00123中文'),pptx:text.includes('中文演示第一段'),pdf:text.includes('PDF original page 2'),media,nativeImages:nativeImages.length})+'\\n');yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:media?'MEDIA_CHAIN_OK':'OFFICE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
 }
 ctx.llm.registerAdapter(['fixture'],new Adapter());fs.writeFileSync(${JSON.stringify(pid)},String(process.pid));const {apply}=await import(pathToFileURL(path.join(process.env.DSH_HOME,'profiles/run-persistent/persistent-runner.mjs')));apply(ctx);
 `);
@@ -34,7 +34,7 @@ value.writeScopedCache(scopeId,{scopeId,models:[m],lastSuccessfulAt:at,lastCompl
 return {models:[m],scopeId,availability:{status:'available',modelIds:[m.id]},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts)};return value;};`);
   const profiles=path.join(runtime,'dsh-home/profiles');fs.mkdirSync(profiles,{recursive:true});fs.symlinkSync(path.join(root,'shell/node_modules'),path.join(profiles,'node_modules'),'dir');
-  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0'},stdio:['ignore','pipe','pipe']});
+  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0',NODE_PATH:process.env.NODE_PATH,PT_NATIVE_MEDIA_RUNTIME:process.env.PT_NATIVE_MEDIA_RUNTIME},stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',b=>logs+=b);child.stderr.on('data',b=>logs+=b);
   const req=(url,{user=0,method='GET',body}={})=>fetch('http://127.0.0.1:'+port+url,{method,headers:{Cookie:cookies[user],...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
   const json=async(url,opts)=>{const r=await req(url,opts);assert.equal(r.status,200,await r.clone().text());return r.json();};
@@ -78,6 +78,32 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
   const found=await json('/api/sources/search',{method:'POST',body:{sourceIds:[pdfSource.id],query:'original'}});
   assert.ok(found.results.some(hit=>hit.locator.kind==='pdf-page'&&hit.locator.page===2));
   assert.equal((await req('/api/sources/search',{user:1,method:'POST',body:{sourceIds:[pdfSource.id],query:'original'}})).status,404);
+  if(process.env.R34_MEDIA_PROOF_ROOT){
+   const audio=fs.readFileSync(path.join(process.env.R34_MEDIA_PROOF_ROOT,'whisper.cpp-1.7.6/samples/jfk.wav'));
+   const upload=await json('/api/upload-media',{method:'POST',body:{data:audio.toString('base64')}});
+   const denied=await req('/api/chat',{user:1,method:'POST',body:{message:'transcribe',media:[{type:'audio',url:upload.url}]}});assert.ok([400,403,409].includes(denied.status));
+   const response=await req('/api/chat',{method:'POST',body:{conversationId,message:'Transcribe the uploaded audio with timestamps',media:[{type:'audio',url:upload.url}]}});
+   assert.match(await response.text(),/MEDIA_CHAIN_OK/,logs);const runId=response.headers.get('x-agent-run-id');
+   assert.equal((await json('/api/runs/'+runId)).run.state,'completed');
+   const events=(await json('/api/runs/'+runId+'/events')).events,source=events.find(event=>event.type==='attachment.status'&&event.payload?.kind==='media');
+   assert.equal(source.payload.inputSha256,sha(audio));assert.match(source.payload.segments.map(segment=>segment.text).join(' '),/ask not what your country/i);
+   assert.equal(source.payload.durationMs,11000);
+   const history=(await json('/api/conversations/'+conversationId)).conversation.messages;
+   assert.ok(history.some(message=>message.role==='assistant'&&message.text==='MEDIA_CHAIN_OK'));
+   const saved=history.find(message=>message.media?.some(item=>item.url===upload.url));assert.equal(saved.mediaEvidence[0].sha256,sha(audio));
+   assert.equal(fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse).at(-1).media,true);
+   const file=path.join(temp,'video-fixture.mp4');
+   await require('../../shell/media/local-content-runtime.cjs').run('ffmpeg',['-nostdin','-v','error','-f','lavfi','-i','testsrc2=size=320x240:rate=10','-t','3','-c:v','mpeg4',file],{cwd:temp});
+   const video=fs.readFileSync(file),videoUpload=await json('/api/upload-media',{method:'POST',body:{data:video.toString('base64')}});
+   const videoResponse=await req('/api/chat',{method:'POST',body:{conversationId,message:'Describe the uploaded video frames with timestamps',media:[{type:'video',url:videoUpload.url}]}});
+   assert.match(await videoResponse.text(),/MEDIA_CHAIN_OK/,logs);
+   const videoRun=videoResponse.headers.get('x-agent-run-id');assert.equal((await json('/api/runs/'+videoRun)).run.state,'completed');
+   const videoEvents=(await json('/api/runs/'+videoRun+'/events')).events,videoSource=videoEvents.find(event=>event.type==='attachment.status'&&event.payload?.kind==='media');
+   assert.equal(videoSource.payload.inputSha256,sha(video));assert.equal(videoSource.payload.frames.length,3);assert.deepEqual(videoSource.payload.frames.map(frame=>frame.timestampMs),[0,1500,2000]);
+   assert.equal(fs.readFileSync(trace,'utf8').trim().split('\n').map(JSON.parse).at(-1).nativeImages,3);
+
+  }
+
 
 
 

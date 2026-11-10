@@ -25,7 +25,11 @@ PDF 空文字页经原有 worker 渲染，再由父进程启动受控 OCR，保�
 | whisper-cli | Linux/x64、CPU，静态 C++ 运行库；SHA256 `82df67eed9c7452facdbd9dd603e461097e84c2c55e1b895a04923fe00778667` |
 | FFmpeg/Tesseract | Debian 签名仓库二进制与实际 ELF 闭包；附包版本、copyright、Whisper 源/模型 MIT 许可；最终归档必须绑定运行库 manifest SHA256 |
 
-依然待完成：Linux PDF/OCR 源检索全链路、宿主音视频 HTTP/原生 SDK 及浏览器交互、发布归档收录和正式平台资源/隔离核验。生产保留 R33；Bug-12 保留 DEGRADED_PREVIEW。
+追加验证：同一源码在 Linux/x64、非 root UID 501、禁网容器中，使用锁文件重新安装的 Linux 依赖，`office-http-sdk-integration-test.mjs` 通过。涵盖实际音频上传、跨用户拒绝、转写/哈希/时长进入宿主 Run 和原生模型请求；实际 MP4 上传，三帧经 DSH 原生附件读取并进入模型请求，0/1500/2000ms 定位和源哈希保留；同时覆盖既有 Office/PDF、导出和历史恢复。模型为受控 SDK 适配器，非真实付费模型。非 root 测试发现 FFmpeg 自动线程数与 NPROC 限额冲突，已明确限制解码/滤镜/编码线程为 2 后重测通过。
+
+Linux PDF 五项回归通过，新增真实扫描 PDF 第二页中文 OCR、物理页定位及原文件哈希一致性。不是图片固定返回或假转写。
+
+依然待完成：Linux PDF/OCR 源检索宿主全链路、音视频浏览器交互、发布归档收录和正式平台资源/隔离核验。生产保留 R33；Bug-12 保留 DEGRADED_PREVIEW。
 
 ## SSH 恢复核对
 

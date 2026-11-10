@@ -1372,7 +1372,7 @@ async function runChat(payload) {
                 else if (event.type === "state") {
                   observeManualCheck(payload.operationStatus);
                   if(payload.action === "web_sources")observeWebSources(targetId,{runId:event.runId,sources:payload.sources});
-                  if(payload.action === "user_question")observeUserQuestion(targetId,{runId:event.runId,question:payload.question});
+                  if(["user_question","user_approval"].includes(payload.action))observeUserQuestion(targetId,{runId:event.runId,question:payload.question});
                   if (payload.action === "media_authorization_required") observeMediaAuthorization({runId:event.runId,taskType:payload.taskType,expiresAt:payload.expiresAt,parameterSummary:payload.parameterSummary});
                 }
                 else if (event.type === "step") {
@@ -4232,7 +4232,26 @@ if ($("#artSwitch")) $("#artSwitch").addEventListener("change", (e) => {
 });
 
 
+function renderOperationApproval(host,entry){
+  const q=entry.question,panel=document.createElement('section');panel.className='user-question operation-approval';panel.dataset.questionId=q.id;
+  panel.style.cssText='margin:12px 0;padding:14px;border:1px solid var(--line);border-radius:10px';
+  const title=document.createElement('strong');title.textContent='精确操作审批';panel.appendChild(title);
+  const description=document.createElement('p');description.textContent='仅批准下列参数对应的一次执行；不授予其他操作权限。';panel.appendChild(description);
+  const snapshot=document.createElement('pre');snapshot.textContent=q.detail||'';snapshot.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere';panel.appendChild(snapshot);
+  const hash=document.createElement('small');hash.textContent='操作指纹：'+q.payloadSha256;panel.appendChild(hash);
+  const notice=document.createElement('p');notice.setAttribute('role','status');panel.appendChild(notice);
+  const buttons=[];
+  const refresh=()=>{const pending=q.approvalState==='pending'&&Date.now()<q.deadline;for(const button of buttons)button.disabled=!pending;notice.textContent=q.approvalState==='consumed'?'本次授权已消费。':q.approvalState==='approved'?'已批准，仅供本次操作消费。':q.approvalState==='rejected'?'已拒绝。':q.approvalState==='cancelled'?'审批已取消。':q.approvalState==='expired'||Date.now()>=q.deadline?'审批已过期。':'等待你的决定。';};
+  for(const [label,decision]of [['批准本次','approve'],['拒绝','reject']]){const button=document.createElement('button');button.type='button';button.textContent=label;buttons.push(button);panel.appendChild(button);
+    button.addEventListener('click',async()=>{buttons.forEach(b=>b.disabled=true);try{
+      const response=await fetch('/api/runs/'+encodeURIComponent(entry.runId)+'/approvals/'+encodeURIComponent(q.id)+'/answer',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({callId:q.callId,payloadSha256:q.payloadSha256,decision})});const result=await response.json();
+      if(result.approval){Object.assign(q,result.approval);refresh();}if(!response.ok||!result.ok)throw Error('审批未提交，请刷新状态后核对。');
+    }catch(error){refresh();notice.textContent=error.message;}});
+  }
+  refresh();host.appendChild(panel);return panel;
+}
 function renderUserQuestion(host,entry) {
+  if(entry.question.type==='approval')return renderOperationApproval(host,entry);
   const q=entry.question;
   const panel=document.createElement('section');panel.className='user-question';panel.dataset.questionId=q.id;
   panel.style.cssText='margin:12px 0;padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--bg-soft)';

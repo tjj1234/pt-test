@@ -9,6 +9,7 @@ const TABLES = Object.freeze([
   { name: 'model_request_attempts', privileges: ['SELECT', 'INSERT'] },
   {name:'agent_web_calls',privileges:['SELECT','INSERT','UPDATE']},
   {name:'pt_billing_credentials',privileges:['SELECT','INSERT','UPDATE','DELETE']},
+ {name:'agent_run_approvals',privileges:['SELECT','INSERT','UPDATE']},
 ]);
 const fail = code => Object.assign(new Error(code), { code });
 

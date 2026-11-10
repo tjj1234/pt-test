@@ -19,7 +19,10 @@ function runtime(){
 }
 async function run(program,args,{input,signal,timeoutMs=30000,maxBytes=1024*1024,cwd}={}){
  if(signal?.aborted)throw fail('RUN_CANCELLED');
- if(!['ffmpeg','ffprobe','tesseract','whisper-cli'].includes(program)||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>150000||!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>20*1024*1024)throw fail('MEDIA_LIMIT_INVALID');
+ if(!['ffmpeg','ffprobe','tesseract','whisper-cli'].includes(program)||!Array.isArray(args)||args.length<1||args.length>128||args.some(value=>typeof value!=='string'||value.length>8192||value.includes('\0'))||!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>150000||!Number.isSafeInteger(maxBytes)||maxBytes<1||maxBytes>20*1024*1024)throw fail('MEDIA_LIMIT_INVALID');
+ // FFmpeg defaults to host CPU count. Bound decoder, filter and encoder
+ // threads explicitly so the same non-root NPROC limit works on large hosts.
+ if(program==='ffmpeg')args=['-threads','2','-filter_threads','2','-filter_complex_threads','2',...args.slice(0,-1),'-threads','2',args.at(-1)];
  const root=runtime();if(!fs.existsSync('/usr/bin/prlimit'))throw fail('MEDIA_RESOURCE_BACKEND_UNAVAILABLE');
  return new Promise((resolve,reject)=>{
   let failure,stdout=[],stderr=[],outBytes=0,errBytes=0,killTimer;
