@@ -1,0 +1,10 @@
+{
+  "maxDurationMs": 180000,
+  "maxModelCalls": 4,
+  "maxToolCalls": 2,
+  "maxToolCallsPerKey": 1,
+  "maxRetries": 0,
+  "maxOutputTokens": 512,
+  "contextModelCalls": 1,
+  "allowedTools": ["web_search", "web_fetch"]
+}

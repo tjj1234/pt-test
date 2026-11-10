@@ -149,9 +149,10 @@ function unprotectMasterKey(masterKeyObj) {
  * ========================================================================== */
 
 /** 加密：返回 { iv(base64), ciphertext(base64 = 密文‖auth tag) }。 */
-function encryptWithKey(key, plaintext) {
+function encryptWithKey(key, plaintext, aad) {
   const iv = crypto.randomBytes(IV_LEN);
   const cipher = crypto.createCipheriv("aes-256-gcm", key, iv);
+  if(aad!==undefined)cipher.setAAD(Buffer.from(aad));
   const enc = Buffer.concat([cipher.update(String(plaintext), "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return {
@@ -161,7 +162,7 @@ function encryptWithKey(key, plaintext) {
 }
 
 /** 解密：auth tag 不符（密文/iv 被篡改）会抛错。 */
-function decryptWithKey(key, ivBase64, ciphertextBase64) {
+function decryptWithKey(key, ivBase64, ciphertextBase64, aad) {
   const iv = Buffer.from(ivBase64, "base64");
   const data = Buffer.from(ciphertextBase64, "base64");
   if (iv.length !== IV_LEN) throw new Error("iv 长度不对");
@@ -169,6 +170,7 @@ function decryptWithKey(key, ivBase64, ciphertextBase64) {
   const enc = data.slice(0, data.length - AUTH_TAG_LEN);
   const tag = data.slice(data.length - AUTH_TAG_LEN);
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, iv);
+  if(aad!==undefined)decipher.setAAD(Buffer.from(aad));
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(enc), decipher.final()]).toString("utf8");
 }
@@ -242,7 +244,25 @@ async function initKeys(opts = {}) {
     };
   }
 
-  return { encryptApiKey, decryptApiKey, getKeyMeta, masterKeyFile, scheme: masterKeyObj.scheme };
+  const billingContext=identity=>{
+    require('./contracts/phase1.cjs').assertContract('identity',identity);
+    return JSON.stringify(['pt-login-token',identity.userId,identity.tenantId]);
+  };
+  async function saveBillingToken(identity,value){
+    const aad=billingContext(identity);
+    if(typeof value!=='string'||value.length<4||value.length>8192||/[\x00-\x1f\x7f]/.test(value)||/^sk-/i.test(value))throw Object.assign(Error('Invalid PT login token'),{code:'BILLING_CREDENTIAL_INVALID'});
+    const key=unprotectMasterKey(masterKeyObj);let encrypted;try{encrypted=encryptWithKey(key,value,aad);}finally{zero(key);}
+    await db.query(`INSERT INTO pt_billing_credentials(user_id,tenant_id,iv,ciphertext) VALUES($1,$2,$3,$4)
+      ON CONFLICT(user_id) DO UPDATE SET tenant_id=EXCLUDED.tenant_id,iv=EXCLUDED.iv,ciphertext=EXCLUDED.ciphertext,updated_at=clock_timestamp()`,[identity.userId,identity.tenantId,encrypted.iv,encrypted.ciphertext]);
+    return {configured:true};
+  }
+  async function loadBillingToken(identity){
+    const aad=billingContext(identity),row=(await db.query('SELECT iv,ciphertext FROM pt_billing_credentials WHERE user_id=$1 AND tenant_id=$2',[identity.userId,identity.tenantId])).rows[0];if(!row)return null;
+    const key=unprotectMasterKey(masterKeyObj);try{return decryptWithKey(key,row.iv,row.ciphertext,aad);}finally{zero(key);}
+  }
+  async function billingTokenStatus(identity){billingContext(identity);const row=(await db.query('SELECT updated_at FROM pt_billing_credentials WHERE user_id=$1 AND tenant_id=$2',[identity.userId,identity.tenantId])).rows[0];return {configured:!!row,updatedAt:row?.updated_at||null};}
+  async function removeBillingToken(identity){billingContext(identity);await db.query('DELETE FROM pt_billing_credentials WHERE user_id=$1 AND tenant_id=$2',[identity.userId,identity.tenantId]);return {configured:false};}
+  return { encryptApiKey, decryptApiKey, getKeyMeta,saveBillingToken,loadBillingToken,billingTokenStatus,removeBillingToken, masterKeyFile, scheme: masterKeyObj.scheme };
 }
 
 module.exports = {

@@ -125,6 +125,16 @@
     <p class="settings-foot"><a href="/">返回工作区</a></p>
   </form>
 
+  <section class="settings-card" aria-labelledby="billingHeading">
+    <h2 id="billingHeading">官方账单授权</h2>
+    <p>使用 PT 登录令牌查询官方实扣；与大模型 API Key 分开保存。查询结果以 credits 展示，本地 USD 估算独立验收。</p>
+    <label for="billingToken">PT 登录令牌</label><input id="billingToken" type="password" autocomplete="off" maxlength="8192">
+    <button id="billingSave" type="button" class="ghost wide">保存账单授权</button><button id="billingRemove" type="button" class="ghost wide">移除账单授权</button>
+    <p id="billingStatus" role="status"></p>
+    <label for="billingStart">开始日期</label><input id="billingStart" type="date"><label for="billingEnd">结束日期</label><input id="billingEnd" type="date">
+    <button id="billingBalance" type="button" class="ghost wide">查询官方余额</button><button id="billingUsage" type="button" class="ghost wide">查询官方账单汇总</button>
+    <pre id="billingResult" style="white-space:pre-wrap;overflow-wrap:anywhere" aria-live="polite"></pre>
+  </section>
 </main>
 <!-- M7：解除授权前的「解除影响提醒」弹框 -->
 <div class="modal-mask" id="revokeModal" role="dialog" aria-modal="true" aria-labelledby="revokeTitle">

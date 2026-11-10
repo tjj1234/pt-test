@@ -7,6 +7,8 @@ const TABLES=Object.freeze([
  {name:'agent_question_scopes',migration:'029_user_questions.sql',privileges:['SELECT','INSERT','UPDATE']},
  {name:'agent_run_questions',migration:'029_user_questions.sql',privileges:['SELECT','INSERT','UPDATE']},
  {name:'model_request_attempts',migration:'030_model_request_attempts.sql',privileges:['SELECT','INSERT']},
+ {name:'agent_web_calls',migration:'032_web_source_evidence.sql',privileges:['SELECT','INSERT','UPDATE']},
+ {name:'pt_billing_credentials',migration:'033_billing_login_credentials.sql',privileges:['SELECT','INSERT','UPDATE','DELETE']},
 ]);
 const fail=code=>Object.assign(new Error(code),{code});
 async function repairRuntimeAcl(db,{expectedDatabase,runtimeRole,apply=false}={}){
@@ -24,7 +26,7 @@ async function repairRuntimeAcl(db,{expectedDatabase,runtimeRole,apply=false}={}
    const {rows:[lock]}=await tx.query("SELECT pg_try_advisory_xact_lock(734030,3401) AS acquired");
    if(!lock.acquired)throw fail('R34_ACL_MAINTENANCE_BUSY');
    // Prevent concurrent table replacement or ACL changes while observing/granting.
-   await tx.query('LOCK TABLE public.agent_question_scopes,public.agent_run_questions,public.model_request_attempts IN SHARE ROW EXCLUSIVE MODE');
+   await tx.query('LOCK TABLE public.agent_question_scopes,public.agent_run_questions,public.model_request_attempts,public.agent_web_calls,public.pt_billing_credentials IN SHARE ROW EXCLUSIVE MODE');
   }
   const tables=[];
   for(const table of TABLES){

@@ -1,0 +1,7 @@
+{
+ "schemaVersion": 1,
+ "trustedDomains": ["github.com", "githubusercontent.com", "powertokens.ai", "deepseek.com", "openai.com", "wikipedia.org", "bing.com", "duckduckgo.com"],
+ "searchEngine": "duckduckgo",
+ "maxBytes": 131072,
+ "timeoutMs": 10000
+}

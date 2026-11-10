@@ -10,7 +10,7 @@ const {repairRuntimeAcl}=require('../../scripts/northstar-r34-runtime-acl.cjs'),
  try{
   await admin.db.exec('CREATE ROLE r34_acl_runtime LOGIN; GRANT USAGE,CREATE ON SCHEMA public TO r34_acl_runtime');
   const baseline=path.join(temp,'baseline');fs.mkdirSync(baseline);
-  for(const file of fs.readdirSync(path.join(__dirname,'../../shell/db-migrations')).filter(f=>f.endsWith('.sql')&&!['029_user_questions.sql','030_model_request_attempts.sql'].includes(f)))fs.copyFileSync(path.join(__dirname,'../../shell/db-migrations',file),path.join(baseline,file));
+  for(const file of fs.readdirSync(path.join(__dirname,'../../shell/db-migrations')).filter(f=>f.endsWith('.sql')&&!['029_user_questions.sql','030_model_request_attempts.sql','032_web_source_evidence.sql','033_billing_login_credentials.sql'].includes(f)))fs.copyFileSync(path.join(__dirname,'../../shell/db-migrations',file),path.join(baseline,file));
   process.env.PT_PG_USER=role;
   storage=await createStorage({migrationsDir:baseline,masterKeyFile:path.join(temp,'key')});
   const user=(await storage.repositories.auth.register({username:'r34-acl-test',password:'FixturePass123'})).user;
@@ -34,11 +34,11 @@ const {repairRuntimeAcl}=require('../../scripts/northstar-r34-runtime-acl.cjs'),
   await assert.rejects(repairRuntimeAcl(fault,{...options,apply:true}));
   assert.ok((await audit()).tables.every(t=>Object.values(t.privileges).every(v=>!v)));
   console.log('PASS late grant failure rolls back earlier grants in real PostgreSQL transaction');
-  const applied=await repairRuntimeAcl(admin.db,{...options,apply:true});assert.deepEqual(applied.tables.map(t=>t.added),[['SELECT','INSERT','UPDATE'],['SELECT','INSERT','UPDATE'],['SELECT','INSERT']]);
+  const applied=await repairRuntimeAcl(admin.db,{...options,apply:true});assert.deepEqual(applied.tables.map(t=>t.added),[['SELECT','INSERT','UPDATE'],['SELECT','INSERT','UPDATE'],['SELECT','INSERT'],['SELECT','INSERT','UPDATE'],['SELECT','INSERT','UPDATE','DELETE']]);
   assert.equal((await audit()).ok,true);
-  for(const table of applied.tables){const {rows:[row]}=await admin.db.query("SELECT has_table_privilege($1,$2,'DELETE') AS allowed",[role,table.table]);assert.equal(row.allowed,false);}
+  for(const table of applied.tables){const {rows:[row]}=await admin.db.query("SELECT has_table_privilege($1,$2,'DELETE') AS allowed",[role,table.table]);assert.equal(row.allowed,table.table==='public.pt_billing_credentials');}
   assert.ok((await repairRuntimeAcl(admin.db,{...options,apply:true})).tables.every(t=>t.added.length===0));
-  console.log('PASS minimal grants pass actual runtime login; DELETE absent; reapply idempotent');
+  console.log('PASS minimal grants pass actual runtime login; DELETE only on dedicated billing credential table; reapply idempotent');
   const pending=service.ask({identity,runId:run.runId,leaseOwner:'acl-worker',args});pending.catch(()=>{});
   let listed;for(let n=0;n<100;n++){listed=await service.list(identity,run.runId);if(listed.questions.length)break;await new Promise(r=>setTimeout(r,5));}
   assert.equal(listed.questions[0].status,'pending');await service.answer(identity,run.runId,'scope',{callId:'native-qa',answer:{selected:['current']}});

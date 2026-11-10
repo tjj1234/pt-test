@@ -4,6 +4,7 @@ const convListEl = $("#convList"), newBtn = $("#newConv");
 let dashLoaded = false;
 const state = { list: [], activeId: null, loadedId: null, busy: false, unread: {} };
 const userQuestionCache = new Map();
+const webSourceCache=new Map();
 // A request belongs to its conversation for its full browser lifecycle. Switching
 // sessions changes composer/stop controls without cancelling or overwriting the prior stream.
 const chatRunsByConversation = new Map();
@@ -326,6 +327,7 @@ function addRunReviewButton(host, runId) {
       addRunUsageControls(panel, runId, data.run.state);
       addMediaReservationControls(panel, runId);
       addQuestionHistoryControl(panel, runId);
+      addWebSourceHistoryControl(panel,runId);
     } catch {
       panel.textContent = "运行记录暂时无法读取，请稍后重试。";
     } finally { button.disabled = false; }
@@ -840,6 +842,7 @@ function renderChat(messages) {
     if (m && m.role === "assistant") mergeArtifacts(m.artifacts);
   });
   if (artItems.length) openArtifactPane();
+  restoreWebSources(state.activeId);
 }
 
 /* 停止 / 超时中断文案。
@@ -1281,6 +1284,7 @@ async function runChat(payload) {
           if (obj.connecting && viewing()) { showConnecting(t); }
           observeManualCheck(obj.operationStatus);
           if (obj.mediaAuthorization) observeMediaAuthorization(obj.mediaAuthorization);
+          if (obj.webSources)observeWebSources(targetId,obj.webSources);
           if (obj.userQuestion) observeUserQuestion(targetId,obj.userQuestion);
           if (obj.artifact && viewing()) { pushArtifact(obj.artifact); openArtifactPane(); }
           if (obj.delta && viewing()) { acc += obj.delta; streamInto(t, acc); }
@@ -1367,6 +1371,7 @@ async function runChat(payload) {
                 if (event.type === "delta") { acc += payload.text || ""; if (viewing()) streamInto(t, acc); }
                 else if (event.type === "state") {
                   observeManualCheck(payload.operationStatus);
+                  if(payload.action === "web_sources")observeWebSources(targetId,{runId:event.runId,sources:payload.sources});
                   if(payload.action === "user_question")observeUserQuestion(targetId,{runId:event.runId,question:payload.question});
                   if (payload.action === "media_authorization_required") observeMediaAuthorization({runId:event.runId,taskType:payload.taskType,expiresAt:payload.expiresAt,parameterSummary:payload.parameterSummary});
                 }
@@ -1514,6 +1519,8 @@ async function ask(msg) {
   const effectiveMsg = msg.trim() || (pendingImage ? "请分析这张图片" : (pendingDocs.length ? "请分析附件内容" : (readyMedia.length ? "请分析音视频内容" : "请分析引用的资料内容")));
   ta.value = ""; ta.style.height = "auto";
   const payload = { conversationId: state.activeId, message: effectiveMsg };
+  if ($('#allowBilling')?.checked) payload.allowBilling=true;
+  if ($('#allowWeb')?.checked) payload.allowWeb=true;
   if ($('#allowQuestions')?.checked) payload.allowQuestions=true;
   if(pendingSourceCitations.length)payload.sourceCitations=pendingSourceCitations.map(({label,...item})=>item);
   // M2：把当前/引用面板作为上下文传给后端，让 LLM 理解「这个面板」等指代
@@ -4290,4 +4297,35 @@ if (typeof globalThis !== "undefined") {
   globalThis.__modelCaps = modelCaps;
   globalThis.__currentModelChat = currentModelChat;
   globalThis.__modelKindLabel = modelKindLabel;
+}
+
+function renderWebSources(host,sources){
+  const panel=document.createElement('details');panel.className='web-sources';
+  const summary=document.createElement('summary');summary.textContent='联网来源与证据';panel.appendChild(summary);
+  let count=0;for(const source of (Array.isArray(sources)?sources:[]).slice(0,40)){
+    let url;try{url=new URL(source.url);if(url.protocol!=='https:'||url.username||url.password)continue;}catch{continue;}
+    const item=document.createElement('div'),link=document.createElement('a');link.href=url.href;link.target='_blank';link.rel='noopener noreferrer';link.textContent=String(source.title||url.href).slice(0,500);item.appendChild(link);
+    const text=document.createElement('p');text.textContent=String(source.excerpt||'').slice(0,2000);item.appendChild(text);
+    const evidence=document.createElement('small');evidence.textContent=(source.evidenceType==='page_content'?'网页正文':'搜索摘要')+' · '+String(source.retrievedAt||'')+' · SHA-256 '+String(source.sourceSha256||'');evidence.style.overflowWrap='anywhere';item.appendChild(evidence);panel.appendChild(item);count++;
+  }
+  if(!count){const empty=document.createElement('p');empty.textContent='此运行没有已保存的联网来源。';panel.appendChild(empty);}host.appendChild(panel);return panel;
+}
+function addWebSourceHistoryControl(host,runId){
+  const button=document.createElement('button');button.type='button';button.textContent='查看联网来源';host.appendChild(button);
+  button.addEventListener('click',async()=>{button.disabled=true;try{const response=await fetch('/api/runs/'+encodeURIComponent(runId)+'/web-sources',{credentials:'same-origin'});if(!response.ok)throw Error();const result=await response.json();renderWebSources(host,result.sources);}catch{const notice=document.createElement('p');notice.textContent='联网来源暂时无法读取。';host.appendChild(notice);}finally{button.disabled=false;}});
+}
+
+for(const [a,b]of [['allowWeb','allowQuestions'],['allowQuestions','allowWeb']]){const input=document.getElementById(a);input?.addEventListener('change',()=>{if(input.checked){const other=document.getElementById(b);if(other)other.checked=false;}});}
+
+for(const id of ['allowWeb','allowQuestions','allowBilling'])document.getElementById(id)?.addEventListener('change',event=>{if(event.target.checked)for(const other of ['allowWeb','allowQuestions','allowBilling'])if(other!==id)document.getElementById(other).checked=false;});
+
+function observeWebSources(conversationId,value){
+ if(!validRunReviewId(value?.runId)||!Array.isArray(value.sources)||value.sources.length>10)return;
+ const key=JSON.stringify([value.runId,value.sources.map(s=>[s?.url,s?.sourceSha256,s?.evidenceType])]);
+ webSourceCache.set(key,{conversationId,sources:value.sources});if(webSourceCache.size>128)webSourceCache.delete(webSourceCache.keys().next().value);restoreWebSources(conversationId);
+}
+function restoreWebSources(conversationId){
+ if(!conversationId||state.activeId!==conversationId)return;
+ chat.querySelectorAll(':scope > .web-sources').forEach(panel=>panel.remove());
+ for(const entry of webSourceCache.values())if(entry.conversationId===conversationId)renderWebSources(chat,entry.sources);
 }

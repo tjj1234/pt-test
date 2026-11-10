@@ -46,21 +46,23 @@ test("real DSH CLI boots isolated run-persistent profile and reaches runner read
     fs.rmSync(tmp, { recursive: true, force: true });
   });
 
-  let buffer = "";
+  let buffer = "",startup="";
   let stderr = "";
   const frames = [];
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (chunk) => { stderr += chunk; });
   child.stdout.on("data", (chunk) => {
-    buffer += chunk;
+    startup+=chunk;buffer += chunk;
     let i;
     while ((i = buffer.indexOf("\n")) >= 0) {
       const line = buffer.slice(0, i).trim(); buffer = buffer.slice(i + 1);
       try { const frame = JSON.parse(line); if (frame && frame.type) frames.push(frame); } catch { /* startup text is not a JSONL runner frame */ }
     }
   });
-  await waitFor(() => frames.some((frame) => frame.type === "ready" && frame.runner === "persistent-runner"), "runner ready");
+  try{await waitFor(() => frames.some((frame) => frame.type === "ready" && frame.runner === "persistent-runner")||child.exitCode!==null, "runner ready");if(!frames.some(f=>f.type==='ready'))throw Error('CLI exited before ready');}
+  catch(error){const diagnostics=(stderr+'\n'+startup).split('\n').filter(line=>/error|Error|not found|Cannot|duplicate|failed|Failed|pending|\[E\]|missing|未知|失败|未找到/i.test(line)&&!/api.?key|Authorization|Bearer|token|secret|password/i.test(line)).slice(-12).join('\n');throw Error(error.message+'; exit='+child.exitCode+'; '+diagnostics+'; '+JSON.stringify(frames.filter(f=>f.type==='setup_diagnostic')));}
+
   const ready = frames.find((frame) => frame.type === "ready");
   assert.equal(ready.protocolVersion, 1);
   assert.ok(Array.isArray(ready.capabilities));

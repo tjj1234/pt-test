@@ -308,3 +308,15 @@
 
   loadAuthAccounts();
 })();
+
+(()=>{
+ const input=document.getElementById('billingToken'),status=document.getElementById('billingStatus'),result=document.getElementById('billingResult');if(!input)return;
+ const refresh=async()=>{try{const response=await fetch('/api/billing/login-token',{credentials:'same-origin'}),data=await response.json();if(!response.ok)throw Error();status.textContent=data.configured?'已配置官方账单授权。':'尚未配置账单登录令牌；大模型 API Key 不用于此接口。';}catch{status.textContent='账单授权状态暂时无法读取。';}};
+ document.getElementById('billingSave').addEventListener('click',async()=>{const token=input.value.trim();input.value='';if(!token)return;try{const response=await fetch('/api/billing/login-token',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({token})});if(!response.ok)throw Error();await refresh();}catch{status.textContent='账单授权保存失败，请核对令牌类型。';}});
+ document.getElementById('billingRemove').addEventListener('click',async()=>{try{const response=await fetch('/api/billing/login-token',{method:'DELETE',credentials:'same-origin'});if(!response.ok)throw Error();result.textContent='';await refresh();}catch{status.textContent='移除失败，请重试。';}});
+ for(const [id,kind]of [['billingBalance','balance'],['billingUsage','usage']])document.getElementById(id).addEventListener('click',async()=>{
+  result.textContent='正在读取官方账户数据…';const query=new URLSearchParams({kind});
+  if(kind==='usage'){for(const [field,name]of [['billingStart','startDate'],['billingEnd','endDate']]){const value=document.getElementById(field).value;if(value)query.set(name,value);}}
+  try{const response=await fetch('/api/billing/account?'+query,{credentials:'same-origin'}),data=await response.json();if(!response.ok||!data.ok){result.textContent='官方账户查询未成功：'+String(data.code||'BILLING_UNAVAILABLE');return;}result.textContent='官方账户数据（credits；不代表逐Run关联；USD估算与积分不换算）\n'+JSON.stringify(data,null,2);}catch{result.textContent='官方账户查询暂时不可用，请稍后重试。';}
+ });refresh();
+})();

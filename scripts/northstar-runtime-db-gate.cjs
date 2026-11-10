@@ -7,6 +7,8 @@ const TABLES = Object.freeze([
   { name: 'agent_question_scopes', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
   { name: 'agent_run_questions', privileges: ['SELECT', 'INSERT', 'UPDATE'] },
   { name: 'model_request_attempts', privileges: ['SELECT', 'INSERT'] },
+  {name:'agent_web_calls',privileges:['SELECT','INSERT','UPDATE']},
+  {name:'pt_billing_credentials',privileges:['SELECT','INSERT','UPDATE','DELETE']},
 ]);
 const fail = code => Object.assign(new Error(code), { code });
 

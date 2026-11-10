@@ -1,0 +1,1 @@
+{"maxDurationMs":180000,"maxModelCalls":3,"maxToolCalls":1,"maxToolCallsPerKey":1,"maxRetries":0,"maxOutputTokens":512,"contextModelCalls":1,"allowedTools":["billing_query"]}

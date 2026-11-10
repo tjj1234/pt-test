@@ -400,6 +400,8 @@ let controlledMediaGrants = null;
 let mediaReservationRelease = null;
 let mediaAuthorization = null;
 let userQuestionService = null;
+let webHostService=null;
+let billingAccountService=null;
 let managedMediaFetch = null;
 let managedMediaReader = null;
 let managedMediaHosts = [];
@@ -1212,7 +1214,7 @@ async function handleChat(req, res, me, body, taskRun = null) {
     dryRun: DRY_RUN_CHAT,
     model: selectedModel,
     reasoningEffort: taskRun?.modelSelection?.reasoningEffort,
-    budgetProfile: body.allowQuestions === true && !controlledMediaGrant && !pinnedSkills.skills.length && !lastUser?.csvSelections?.length ? "questions" : controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
+    budgetProfile: body.allowBilling===true?"billing":body.allowWeb===true ? "web" : body.allowQuestions === true && !controlledMediaGrant && !pinnedSkills.skills.length && !lastUser?.csvSelections?.length ? "questions" : controlledMediaGrant ? `${pinnedSkills.skills.length?"skill-":""}media:${controlledMediaGrant.taskType}`
       : taskRun && Array.isArray(lastUser?.csvSelections) && lastUser.csvSelections.length === 1 ? (pinnedSkills.skills.length?"skill-csv":"csv") : pinnedSkills.skills.length?"skill":undefined,
     pinnedSkills,
     runId:taskRun?.runId,
@@ -1221,7 +1223,10 @@ async function handleChat(req, res, me, body, taskRun = null) {
     recordModelIntents: Boolean(modelIntentHandler),
     timeoutMs: taskTimeoutMs,
     onToolRequest: request => request.name === MODEL_INTENT_RPC && modelIntentHandler
-      ? modelIntentHandler.handle(request) : ['northstar.user_question','northstar.user_question_validate'].includes(request.name) ? (()=>{
+      ? modelIntentHandler.handle(request) : request.name==='northstar.billing'?(()=>{if(!taskRun||body.allowBilling!==true)throw Object.assign(Error('Billing mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});return billingAccountService.query({userId:uid,tenantId:me.tenant.id},request.args,{signal:request.signal,runId:taskRun.runId,leaseOwner:taskRun.leaseOwner});})():request.name==='northstar.web'?(()=>{
+        if(!taskRun||body.allowWeb!==true)throw Object.assign(Error('Web mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});
+        return webHostService.execute({identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,leaseOwner:taskRun.leaseOwner,args:request.args,signal:request.signal});
+      })(): ['northstar.user_question','northstar.user_question_validate'].includes(request.name) ? (()=>{
         if(!taskRun || body.allowQuestions!==true || controlledMediaGrant || pinnedSkills.skills.length || lastUser?.csvSelections?.length)throw Object.assign(Error('Question mode unavailable'),{code:'RUN_TOOL_NOT_ALLOWED'});
         if(request.name==='northstar.user_question_validate')return userQuestionService.validate(request.args);
         return userQuestionService.ask({identity:{userId:uid,tenantId:me.tenant.id},runId:taskRun.runId,leaseOwner:taskRun.leaseOwner,args:request.args,signal:request.signal});
@@ -1888,6 +1893,8 @@ async function handle(req, res) {
   const runIdentity = { userId: me.user.id, tenantId: me.tenant.id };
   const managedMediaMatch=p.match(/^\/api\/run-media\/([a-f0-9-]{36})\/([a-f0-9-]{36}\.(?:png|jpe?g|webp|gif|avif|mp4|webm|mov))$/i);
   if(managedMediaMatch)return managedMediaReader(req,res,runIdentity,{runId:managedMediaMatch[1],filename:managedMediaMatch[2]});
+  const webSourcesMatch=p.match(/^\/api\/runs\/([a-f0-9-]{36})\/web-sources$/i);
+  if(webSourcesMatch&&req.method==='GET'){try{return json(res,200,{ok:true,...await webHostService.list(runIdentity,webSourcesMatch[1])});}catch(error){return json(res,error.code==='NOT_FOUND'?404:409,{ok:false,code:error.code==='NOT_FOUND'?'NOT_FOUND':'WEB_STORE_UNAVAILABLE'});}}
   const userQuestionMatch=p.match(/^\/api\/runs\/([a-f0-9-]{36})\/questions(?:\/([^/]+)\/answer)?$/i);
   if(userQuestionMatch && ['GET','POST'].includes(req.method)){
     try{
@@ -2083,6 +2090,21 @@ async function handle(req, res) {
     } catch (e) {
       return json(res, 400, { ok: false, error: e && e.message ? e.message : String(e) });
     }
+  }
+  if(p==='/api/billing/login-token'){
+    try{
+      if(req.method==='GET')return json(res,200,{ok:true,...await keys.billingTokenStatus(runIdentity)});
+      if(req.method==='DELETE')return json(res,200,{ok:true,...await keys.removeBillingToken(runIdentity)});
+      if(req.method!=='POST')return json(res,405,{ok:false,code:'METHOD_NOT_ALLOWED'});
+      const input=JSON.parse(await readBody(req,12288));if(!input||Object.keys(input).join(',')!=='token')return json(res,400,{ok:false,code:'BILLING_CREDENTIAL_INVALID'});
+      return json(res,200,{ok:true,...await keys.saveBillingToken(runIdentity,input.token)});
+    }catch{return json(res,400,{ok:false,code:'BILLING_CREDENTIAL_INVALID'});}
+  }
+  if(p==='/api/billing/account'&&req.method==='GET'){
+    const controller=new AbortController(),cancel=()=>controller.abort();res.once('close',cancel);
+    try{const params=new URL(req.url,'http://localhost').searchParams;if([...params.keys()].some(k=>!['kind','startDate','endDate'].includes(k)))return json(res,400,{ok:false,code:'BILLING_INPUT_INVALID'});
+      const result=await billingAccountService.query(runIdentity,{kind:params.get('kind')||'usage',...(params.has('startDate')?{startDate:params.get('startDate')}:{}),...(params.has('endDate')?{endDate:params.get('endDate')}:{})},{signal:controller.signal});if(!res.destroyed)return json(res,result.ok?200:409,result);
+    }catch(error){if(!res.destroyed)return json(res,409,{ok:false,code:/^BILLING_[A-Z_]+$/.test(error.code||'')?error.code:'BILLING_UNAVAILABLE'});}finally{res.removeListener('close',cancel);}
   }
   if (p === "/api/usage/tool-calls" && req.method === "GET") {
     const u = new URL(req.url, "http://127.0.0.1:" + PORT);
@@ -2741,6 +2763,7 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
         if (event.type === "queued") frame({ queued: true });
         else if (event.type === "connecting") frame({ connecting: true });
         else if (event.type === "state" && p.operationStatus === "manual_check") frame({ operationStatus: "manual_check" });
+        else if(event.type === "state" && p.action === "web_sources") frame({webSources:{runId:event.runId,sources:p.sources}});
         else if (event.type === "state" && p.action === "user_question") frame({userQuestion:{runId:event.runId,question:p.question}});
         else if (event.type === "state" && p.action === "media_authorization_required") frame({mediaAuthorization:{runId:event.runId,taskType:p.taskType,expiresAt:p.expiresAt,parameterSummary:p.parameterSummary}});
         else if (event.type === "delta") frame({ delta: p.text || "" });
@@ -2800,7 +2823,8 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
           const frame = (data) => res.write("id: " + event.seq + "\ndata: " + JSON.stringify(data) + "\n\n");
           if (event.type === "connecting") frame({ connecting: true });
           else if (event.type === "state" && p.operationStatus === "manual_check") frame({ operationStatus: "manual_check" });
-          else if (event.type === "state" && p.action === "user_question") frame({userQuestion:{runId:event.runId,question:p.question}});
+          else if(event.type === "state" && p.action === "web_sources") frame({webSources:{runId:event.runId,sources:p.sources}});
+        else if (event.type === "state" && p.action === "user_question") frame({userQuestion:{runId:event.runId,question:p.question}});
         else if (event.type === "state" && p.action === "media_authorization_required") frame({mediaAuthorization:{runId:event.runId,taskType:p.taskType,expiresAt:p.expiresAt,parameterSummary:p.parameterSummary}});
           else if (event.type === "delta") frame({ delta: p.text || "" });
           else if (event.type === "step") frame({ step: p.step });
@@ -3018,11 +3042,13 @@ async function main() {
     throw new Error("Google OAuth must be configured before listening on a non-loopback interface");
   }
   keys = await keysMod.initKeys({ db: auth.db, masterKeyFile: MASTER_KEY_FILE });
+  billingAccountService=require("./usage/billing-account-service.cjs").createBillingAccountService({db:auth.db,keys});
   conversations = await convMod.initConversations(auth.db);
   memory = await memoryMod.initMemory(auth.db);
   panelShares = await panelSharesMod.initPanelShares(auth.db);
   taskStore = createTaskStore(auth.db);
   userQuestionService = require("./questions/service.cjs").createQuestionService({db:auth.db});
+  webHostService=require("./web/host-service.cjs").createWebHostService({db:auth.db});
   publishedSkills=createSkillPublicationStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   memoryProvenance=createMemoryProvenanceStore({db:auth.db,onInvalidate:identity=>invalidateUserMemorySessions(identity.userId,identity.tenantId)});
   sources=createSourceStore({db:auth.db,uploadsRoot:path.join(RUNTIME,'_uploads'),onRevoke:async(identity,conversationIds)=>{

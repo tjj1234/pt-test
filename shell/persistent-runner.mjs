@@ -9,6 +9,7 @@ import { apply as installAskUserTool } from "@deepseek-ai/dsh-tool-ask-user";
 import {installPublishedSkillProvider} from './published-skill-provider.mjs';
 import {installNativeContextGateR4} from './dsh-native-context-r4-candidate.mjs';
 import {nativeImageMessage} from './native-image-message.mjs';
+let withNativeWebExecution=(_active,_execution,next)=>next();
 let withNativeQuestionExecution = (_active,_execution,next) => next();
 
 const require = createRequire(import.meta.url);
@@ -19,8 +20,8 @@ const { listStylePresets, stylePresetSummary } = require("./presets.cjs");
 const crypto = require("node:crypto");
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647;
-const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit", "skill_resource"]);
-const NATIVE_RUN_TOOL_NAMES = new Set(['ask_user_question', 'skill', 'web_search']);
+const HOST_RUN_TOOL_NAMES = new Set(["get_current_time", "media_route", "csv_analyze", "billing_query", "ga_query", "attribution_query", "attribution_quality", "tracking_quality_audit", "skill_resource"]);
+const NATIVE_RUN_TOOL_NAMES = new Set(['ask_user_question', 'skill', 'web_search','web_fetch']);
 const RUN_TOOL_NAMES = new Set([...HOST_RUN_TOOL_NAMES, ...NATIVE_RUN_TOOL_NAMES]);
 const MEDIA_TASK_TYPES = new Set(["text2image", "image2image", "text2video", "image2video"]);
 const RUNNER_FAILURE_MESSAGES = Object.freeze({
@@ -96,8 +97,8 @@ function loadRunBudgetPolicy(profile = "default") {
   if (!dshHome) throw Object.assign(new Error("Run budget configuration root is unavailable"), { code: "RUN_BUDGET_CONFIG_INVALID" });
   const mediaTask = /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.exec(profile)?.[1] || null;
   const withSkill=profile==='skill'||profile==='skill-csv'||profile.startsWith('skill-media:');
-  if (profile !== "default" && profile !== "questions" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
-  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "questions" ? "run-budget-questions.json" : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
+  if (profile !== "default" && profile!=="billing" && profile !== "web" && profile !== "questions" && profile !== "csv" && profile!=="skill" && profile!=="skill-csv" && !mediaTask) throw Object.assign(new Error("Run budget profile is invalid"), { code: "RUN_BUDGET_CONFIG_INVALID" });
+  const configPath = path.join(dshHome, "profiles", "run-persistent", mediaTask ? (withSkill?"run-budget-skill-media.json":"run-budget-media.json") : profile === "billing"?"run-budget-billing.json":profile === "web" ? "run-budget-web.json" : profile === "questions" ? "run-budget-questions.json" : profile === "skill" ? "run-budget-skill.json" : profile === "skill-csv" ? "run-budget-skill-csv.json" : profile === "csv" ? "run-budget-csv.json" : "run-budget.json");
   let text;
   try { text = readFileSync(configPath, "utf8"); }
   catch {
@@ -201,7 +202,7 @@ const MEDIA_NO_LINK_NOTE =
  */
 
 const name = "persistent-runner";
-const inject = ["agentDefaultModel", "agents", "sessions", "attachments", "userQuestions", "tools"];
+const inject = ["agentDefaultModel", "agents", "sessions", "attachments", "userQuestions", "tools", "systemPrompt", "web"];
 const RPC_PROTOCOL_VERSION = 1;
 const RPC_CAPABILITIES = Object.freeze(["task-v1", "tool-rpc-v1", "abort-v1", "model-intent-v1", "model-info-v1", "reasoning-selection-v1", "native-context-v1", "skill-pins-v1"]);
 const CONTROL_ERROR_MESSAGES = Object.freeze({
@@ -271,6 +272,7 @@ async function guardNativeToolExecution(active, execution, next) {
   if (!NATIVE_RUN_TOOL_NAMES.has(execution.name) || !Array.isArray(active.toolPolicy?.allowedTools) || !active.toolPolicy.allowedTools.includes(execution.name)) {
     throw deny('RUN_TOOL_NOT_ALLOWED');
   }
+  if(execution.name==='web_search'&&(!Array.isArray(execution.arguments?.queries)||execution.arguments.queries.length!==1||typeof execution.arguments.queries[0]!=='string'||!execution.arguments.queries[0].trim()||execution.arguments.queries[0].length>512))throw budgetAdmissionError('WEB_INPUT_INVALID');
   if(execution.name==='ask_user_question'&&active.preflightQuestion)await active.preflightQuestion(execution);
   if(active.cancelRequested||active.expired||execution.signal.aborted)throw budgetAdmissionError('RUN_CANCELLED');
   const admission = active.budget.admit({type: 'tool', key: canonicalToolKey(execution.name, execution.arguments)});
@@ -278,11 +280,12 @@ async function guardNativeToolExecution(active, execution, next) {
     if (admission.code === 'RUN_DURATION_LIMIT') active.expire?.();
     throw deny(admission.code);
   }
-  try { return await withNativeQuestionExecution(active,execution,next); }
+  try { return await withNativeQuestionExecution(active,execution,()=>withNativeWebExecution(active,execution,next)); }
   finally { admission.settle(); }
 }
 
 function apply(ctx) {
+  let setupStage="initial";
   (async () => {
     await ctx.get("loader")?.await();
     const agents = ctx.get("agents");
@@ -311,6 +314,17 @@ function apply(ctx) {
       getActiveTurn:agent=>[...activeTurns.values()].find(turn=>turn.agent===agent),
       ask:(active,args)=>requestParentTool(active.sessionId,'northstar.user_question',args),
     });
+    }
+    if(ctx.get('web')?.registerFetchProvider){
+      setupStage='web-provider-import';
+      const nativeWeb=await import('./native-web-provider.mjs');withNativeWebExecution=nativeWeb.withNativeWebExecution;
+      setupStage='web-provider-registration';
+      nativeWeb.installNativeWebProvider(ctx,{getActiveTurn:agent=>[...activeTurns.values()].find(turn=>turn.agent===agent),request:(active,args)=>requestParentTool(active.sessionId,'northstar.web',args)});
+      setupStage='web-tool-import';
+      const {applyWebSearchTool,applyWebFetchTool}=await import('@deepseek-ai/dsh-tool-web');
+      setupStage='web-search-registration';if(!ctx.tools.get('web_search'))applyWebSearchTool(ctx,5,1,15000,true);
+      setupStage='web-fetch-registration';if(!ctx.tools.get('web_fetch'))applyWebFetchTool(ctx,15000,20000);
+      setupStage='web-ready';
     }
     const nativeContextGate=installNativeContextGateR4(ctx,{
       getActiveTurn:nativeId=>{const turn=activeTurns.get(String(nativeId).replace(/^session-/,''));return turn?{sessionId:nativeId,runId:turn.runId,tenantId:turn.tenantId,budget:{admit:operation=>{if(turn.auxiliaryAdmissions>=turn.contextModelCalls)return {allowed:false,code:'RUN_MODEL_CALL_LIMIT'};const admission=turn.budget.admit(operation);if(admission.allowed)turn.auxiliaryAdmissions++;return admission;}},cancelRequested:turn.cancelRequested,expired:turn.expired,maxOutputTokens:turn.maxOutputTokens}:null;},
@@ -484,7 +498,7 @@ function apply(ctx) {
           || (cmd.compact!==undefined&&typeof cmd.compact!=='boolean')
           || (cmd.runId!==undefined&&(typeof cmd.runId!=='string'||!cmd.runId.trim()||cmd.runId.length>128))
           || (cmd.recordModelIntents !== undefined && typeof cmd.recordModelIntents !== "boolean")
-          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv","questions"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
+          || (cmd.budgetProfile !== undefined && !["csv","skill","skill-csv","questions","web","billing"].includes(cmd.budgetProfile) && !/^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(cmd.budgetProfile))) {
         emit({ type: "error", sessionId: safeSessionId(cmd.sessionId),
           code: cmd.protocolVersion !== RPC_PROTOCOL_VERSION ? "PROTOCOL_VERSION_MISMATCH" : "TASK_FRAME_INVALID",
           message: "Parent task frame is invalid" });
@@ -649,6 +663,12 @@ function apply(ctx) {
                 execute:args=>requestParentTool(sid,'northstar.skill_resource',args),
               });
               // M1 探针：注册一个与业务线无关的 demo 工具，验证「对话 → 真实 tool/call → tool/result」链路
+              registerRunTool(agentCtx,sid,'billing_query',{
+                name:'billing_query',description:'只读查询用户已授权的PT官方账户余额、账单汇总、协议状态或最新消费记录。官方实扣为credits；不自动关联本Run，不换算USD，不发起模型或支付请求。',
+                parameters:{kind:{type:'string',required:true,enum:['balance','usage','agreement','latest']},startDate:{type:'string'},endDate:{type:'string'}},
+                output:{schema:{type:'object',additionalProperties:true},render:(_args,value)=>[{type:'text',text:JSON.stringify(value)}]},
+                execute:args=>requestParentTool(sid,'northstar.billing',args),
+              });
               registerRunTool(agentCtx, sid, "get_current_time", {
                 name: "get_current_time",
                 description: "返回当前精确时间、本地日期和星期几。当用户询问「现在几点 / 今天日期 / 今天星期几 / 当前时间」时使用此工具。",
@@ -1188,8 +1208,9 @@ function apply(ctx) {
     });
 
     emit({ type: "ready", runner: name, capabilities: RPC_CAPABILITIES });
-  })().catch(() => {
+  })().catch(error => {
     emitControlError("RUNNER_SETUP_FAILED");
+    emit({type:'setup_diagnostic',stage:setupStage,reasonCode:/^[A-Z][A-Z0-9_]{0,63}$/.test(error?.code||'')?error.code:'UNCLASSIFIED',errorName:error instanceof TypeError?'TypeError':error instanceof SyntaxError?'SyntaxError':'Error',frame:String(error?.stack||'').match(/node_modules\/((?:@[A-Za-z0-9_-]+\/)?[A-Za-z0-9_.-]+\/[^)\n]+:[0-9]+:[0-9]+)/)?.[1]||null});
     process.exit(1);
   });
 }

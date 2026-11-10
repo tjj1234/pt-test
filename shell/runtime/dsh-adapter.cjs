@@ -169,6 +169,9 @@ function normalizeRunnerControlError(frame) {
 const PROFILE_FORMAT_VERSION = 1;
 const PROFILE_MANIFEST = "northstar-profile-manifest.json";
 const PROFILE_SOURCE_FILES = Object.freeze({
+  "run-budget-billing.json":runner=>path.resolve(path.dirname(runner),"runtime/run-budget-billing.json"),
+  "native-web-provider.mjs":runner=>path.resolve(path.dirname(runner),'runtime/native-web-provider.mjs'),
+  "run-budget-web.json":runner=>path.resolve(path.dirname(runner),'runtime/run-budget-web.json'),
   "persistent-runner.mjs": (runner) => runner,
   "powertokens.cjs": (runner) => path.resolve(path.dirname(runner), "..", "business", "media", "powertokens.cjs"),
   "presets.cjs": (runner) => path.resolve(path.dirname(runner), "..", "business", "media", "presets.cjs"),
@@ -189,6 +192,7 @@ const PROFILE_SOURCE_FILES = Object.freeze({
   "run-budget-media.json": (runner) => path.resolve(path.dirname(runner), "runtime", "run-budget-media.json"),
 });
 const PROFILE_PATCH = [
+  "- id: web", "  config:", "    searchProvider: northstar-host", "    fetchProvider: northstar-host", "",
   "- id: hmr",
   "  disabled: true",
   ...["session-title-llm", "command-compact", "tool-bash", "tool-pwsh", "tool-jobs", "tool-fs", "tool-fs-search", "skill-filesystem", "subagent", "subagent-spawn-in-process", "subagent-fork-in-process", "tool-subagent-control", "tool-subagent-list-agents", "tool-subagent", "tool-subagent-fork", "tool-subagent-report", "workflow-worker-thread", "tool-workflow", "tool-result-pruner", "tool-todo", "tool-goal", "tool-ralph", "tool-str-replace-editor", "repeat-tool-reminder", "tool-web"].flatMap((id) => ["", `- id: ${id}`, "  disabled: true"]),
@@ -228,7 +232,7 @@ function profileFiles(persistentRunner) {
   }
   const { buildProfileDependencyContract, PROFILE_DEPENDENCY_FILE } = require("./profile-dependencies.cjs");
   const dependencyContract = buildProfileDependencyContract({
-    plugins: ["@deepseek-ai/dsh-tool-ask-user"],
+    plugins: ["@deepseek-ai/dsh-tool-ask-user","@deepseek-ai/dsh-tool-web"],
     lockfile: fs.readFileSync(path.resolve(__dirname, "../package-lock.json")),
     npmrc: fs.readFileSync(path.resolve(__dirname, "../.npmrc")),
   });
@@ -987,7 +991,7 @@ function createDshRuntime(opts = {}) {
         ...((spec.inputImages !== undefined || (!warm && !resume && spec.historyInputImages?.length))
           ? {inputImages:[...(!warm&&!resume?(spec.historyInputImages||[]):[]),...(spec.inputImages||[])]} : {}),
         ...(spec.recordModelIntents === true ? { recordModelIntents: true } : {}),
-        ...(["csv","skill","skill-csv","questions"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv","questions","web","billing"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) { waiter.taskDispatched = true; writeJson(proc, taskFrame); }
       else proc.pendingTasks.set(sessionId, taskFrame);
 
@@ -1053,7 +1057,7 @@ function createDshRuntime(opts = {}) {
       };
       proc.waiters.set(sessionId, waiter);
       const taskFrame = { type: "task", protocolVersion: RPC_PROTOCOL_VERSION, sessionId, task, model: spec.model, tenantId,
-        ...(["csv","skill","skill-csv","questions"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
+        ...(["csv","skill","skill-csv","questions","web","billing"].includes(spec.budgetProfile) || /^(?:skill-)?media:(text2image|image2image|text2video|image2video)$/.test(spec.budgetProfile || "") ? { budgetProfile: spec.budgetProfile } : {}) };
       if (proc.ready) writeJson(proc, taskFrame);
       else proc.pendingTasks.set(sessionId, taskFrame);
       setTimeout(() => {
