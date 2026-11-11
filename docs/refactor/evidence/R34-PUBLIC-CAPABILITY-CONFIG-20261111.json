@@ -1,0 +1,12 @@
+{
+  "scope": "R34_PUBLIC_UNIT_FLAGS_ONLY",
+  "environmentFilesNotRead": true,
+  "flags": {
+    "PT_MEDIA_GENERATION": null,
+    "PT_CONTROLLED_MEDIA_AUTHORIZATION": null,
+    "PT_TRUSTED_WEB_CONFIG_FILE": null,
+    "PT_MOCK_DSH": null,
+    "DSH_PERMISSION_MODE": null,
+    "DSH_TELEMETRY_MODE": null
+  }
+}
