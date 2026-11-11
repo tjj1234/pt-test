@@ -1,0 +1,24 @@
+northstar-controlled-trial-20261111-r34-all8-1586f76-target.tar.gz: OK
+northstar-controlled-trial-20261111-r34-all8-1586f76-target.sources.json: OK
+r34-target-linux-node-modules-20261111.tar.gz: OK
+ARCHIVE_PATHS_PASS
+ARCHIVE_MEMBER_BINDING_PASS 1095
+{
+  "result": "PASS",
+  "target": {
+    "platform": "linux",
+    "arch": "x64",
+    "gate": "enforced"
+  },
+  "packageCount": 515,
+  "fileCount": 32753,
+  "arborist": "8.0.5",
+  "packageLockSha256": "bc87a472976657df6268d9baee95ef77e5de94645965b2b2de6784cbeaeea623",
+  "generatedWithNode": "v22.23.4",
+  "checkedWithNode": "v24.22.0"
+}
+TARGET_REAL_AUDIO_TRANSCRIPTION_PASS
+TARGET_REAL_CHINESE_OCR_PASS
+TARGET_REAL_VIDEO_FRAMES_PASS
+TARGET_NATIVE_MEDIA_AND_ISOLATION_PASS
+R34_TARGET_PREFLIGHT_PASS_NO_DEPLOYMENT
