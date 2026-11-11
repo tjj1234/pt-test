@@ -1,5 +1,7 @@
 # 北极星完整重构主台账
 
+R34详细功能与开关说明：[功能清单及DSH能力对应表（2026-11-11）](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/R34-FEATURE-AND-DSH-CAPABILITY-MATRIX-20261111.md)。覆盖基础功能、01–08子功能、17个注册工具、11类预算、27个配置模型、显式关闭项、运营配置未核实项与验收边界。采用参考ASD-STE100的中文受控说明。
+
 2026-11-11 14:40东京时间最新上线状态：**R34已部署至唯一正式环境，DEPLOYED_FOR_QA**。源码1586f765b53fde0a767ef13def3a47e56ca0c726，归档SHA256 cb36cdc5002bdc70a855fd30558893632c9442d847dd609534ea027efe94e4bf，release=controlled-trial-20261111-r34-all8-1586f76-target。服务active、PID494892、NRestarts0；主程独立核验1095成员及权限、健康PID、公网JS/CSS均PASS。隔离恢复/迁移361:30→361:35、正式五项追加迁移/最小运行权限/审核价格导入通过；备份r34-20261111T054024Z。01–08与Bug3/R33整改已随包上线，独立QA及真实模型/计费业务验收待做；Bug-12保持DEGRADED_PREVIEW。详见[正式回执及可转发QA指令](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/evidence/R34-ONLINE-AND-QA-HANDOVER-20261111.md)。下方首次失败/待切换文字均为历史记录；勿再次运行部署脚本。
 
 2026-11-11发布纠偏：首次R34发布在备份恢复后失败，已自动回滚；独立核对R33 active、PID494147、NRestarts0。备份r34-20261111T051705Z、隔离恢复361:30；尚未执行R34生产迁移/ACL/价格导入。私有日志错误码ERR_INVALID_PACKAGE_CONFIG，正在核实执行身份与工作目录差异；R34未上线。以下“待切换”保留为尝试前历史状态。
