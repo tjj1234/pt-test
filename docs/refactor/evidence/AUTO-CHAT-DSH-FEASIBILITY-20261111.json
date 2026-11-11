@@ -1,0 +1,90 @@
+{
+  "scope": "LOCKED_DSH_AUTO_CHAT_FEASIBILITY",
+  "result": "PASS",
+  "packageVersions": {
+    "@deepseek-ai/dsh-agent": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-agent-loop": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-llm": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-tools": "0.1.1-rc.2"
+  },
+  "modelBackend": "deterministic LlmAdapter; not PT",
+  "externalCalls": 0,
+  "productionChanges": 0,
+  "results": [
+    {
+      "name": "native one-turn three-step model switch and tool-result handoff",
+      "result": "PASS",
+      "elapsedMs": 11
+    },
+    {
+      "name": "native warm session reuses history while changing model",
+      "result": "PASS",
+      "elapsedMs": 4
+    },
+    {
+      "name": "native dynamic tool mask blocks a revoked tool body",
+      "result": "PASS",
+      "elapsedMs": 2
+    },
+    {
+      "name": "agent-local definitions require a host execution guard (native boundary)",
+      "result": "PASS",
+      "elapsedMs": 5
+    },
+    {
+      "name": "two native agents keep model and tool scopes separate",
+      "result": "PASS",
+      "elapsedMs": 2
+    },
+    {
+      "name": "native cancellation stops active tool and prevents downstream model",
+      "result": "PASS",
+      "elapsedMs": 2
+    },
+    {
+      "name": "existing maxCost reserves concurrent amounts and settles known cost",
+      "result": "PASS",
+      "elapsedMs": 0
+    },
+    {
+      "name": "existing maxCost blocks unknown estimates and unknown settlement",
+      "result": "PASS",
+      "elapsedMs": 0
+    }
+  ],
+  "traces": [
+    {
+      "case": "one-turn",
+      "models": [
+        "planner-a",
+        "worker-b",
+        "writer-c"
+      ],
+      "tools": [
+        [
+          "prepare"
+        ],
+        [
+          "render"
+        ],
+        []
+      ],
+      "sameSession": true,
+      "turns": 1
+    },
+    {
+      "case": "local-tool-boundary",
+      "nativeRestrictionCoversLocalDefinitions": false,
+      "hostExecutionGuardBlocksBody": true
+    }
+  ],
+  "limitations": [
+    "No real PT model quality or billing acceptance",
+    "No host PostgreSQL multi-tenant persistence tested",
+    "No frozen-plan implementation or automatic Python authorization implemented",
+    "Stock R34 host selectedModel and mutually exclusive mode guards remain unchanged"
+  ],
+  "observedAt": "2026-11-11T07:01:29.270769+00:00",
+  "probeSha256": "b5138d59aa6d5bb6a38a8120630bac3b4a857a88b0f37f7126a9dae5911dd465",
+  "shellLockSha256": "bc87a472976657df6268d9baee95ef77e5de94645965b2b2de6784cbeaeea623"
+}

@@ -1,0 +1,14 @@
+Command: node --test tests/regression/f1-native-model-switch-intent-test.mjs
+Exit code: 0
+Backend: actual locked DSH CLI and pi-ai adapter, loopback HTTP fixture only.
+Real API keys: none. Real provider calls: none.
+Captured test output:
+✔ native pinned launcher records the final selected model before both warm-session requests (4577.218458ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4614.034167
