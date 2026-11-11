@@ -222,3 +222,16 @@ server.cjs:1533只有非AUTO文字请求才尝试recordManualTextChatVerificatio
 | 预算与媒体去重 | 费用/副作用保护 | 新方案允许正常付费恢复，同时保留未知受理的幂等/查单边界 |
 
 新方案第11–20节已涵盖金额/媒体上限、设置授权撤销、多租户、计划冻结、Python安全、PT依赖、模型选择/数据格式/传递、5–7人日估计及回归影响；原生DSH8组与CLI1组小验证已有回执。第21节补首用冷启动。以上仍为方案，不表示整体开工或已上线。
+
+
+## 10. 用户补充的媒体事故与连接状态（交接前）
+
+用户报告：账号google_46318be1631a400585946549d0605528，userId=842a987b-1ec1-4931-9224-ba6886392dea；文生图/图生图先报“媒体生成未完成展示；远端任务状态请在运行记录中核对，勿重复提交。”，之后报“Run stopped because the tool-call budget was exhausted”。首个时间2026-11-11 14:02:27，时区仍待确认。
+
+这是用户上报，不是本轮已查到的日志。源码映射分别为server.cjs:1470–1478的MEDIA_RESULT_NOT_AVAILABLE，以及persistent-runner.mjs:36的RUN_TOOL_CALL_LIMIT。前者是媒体结果验收未通过的通用展示，不证明PT成功/失败或已扣费；后者可能来自零工具/一次工具预算或重复工具请求，必须读取实际Run budget、step与外部operation，不能直接定根因，也不归到文字AUTO冷启动。
+
+时间边界：若为东京时间，14:02:27=05:02:27Z，早于R34成功发布14:40:24；若为北京时间，则06:02:27Z=东京15:02:27，落在R34后。未确认时区与Run/release前不能统称R34线上缺陷。
+
+用户指定共享socket为~/.ssh/pt-r34-audit.sock，不是/private/tmp路径。当前工具home=/Users/mmdn；实查/Users/mmdn/.ssh/pt-r34-audit.sock不存在，SSH -O check失败，批处理连接认证失败。没有删除、关闭或替换用户连接。私有线上核查未执行。旧scripts/r34-ops-20261111.py仍硬编码旧socket，不能拿它重试后声称使用新通道。
+
+交接前公网重核：2026-11-11T08:28:35.942Z健康PID494892、Google configured=true，公网app.js SHA仍58ab60dd7c687fb40d351ffaa4ba9357d47a522a9cba712edee38763bc5e3b4a。此事实不替代route文件、TRUST_PROXY、nginx、用户Key分组及事故数据库核查。

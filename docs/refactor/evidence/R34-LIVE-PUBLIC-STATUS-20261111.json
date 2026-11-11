@@ -22,5 +22,24 @@
     "error": "请使用 Google 登录",
     "method": "GET",
     "credentialsSent": false
+  },
+  "handoffRecheck": {
+    "health": {
+      "ok": true,
+      "status": "ok",
+      "version": "1.0.0",
+      "pid": 494892,
+      "uptimeSec": 10038,
+      "ts": "2026-11-11T08:28:35.942Z"
+    },
+    "googleAuthStatus": {
+      "ok": true,
+      "configured": true
+    },
+    "publicAppSha256": "58ab60dd7c687fb40d351ffaa4ba9357d47a522a9cba712edee38763bc5e3b4a",
+    "requestedControlPath": "/Users/mmdn/.ssh/pt-r34-audit.sock",
+    "controlSocketPresentInToolEnvironment": false,
+    "sshControlCheck": "No such file or directory",
+    "privateAuditExecuted": false
   }
 }

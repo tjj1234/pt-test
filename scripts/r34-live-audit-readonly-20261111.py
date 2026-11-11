@@ -3,16 +3,18 @@
 No HTTP/model calls, DDL, cache sync, sessions, config changes, or raw secrets output.
 Run through audited SHA in the server terminal. Output can be shared with lead.
 """
-import os,json,re,subprocess,hashlib,datetime,shlex
+import os,json,re,subprocess,hashlib,datetime,shlex,sys
 from pathlib import Path
 assert os.geteuid()==0,'ROOT_REQUIRED'
+target_user=sys.argv[1] if len(sys.argv)==2 else ''
+assert not target_user or re.fullmatch(r'[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}',target_user,re.I),'TARGET_USER_UUID_REQUIRED'
 def call(argv,**kw):return subprocess.run(argv,capture_output=True,text=True,timeout=kw.pop('timeout',20),**kw)
 props=dict(x.split('=',1) for x in call(['systemctl','show','northstar-shell','--property=ActiveState,MainPID,NRestarts,WorkingDirectory,User,MemoryMax,TasksMax,LimitNOFILE,CPUQuotaPerSecUSec','--no-pager']).stdout.splitlines())
 pid=int(props['MainPID']);shell=Path(props['WorkingDirectory']);assert str(shell).startswith('/opt/northstar/releases/') and shell.name=='shell'
 env={x.split(b'=',1)[0].decode():x.split(b'=',1)[1].decode(errors='replace') for x in Path(f'/proc/{pid}/environ').read_bytes().split(b'\0') if b'=' in x}
 runtime=Path(env.get('PT_RUNTIME_DIR',str(shell.parent/'runtime')))
 keys=['TRUST_PROXY','PT_AUTO08_ROUTE_CONFIG_FILE','PT_RUNS_PER_USER','PT_RUNS_GLOBAL','PT_RATE_CHAT_PER_MIN','PT_RATE_LOGIN_PER_MIN','PT_RATE_REGISTER_PER_MIN','PT_RATE_FORGOT_PER_MIN','PT_RATE_CHANGE_PW_PER_MIN','PT_BF_MAX_FAILURES','PT_BF_WINDOW_MS','PT_BF_LOCK_MS','PT_PG_POOL_MAX','PT_PG_CONNECT_TIMEOUT_MS','PT_SESSION_TTL_MS','PT_DSH_UID','PT_DSH_GID','PT_MEDIA_GENERATION','PT_CONTROLLED_MEDIA_AUTHORIZATION','PT_DOC_UPLOAD_MB','PT_DOC_CONTEXT_CHARS','PT_MEDIA_UPLOAD_MB','PT_UPLOAD_QUOTA_MB','PT_HEARTBEAT_ENABLED','PT_HEARTBEAT_INTERVAL_MS','PT_LISTEN_HOST','PT_CHAT_DRYRUN']
-out={'scope':'R34_LIVE_READONLY_AUDIT','observedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'service':props,'processEnvironment':{k:{'set':k in env,'value':env.get(k)} for k in keys},'readOnly':True,'paidCalls':0}
+out={'scope':'R34_LIVE_READONLY_AUDIT','observedAt':datetime.datetime.now(datetime.timezone.utc).isoformat(),'service':props,'processEnvironment':{k:{'set':k in env,'value':env.get(k)} for k in keys},'readOnly':True,'paidCalls':0,'targetUserId':target_user or None}
 selected=['server.cjs','auth-routes.cjs','auth-google-routes.cjs','ratelimit.cjs','models/task-router.cjs','models/auto-route-policy.cjs','models/capabilities.cjs','models/catalog-cache.cjs','model-catalog.cjs','runtime/session-scheduler.cjs','runtime/dsh-adapter.cjs','db-pg.cjs','tasks/store.cjs','tasks/budget.cjs','tenant.cjs','auth-google.cjs','member-routes.cjs','runtime/native-image-message.mjs','runtime/native-analysis-provider.mjs','runtime/offline-analysis.mjs','isolation/offline-analysis.c','tasks/analysis-workspace.cjs','tasks/document-export-handler.cjs','exports/conversation-docx.cjs','attachments/office-document-parser.cjs','attachments/pdf-text-parser.cjs','attachments/office-zip-guard.cjs','attachments/document-bundle-worker.cjs','attachments/document-bundle.cjs','attachments/csv-parser.cjs','media/local-content-runtime.cjs','memory/provenance-store.cjs']
 out['sourceSha256']={n:hashlib.sha256((shell/n).read_bytes()).hexdigest() for n in selected}
 out['sourceSha256'].update({str(p.relative_to(shell)):hashlib.sha256(p.read_bytes()).hexdigest() for p in (shell/'runtime').glob('run-budget*.json')})
@@ -47,8 +49,11 @@ for filename in sorted(accessFiles):
 out['nginx']['recentErrorRequests']=access[-150:]
 # Bounded selected journal metadata; never dump request bodies, environment or messages.
 journal=call(['journalctl','-u','northstar-shell','--since','48 hours ago','-n','15000','-o','cat','--no-pager'],timeout=30)
-logfiles=[];logdir=Path(env.get('PT_LOG_DIR',str(shell.parent/'logs')))
-if logdir.is_dir():logfiles=sorted(logdir.glob('app-*.log'))[-3:]
+logfiles=[]
+logdirs={Path(env.get('PT_LOG_DIR',str(shell.parent/'logs'))),Path('/opt/northstar/releases/controlled-trial-20261106-candidate-34-r33-questions-m1-draft/logs')}
+for logdir in logdirs:
+ if logdir.is_dir():logfiles.extend(sorted(logdir.glob('app-*.log'))[-3:])
+logfiles=sorted(set(p.resolve() for p in logfiles))
 rows=[];ipGroups={}
 def tail(p):
  with p.open('rb') as f:
@@ -106,15 +111,16 @@ const hash=x=>crypto.createHash('sha256').update(x).digest('hex'),safeCode=x=>ty
  }
  master?.fill(0);salt.fill(0);
  const runs=(await db.query(`SELECT r.run_id,r.user_id,r.created_at,r.updated_at,r.state,r.request->'modelSelection'->>'requestedModelId' AS requested_model,
- (SELECT jsonb_agg(jsonb_build_object('type',e.event->>'type','code',e.event->'payload'->>'code','errorCode',e.event->'payload'->>'errorCode','reasonCodes',e.event->'payload'->'reasonCodes','action',e.event->'payload'->>'action','modelId',COALESCE(e.event->'payload'->>'modelId',e.event->'payload'->>'resolvedModelId'),'noEligibleMessage',COALESCE((e.event->'payload'->>'error') LIKE '%没有满足当前文字对话资格%',false))) FROM agent_run_events e WHERE e.run_id=r.run_id AND (e.event->>'type' IN ('done','error','state'))) AS metadata
- FROM agent_runs r WHERE r.created_at>now()-interval '7 days' ORDER BY r.created_at DESC LIMIT 200`)).rows;
- const safeRuns=runs.map(r=>({runId:r.run_id,user:label.get(r.user_id)||'other',createdAt:r.created_at,updatedAt:r.updated_at,state:r.state,requestedModel:r.requested_model,events:(r.metadata||[]).filter(e=>e.code||e.errorCode||e.reasonCodes||e.noEligibleMessage||['model_selection','text_chat_runtime_verified','image_understanding_runtime_verified'].includes(e.action)).map(e=>({...e,code:safeCode(e.code),errorCode:safeCode(e.errorCode)}))}));
- return {identity,postgresMaxConnections:maxConnections,accounts:reports,keyGroupsAreEphemeral:true,keyMaterialNotExported:true,activeRoutePolicy:policy?{version:policy.version,sha256:policy.sha256,routes:policy.routes}:null,configuredDshModelCount:ids.length,recentRunMetadata:safeRuns};
+ (SELECT jsonb_agg(jsonb_build_object('type',e.event->>'type','code',e.event->'payload'->>'code','errorCode',e.event->'payload'->>'errorCode','reasonCodes',e.event->'payload'->'reasonCodes','action',e.event->'payload'->>'action','toolName',e.event->'payload'->'step'->>'name','isError',e.event->'payload'->'step'->'isError','budget',CASE WHEN e.event->'payload'->>'kind'='run_budget' THEN e.event->'payload' ELSE NULL END,'modelId',COALESCE(e.event->'payload'->>'modelId',e.event->'payload'->>'resolvedModelId'),'noEligibleMessage',COALESCE((e.event->'payload'->>'error') LIKE '%没有满足当前文字对话资格%',false))) FROM agent_run_events e WHERE e.run_id=r.run_id AND (e.event->>'type' IN ('done','error','state','step','usage'))) AS metadata
+ FROM agent_runs r WHERE r.created_at>now()-interval '7 days' AND ($1::uuid IS NULL OR r.user_id=$1::uuid) ORDER BY r.created_at DESC LIMIT 200`,[process.env.PT_AUDIT_TARGET_USER_ID||null])).rows;
+ const safeRuns=runs.map(r=>({runId:r.run_id,user:label.get(r.user_id)||'other',createdAt:r.created_at,updatedAt:r.updated_at,state:r.state,requestedModel:r.requested_model,events:(r.metadata||[]).filter(e=>e.code||e.errorCode||e.reasonCodes||e.noEligibleMessage||e.toolName||e.budget||['model_selection','text_chat_runtime_verified','image_understanding_runtime_verified'].includes(e.action)).map(e=>({...e,code:safeCode(e.code),errorCode:safeCode(e.errorCode)}))}));
+ const external=(await db.query("SELECT r.run_id,o.operation_id,o.provider,o.status,o.task_id,o.query_attempts,o.last_query->>'outcome' AS query_outcome,o.last_query->>'reason' AS query_reason,o.created_at,o.updated_at FROM run_external_operations o JOIN agent_runs r ON r.run_id=o.run_id WHERE ($1::uuid IS NULL OR r.user_id=$1::uuid) AND r.created_at>now()-interval '7 days' ORDER BY o.created_at DESC LIMIT 100",[process.env.PT_AUDIT_TARGET_USER_ID||null])).rows;
+ return {identity,postgresMaxConnections:maxConnections,accounts:reports,externalOperationMetadata:external,keyGroupsAreEphemeral:true,keyMaterialNotExported:true,activeRoutePolicy:policy?{version:policy.version,sha256:policy.sha256,routes:policy.routes}:null,configuredDshModelCount:ids.length,recentRunMetadata:safeRuns};
  });console.log(JSON.stringify(result));}finally{await connection.close();}
 })().catch(()=>{console.log(JSON.stringify({diagnosticFailed:true,error:'READONLY_DB_OR_CACHE_DIAGNOSTIC_FAILED'}));process.exitCode=1;});
 '''
 node_env={k:v for k,v in env.items() if k.startswith('PT_PG_') or k in ['PT_RUNTIME_DIR','PT_MASTER_KEY_FILE','PT_AUTO08_ROUTE_CONFIG_FILE']}
-node_env.update({'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/','LANG':'C.UTF-8','PT_PG_POOL_MAX':'1'})
+node_env.update({'PATH':'/usr/local/bin:/usr/bin:/bin','HOME':'/','LANG':'C.UTF-8','PT_PG_POOL_MAX':'1','PT_AUDIT_TARGET_USER_ID':target_user})
 r=call(['runuser','-u','northstar','--','/usr/local/bin/node','-',str(shell)],input=node,env=node_env,cwd='/',timeout=60)
 try:out['databaseAudit']=json.loads(r.stdout)
 except Exception:out['databaseAudit']={'diagnosticFailed':True,'noRawErrorExported':True}
