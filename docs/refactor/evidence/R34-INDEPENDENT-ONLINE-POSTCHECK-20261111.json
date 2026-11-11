@@ -1,0 +1,23 @@
+{
+  "scope": "R34_INDEPENDENT_ONLINE_POSTCHECK",
+  "result": "PASS",
+  "sourceMembers": 1095,
+  "service": {
+    "ActiveState": "active",
+    "MainPID": "494892",
+    "NRestarts": "0",
+    "WorkingDirectory": "/opt/northstar/releases/controlled-trial-20261111-r34-all8-1586f76-target/shell"
+  },
+  "health": {
+    "ok": true,
+    "status": "ok",
+    "version": "1.0.0",
+    "pid": 494892,
+    "uptimeSec": 58,
+    "ts": "2026-11-11T05:42:16.323Z"
+  },
+  "publicAssetSha256": {
+    "app.js": "58ab60dd7c687fb40d351ffaa4ba9357d47a522a9cba712edee38763bc5e3b4a",
+    "styles.css": "6df8d0c1d73f9ec0ea5e54cccbdc9476acc9656f11b4f51bf271c6ee90e750b1"
+  }
+}
