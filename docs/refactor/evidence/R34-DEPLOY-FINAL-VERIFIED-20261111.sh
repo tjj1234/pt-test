@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Exact R34 on agent-fat. Preserve all releases and data; no provider execution.
 set -Eeuo pipefail
+# Never inherit an operator-private staging cwd when dropping privileges.
+# Node stdin module resolution also reads package scope from its cwd.
+cd /
 umask 077
 [[ $(id -u) == 0 ]] || { echo ROOT_REQUIRED; exit 1; }
 exec 9>/run/lock/northstar-deploy.lock
@@ -74,6 +77,8 @@ PY
  exit "$code"
 }
 trap rollback EXIT
+# Report location only; command text may contain private environment values.
+trap 'printf "DEPLOYMENT_ERROR_LINE=%s\n" "$LINENO" >&2' ERR
 [[ $(systemctl show northstar-shell --property=WorkingDirectory --value) == "$old/shell" ]] || { echo CURRENT_RELEASE_DRIFT; exit 1; }
 systemctl is-active --quiet northstar-shell
 systemctl is-active --quiet northstar-analytics
@@ -136,6 +141,16 @@ runuser -u northstar -- env TMPDIR="$runtime/tmp" PT_MEDIA_PROCESSING_DIR="$runt
 import fs from 'node:fs';import os from 'node:os';import path from 'node:path';import {pathToFileURL} from 'node:url';import {createRequire} from 'node:module';import {spawnSync} from 'node:child_process';
 const root=process.argv[2],require=createRequire(path.join(root,'shell/package.json'));const media=require(path.join(root,'shell/media/local-content-runtime.cjs'));media.verifyRuntime();require(path.join(root,'shell/attachments/legacy-office.cjs')).verifyLegacyRuntime();await media.run('ffmpeg',['-version'],{maxBytes:65536});await media.run('tesseract',['--version'],{maxBytes:65536});
 const workspace=fs.mkdtempSync(path.join(os.tmpdir(),'northstar-r34-preflight-'));try{const {offlineAnalysisArguments}=await import(pathToFileURL(path.join(root,'shell/runtime/offline-analysis.mjs')));const config=offlineAnalysisArguments({workspaceRoot:workspace,code:"print('R34_KERNEL_PREFLIGHT_PASS')"});const out=spawnSync(config.argv[0],config.argv.slice(1),{cwd:workspace,encoding:'utf8',timeout:6000,maxBuffer:32768});if(out.status!==0||!out.stdout.includes('R34_KERNEL_PREFLIGHT_PASS'))throw Error('R34_KERNEL_PREFLIGHT_FAILED');fs.mkdirSync(path.join(workspace,'bin'));fs.copyFileSync(path.join(root,'shell/attachments/vendor-legacy/bin/catdoc'),path.join(workspace,'bin/catdoc'));fs.chmodSync(path.join(workspace,'bin/catdoc'),0o500);const legacy=await import(pathToFileURL(path.join(root,'shell/runtime/native-readonly-process.mjs')));const version=await legacy.runLegacyProcess({root:workspace,program:'catdoc',args:['-V'],maxBytes:1024});if(version.exitCode!==0||!version.stdout.includes('0.95'))throw Error('LEGACY_UID_PREFLIGHT_FAILED');fs.unlinkSync(path.join(workspace,'bin/catdoc'));fs.rmdirSync(path.join(workspace,'bin'));}finally{fs.rmdirSync(workspace);}console.log('NATIVE_MEDIA_AND_ISOLATION_PREFLIGHT_PASS');
+NODE
+# Same UID, Node stdin form and cwd as profile/migration steps, before downtime.
+runuser -u northstar -- /usr/local/bin/node --env-file=/etc/northstar/northstar.env - "$new" <<'NODE'
+const path=require('node:path');const root=process.argv[2];
+if(process.cwd()!=='/'||process.env.PT_RUNTIME_DIR!=='/var/lib/northstar/runtime')throw Error('R34_MAINTENANCE_CONTEXT_INVALID');
+for(const module of ['shell/runtime/dsh-adapter.cjs','shell/db.cjs','shell/db-pg.cjs'])require(path.join(root,module));
+console.log('RUNTIME_IDENTITY_MODULE_PREFLIGHT_PASS');
+NODE
+runuser -u postgres -- /usr/local/bin/node - "$new" <<'NODE'
+const path=require('node:path');if(process.cwd()!=='/')throw Error('R34_MIGRATION_CWD_INVALID');require(path.join(process.argv[2],'shell/db.cjs'));console.log('MIGRATION_IDENTITY_MODULE_PREFLIGHT_PASS');
 NODE
 active=$(runuser -u postgres -- psql -X -Atq -v ON_ERROR_STOP=1 -d northstar -c "SELECT count(*) FROM agent_runs WHERE state NOT IN ('completed','failed','cancelled','interrupted')")
 [[ $active == 0 ]] || { echo ACTIVE_RUNS_BLOCK_SWITCH; exit 1; }
