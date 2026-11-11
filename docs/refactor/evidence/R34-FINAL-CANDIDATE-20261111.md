@@ -30,3 +30,5 @@
 2026-11-11首次发布失败记录：备份 `/var/backups/northstar/r34-20261111T051705Z`；恢复库 `northstar_r34_verify_20261111051705`，计数361:30。归档、1095源码成员、依赖闭包、原生媒体/内核预检、备份恢复均通过；输出未到PROFILE_REBUILD_PASS。退出码1，R33_ROLLBACK_HEALTH_AND_SOURCE_PASS；独立SSH核对R33 active、PID494147、NRestarts0。生产数据库迁移/ACL/价格导入尚未执行。服务器独立临时目录中R33配置生成→R34重建→重新校验通过；生产私有日志需sudo只读脱敏诊断，不按推测修正或重跑。
 
 只读诊断回执：配置日志含ERR_INVALID_PACKAGE_CONFIG；PT_RUNTIME_DIR匹配预期。目录元数据未见符号链接；runtime/dsh-home为运行身份所有且0700。准备的脚本修订固定工作目录为/，并把实际northstar/postgres身份的Node stdin模块加载校验前置到停机前，ERR仅输出行号。该修订尚待同身份工作目录对照实验确认，尚未再次部署；原失败脚本SHA为dccd35572c2998d4b02359045b4a1deb5853fb15161ff533c2705ee51956c9b2。
+
+根因确认（用户回传第二版只读实验）：同一northstar身份、同一R34模块，cwd为用户暂存目录时exit1/ERR_INVALID_PACKAGE_CONFIG，cwd为/时exit0/MODULE_LOAD_PASS。运行目录变量正确。本次失败为发布命令继承工作目录导致的Node加载错误；修订固定cwd=/并在停机前分别以northstar与postgres执行同形式模块加载预检。修订脚本SHA256=a4a3ae240d3d28e1f39306667e00f85e43c5764c24f2b9df85dc73644ebd0858；归档/源码/迁移范围不变，尚待重新执行正式发布。
