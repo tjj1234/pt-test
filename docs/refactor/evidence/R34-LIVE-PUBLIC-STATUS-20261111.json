@@ -1,9 +1,26 @@
 {
   "scope": "R34_PUBLIC_READONLY_CHECK",
-  "health": {"ok": true, "status": "ok", "version": "1.0.0", "pid": 494892, "uptimeSec": 7944, "ts": "2026-11-11T07:53:41.971Z"},
-  "googleAuthStatus": {"ok": true, "configured": true},
+  "health": {
+    "ok": true,
+    "status": "ok",
+    "version": "1.0.0",
+    "pid": 494892,
+    "uptimeSec": 7944,
+    "ts": "2026-11-11T07:53:41.971Z"
+  },
+  "googleAuthStatus": {
+    "ok": true,
+    "configured": true
+  },
   "privateProcessEnvironmentChecked": false,
   "sshAuditStatus": "Shared socket command timed out; fresh audit connection pending",
   "productionChanges": 0,
-  "modelInferenceCalls": 0
+  "modelInferenceCalls": 0,
+  "legacyPasswordLoginGet": {
+    "httpStatus": 410,
+    "code": "GOOGLE_LOGIN_REQUIRED",
+    "error": "请使用 Google 登录",
+    "method": "GET",
+    "credentialsSent": false
+  }
 }

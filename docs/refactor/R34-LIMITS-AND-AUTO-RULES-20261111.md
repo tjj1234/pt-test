@@ -13,7 +13,7 @@
 | 本地资格推导 | 由代码或测试推出，不是第三人当次线上事实 |
 | 未确认 | 缺连接、授权、账号/时间或日志；不能填“未设置/默认”冒充已查 |
 
-本轮公网实查：`/healthz`返回ok，PID494892，2026-11-11T07:53:41.971Z，uptime7944秒；`/api/auth/google/status`返回configured=true。这只证明服务存活及Google登录配置存在。共享SSH通道超时，新的只读连接待恢复；私有环境/route文件/日志/用户Key同一性仍未核实。
+本轮公网实查：`/healthz`返回ok，PID494892，2026-11-11T07:53:41.971Z，uptime7944秒；`/api/auth/google/status`返回configured=true。另以无凭据GET直接核对`/api/auth/login`，线上返回410/GOOGLE_LOGIN_REQUIRED，证明当前旧密码入口关闭；未发起密码登录、未消耗失败计数。这些公网事实不能替代私有参数核实。共享SSH通道超时，新的只读连接待恢复；私有环境/route文件/日志/用户Key同一性仍未核实。
 
 ## 2. 线上问题核实台账
 
@@ -27,7 +27,7 @@
 | PT_RUNS_PER_USER/GLOBAL、聊天频率是否改过 | **未确认** | 默认4/16/35；需进程环境。即使当前值非默认，也不能仅据当前值给出历史修改时间 |
 | 第三人的实际错误码 | **未确认** | 需账号或报错时间；关联Run事件、app日志及nginx。不能从用户描述直接当作已找到日志 |
 | 测试同事是否共用Key | **未确认** | 计划只在服务器内解密比较，输出用户匿名代号/Key组号，不输出Key或可复用指纹 |
-| 登录10/分、失败5次是否真实生效 | 不能直接套用旧密码登录规则。R34代码先返回410关闭密码路径；实际Google OAuth有独立限流 | server.cjs:1737–1742；auth-google-routes.cjs:20、31、45；公网Google configured=true |
+| 登录10/分、失败5次是否真实生效 | 不能直接套用旧密码登录规则。R34代码先返回410关闭密码路径；本轮线上无凭据GET也直接验证410/GOOGLE_LOGIN_REQUIRED。Google OAuth有独立限流 | server.cjs:1737–1742；auth-google-routes.cjs:20、31、45；公网Google configured=true |
 
 同一办公室共享出口IP时，即使TRUST_PROXY=1也可能共享OAuth的IP桶。若未信任反代且全部请求来自127.0.0.1，则可能退化成所有人共享同一桶。两种情况与“只有两人席位”不同，均须取线上证据区分。
 
