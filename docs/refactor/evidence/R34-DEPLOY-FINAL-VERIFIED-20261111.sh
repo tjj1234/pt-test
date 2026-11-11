@@ -169,9 +169,9 @@ NODE
 echo PROFILE_REBUILD_PASS
 run_migration() {
  local database=$1
- runuser -u postgres -- env PT_PG_HOST=/var/run/postgresql PT_PG_DATABASE="$database" PT_PG_USER=postgres /usr/local/bin/node - "$new" > "$backup/migration-$database.private.log" 2>&1 <<'NODE'
+ runuser -u postgres -- env -u PT_PG_DSN -u PT_PG_PASSWORD -u PT_PG_SSL -u PT_PG_LIB -u PT_PG_DB -u PT_PG_USERNAME PT_PG_HOST=/var/run/postgresql PT_PG_DATABASE="$database" PT_PG_USER=postgres /usr/local/bin/node - "$new" > "$backup/migration-$database.private.log" 2>&1 <<'NODE'
 const root=process.argv[2],path=require('node:path'),m=require(path.join(root,'shell/db.cjs'));
-(async()=>{const opened=await m.open({});try{await m.migrate(opened.db,path.join(root,'shell/db-migrations'));await m.migrate(opened.db,path.join(root,'shell/db-migrations'));}finally{await opened.close();}})().catch(()=>process.exit(1));
+(async()=>{const opened=await m.open({});try{const {rows:[identity]}=await opened.db.query('SELECT current_database() AS database,current_user AS role,session_user AS login');if(identity.database!==process.env.PT_PG_DATABASE||identity.role!=='postgres'||identity.login!=='postgres')throw Error('MIGRATION_TARGET_IDENTITY_MISMATCH');await m.migrate(opened.db,path.join(root,'shell/db-migrations'));await m.migrate(opened.db,path.join(root,'shell/db-migrations'));}finally{await opened.close();}})().catch(()=>process.exit(1));
 NODE
 }
 run_migration "$verify_db"
@@ -183,7 +183,7 @@ echo "ISOLATED_MIGRATION_PASS counts=$verified_counts"
 runuser -u postgres -- psql -X -v ON_ERROR_STOP=1 -d postgres -c "ALTER DATABASE $verify_db CONNECTION LIMIT 2; GRANT CONNECT ON DATABASE $verify_db TO northstar_app"
 apply_acl() {
  local database=$1
- runuser -u postgres -- env PT_PG_HOST=/var/run/postgresql PT_PG_DATABASE="$database" PT_PG_USER=postgres /usr/local/bin/node "$new/scripts/northstar-r34-runtime-acl.cjs" --expect-database "$database" --runtime-role northstar_app --mode apply
+ runuser -u postgres -- env -u PT_PG_DSN -u PT_PG_PASSWORD -u PT_PG_SSL -u PT_PG_LIB -u PT_PG_DB -u PT_PG_USERNAME PT_PG_HOST=/var/run/postgresql PT_PG_DATABASE="$database" PT_PG_USER=postgres /usr/local/bin/node "$new/scripts/northstar-r34-runtime-acl.cjs" --expect-database "$database" --runtime-role northstar_app --mode apply
 }
 runtime_gate() {
  runuser -u northstar -- /usr/local/bin/node --env-file=/etc/northstar/northstar.env "$new/scripts/r34-runtime-maintenance-20261111.cjs" "$new" "$1" import

@@ -15,7 +15,7 @@
 | 迁移新增 | 030请求预留、031文档格式、032联网来源、033计费凭证、034操作审批 |
 | 唯一正式服务 | northstar-shell，agent-fat.adorado.top |
 | 发布前版本 | R33，PID367662、NRestarts0；最终切换前脚本再次核验 |
-| 部署脚本SHA256 | bd9285afdb4574db5c78e4c63ef298d771da008d39d5d6851a4b0b6533e1e07e |
+| 部署脚本SHA256 | dccd35572c2998d4b02359045b4a1deb5853fb15161ff533c2705ee51956c9b2 |
 
 01音视频真实本地转写/采样帧及原生DSH附件；02现代Office、PDF逐页/OCR、旧DOC/XLS/PPT与ZIP有界解析及引用；03原生工具→Word/中文PDF/Excel产物、owned下载与历史；04原生ctx.web/provider、可信transport及来源；05普通澄清与精确持久审批；06原生fs/subprocess结合内核只读Python、无网络/资源/取消边界；07按用户独立凭证读取协议账单与双轨估算；08调用前配置资格、版本pin及持久提交预留均在本候选。第三批流式中断/历史、单价、列宽及不可变firstConnected等修复已纳入。Bug-12继续DEGRADED_PREVIEW。
 

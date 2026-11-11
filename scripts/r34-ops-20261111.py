@@ -24,6 +24,8 @@ elif mode=='final-prepare':
  files=[ROOT/'docs/refactor/evidence/R34-DEPLOY-FINAL-VERIFIED-20261111.sh',ROOT/'scripts/r34-target-final-preflight-20261111.sh',ROOT/'scripts/r34-runtime-maintenance-20261111.cjs']
  subprocess.run(['scp','-o','ControlPath=/private/tmp/pt-ops-20261105.sock',*map(str,files),'tongjiawan@47.237.22.191:'+folder+'/'],check=True,timeout=30)
  remote('set -eu; for file in r34-target-linux-node-modules-20261111.tar.gz northstar-controlled-trial-20261106-candidate-34-r33-questions-m1-draft.sources.json jfk.wav ocr-proof.png; do test ! -e '+folder+'/$file; cp -p '+STAGE+'/$file '+folder+'/; done; bash '+folder+'/r34-target-final-preflight-20261111.sh',timeout=150)
+elif mode=='final-script-upload':
+ subprocess.run(['scp','-o','ControlPath=/private/tmp/pt-ops-20261105.sock',str(ROOT/'docs/refactor/evidence/R34-DEPLOY-FINAL-VERIFIED-20261111.sh'),'tongjiawan@47.237.22.191:'+STAGE+'/assembled-1586f76/'],check=True,timeout=30)
 elif mode=='final-fingerprints':
  remote('sha256sum '+STAGE+'/assembled-1586f76/R34-DEPLOY-FINAL-VERIFIED-20261111.sh '+STAGE+'/assembled-1586f76/r34-runtime-maintenance-20261111.cjs; systemctl show northstar-shell --property=ActiveState,MainPID,NRestarts,WorkingDirectory --no-pager')
 elif mode=='assemble-upload':
