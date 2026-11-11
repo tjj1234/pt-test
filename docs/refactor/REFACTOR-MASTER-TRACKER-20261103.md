@@ -1,5 +1,7 @@
 # 北极星完整重构主台账
 
+产品目标纠偏（2026-11-11）：用户要求默认单聊天框自动理解目标、规划、组合模型/工具并交付；当前R34的选模和模式复选框未满足该目标。新增[单聊天框AUTO改进方案](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/AUTO-CHAT-PRODUCT-IMPROVEMENT-PLAN-20261111.md)，状态仅方案，未实现/未部署。明确取消128 token限制、每模型最多3次失败重试、正常调用不因本地价格未知阻断；保留R34组件上线事实，不将其等同自动产品体验已完成。
+
 R34详细功能与开关说明：[功能清单及DSH能力对应表（2026-11-11）](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/R34-FEATURE-AND-DSH-CAPABILITY-MATRIX-20261111.md)。覆盖基础功能、01–08子功能、17个注册工具、11类预算、27个配置模型、显式关闭项、运营配置未核实项与验收边界。采用参考ASD-STE100的中文受控说明。
 
 2026-11-11 14:40东京时间最新上线状态：**R34已部署至唯一正式环境，DEPLOYED_FOR_QA**。源码1586f765b53fde0a767ef13def3a47e56ca0c726，归档SHA256 cb36cdc5002bdc70a855fd30558893632c9442d847dd609534ea027efe94e4bf，release=controlled-trial-20261111-r34-all8-1586f76-target。服务active、PID494892、NRestarts0；主程独立核验1095成员及权限、健康PID、公网JS/CSS均PASS。隔离恢复/迁移361:30→361:35、正式五项追加迁移/最小运行权限/审核价格导入通过；备份r34-20261111T054024Z。01–08与Bug3/R33整改已随包上线，独立QA及真实模型/计费业务验收待做；Bug-12保持DEGRADED_PREVIEW。详见[正式回执及可转发QA指令](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/evidence/R34-ONLINE-AND-QA-HANDOVER-20261111.md)。下方首次失败/待切换文字均为历史记录；勿再次运行部署脚本。
