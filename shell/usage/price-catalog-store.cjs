@@ -3,6 +3,7 @@
 const { createHash } = require('node:crypto');
 const { fingerprint } = require('../contracts/phase1.cjs');
 const { selectTextPriceSnapshot, parseUnambiguousUtc, OFFICIAL_PRICE_SOURCE } = require('./price-snapshot-selection-candidate.cjs');
+const {basePrice,materializePrice}=require('./price-time-rule.cjs');
 const hash = value => createHash('sha256').update(value).digest('hex');
 const fail = code => Object.assign(new Error(code), { code });
 
@@ -21,9 +22,9 @@ function normalizeCatalog(input) {
     const captured = parseUnambiguousUtc(snapshot?.capturedAt);
     if (from === null || captured === null) throw fail('PRICE_CATALOG_INVALID');
     const requestedAt = new Date(Math.max(from, captured)).toISOString();
-    const selected = selectTextPriceSnapshot({ snapshots: [snapshot], model: snapshot.model, requestedAt });
+    const selected = selectTextPriceSnapshot({ snapshots: [basePrice(snapshot)], model: snapshot.model, requestedAt });
     if (!selected.snapshot) throw fail('PRICE_CATALOG_INVALID');
-    return selected.snapshot;
+    return Object.hasOwn(snapshot,'timeRule')?{...selected.snapshot,timeRule:snapshot.timeRule}:selected.snapshot;
   }).sort((a, b) => (a.model < b.model ? -1 : a.model > b.model ? 1 :
     parseUnambiguousUtc(a.effectiveFrom) - parseUnambiguousUtc(b.effectiveFrom)));
   for (let index = 1; index < snapshots.length; index++) {
@@ -63,7 +64,7 @@ function createTextPriceCatalogStore(db) {
         WHERE recorded_at<=$1::timestamptz ORDER BY recorded_at DESC,ordinal DESC LIMIT 1`, [requestedAt],
     )).rows[0];
     if (!row) return { catalogId: null, sourceSha256: null, snapshot: null, coverage: 'unknown', reasonCode: 'NO_RECORDED_CATALOG' };
-    const selected = selectTextPriceSnapshot({ snapshots: row.snapshots, model, requestedAt });
+    const selected = selectTextPriceSnapshot({ snapshots: row.snapshots.map(snapshot=>materializePrice(snapshot,requestedAt)), model, requestedAt });
     return { catalogId: row.catalog_id, sourceSha256: row.source_sha256, ...selected };
   }
   async function selectNow(model) {
