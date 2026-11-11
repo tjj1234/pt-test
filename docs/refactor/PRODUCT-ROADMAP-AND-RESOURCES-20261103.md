@@ -1,5 +1,7 @@
 # 北极星完整产品路线图与资源需求
 
+AUTO小验证与补充方案（2026-11-11）：锁定DSH同Agent同turn三模型/两工具链、动态选模/全局工具限制、局部工具门禁边界、取消与maxCost共8组通过；真实CLI/pi-ai回环换模1/1通过，无付费调用。详见[补充方案第11–20节](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/AUTO-CHAT-PRODUCT-IMPROVEMENT-PLAN-20261111.md#11-补充审查结论与小验证2026-11-11)。新增金额/媒体上限、设置授权撤销、多租户/RLS计划、冻结与注入防护、Python独立安全门禁、PT依赖、规划模型/格式/数据传递及5–7人日估计。状态：原生复用可行，产品尚未整体开工；官方实扣硬帽与未知受理恢复不可提前标通过。
+
 产品目标纠偏（2026-11-11）：用户要求默认单聊天框自动理解目标、规划、组合模型/工具并交付；当前R34的选模和模式复选框未满足该目标。新增[单聊天框AUTO改进方案](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/AUTO-CHAT-PRODUCT-IMPROVEMENT-PLAN-20261111.md)，状态仅方案，未实现/未部署。明确取消128 token限制、每模型最多3次失败重试、正常调用不因本地价格未知阻断；保留R34组件上线事实，不将其等同自动产品体验已完成。
 
 R34详细功能与开关说明：[功能清单及DSH能力对应表（2026-11-11）](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/R34-FEATURE-AND-DSH-CAPABILITY-MATRIX-20261111.md)。覆盖基础功能、01–08子功能、17个注册工具、11类预算、27个配置模型、显式关闭项、运营配置未核实项与验收边界。采用参考ASD-STE100的中文受控说明。
