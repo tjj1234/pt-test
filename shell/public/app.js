@@ -1867,7 +1867,7 @@ async function uploadImageDataUrl(b64) {
  * 走基座已合并的 POST /api/upload-doc，只把返回的 url 存下来，
  * 发消息时作为 documents 数组提交；正文由后端读出来注入上下文（URL 本身不给模型）。
  * 下面的扩展名 / 体积校验只是「早点给提示」，后端还会按内容再判一次纯文本，两道都在。 */
-const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx", "pdf"]);
+const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx", "pdf", "doc", "xls", "ppt", "zip"]);
 const DOC_MAX_BYTES = 5 * 1024 * 1024;
 let pendingDocs = [];   // [{ url, name, size, chars, csvSelection? }]
 
@@ -1994,11 +1994,11 @@ async function uploadDocFile(f) {
   if (!f) return false;
   const name = f.name || "未命名文件";
   if (!DOC_EXT_WHITELIST.has(docExtOf(name))) {
-    composerNotice("支持 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf，「" + name + "」暂不支持", "err");
+    composerNotice("支持 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf / .doc / .xls / .ppt / .zip，「" + name + "」暂不支持", "err");
     return false;
   }
   if (!f.size) { composerNotice("「" + name + "」是空文件，没有可读取的内容", "err"); return false; }
-  const maxBytes=['docx','xlsx','pptx','pdf'].includes(docExtOf(name))?20*1024*1024:DOC_MAX_BYTES;
+  const maxBytes=['docx','xlsx','pptx','pdf','doc','xls','ppt','zip'].includes(docExtOf(name))?20*1024*1024:DOC_MAX_BYTES;
   if (f.size > maxBytes) {
     composerNotice("文档太大：单文件上限 "+Math.round(maxBytes/1048576)+"MB，「" + name + "」是 " + fmtSize(f.size), "err");
     return false;
@@ -2381,7 +2381,7 @@ async function handleComposerFile(f) {
   if (isDocFile(f)) { await uploadDocFile(f); return; }          // 文档 → /api/upload-doc
   if (mediaKindOf(f)) { await uploadMediaFile(f); return; }      // 音视频 → /api/upload-media
   if (!/^image\//.test(f.type || "")) {
-    composerNotice("只支持图片（参考素材）、音视频，或 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
+    composerNotice("只支持图片（参考素材）、音视频，或 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf / .doc / .xls / .ppt / .zip 文档，「" + (f.name || "未命名文件") + "」都不是", "err");
     return;
   }
   if (f.size > 15 * 1024 * 1024) { composerNotice("素材太大（≤15MB）", "err"); return; }

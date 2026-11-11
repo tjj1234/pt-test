@@ -42,7 +42,7 @@ const REGEX = Object.freeze({
   TENANT_ID: /^[a-zA-Z0-9_-]{1,128}$/,
   DOCUMENT_ID: /^[a-zA-Z0-9_./-]{1,256}$/,
   SHA256_HEX: /^[0-9a-f]{64}$/i,
-  SUPPORTED_FORMATS: /^(docx|xlsx|pptx|pdf|csv|txt|markdown)$/,
+  SUPPORTED_FORMATS: /^(docx|xlsx|pptx|pdf|doc|xls|ppt|zip|csv|txt|markdown)$/,
 });
 
 function fail(code, message) {
@@ -99,6 +99,19 @@ function computeCoverageHash({ tenantId, documentId, sourceSha256, version, form
  * 校验块定位器并规范化
  */
 function normalizeLocator(rawLocator, format, blockIndex) {
+  if(format==='zip'){
+    const x=rawLocator;
+    if(!x||typeof x.member!=='string'||!x.member||x.member.length>512||/[\\\x00-\x1f\x7f]/.test(x.member)||x.member.startsWith('/')||x.member.split('/').some(p=>!p||p==='.'||p==='..')||!REGEX.SHA256_HEX.test(x.memberSha256||'')||!['txt','md','csv','docx','xlsx','pptx','pdf','doc','xls','ppt'].includes(x.memberFormat)||!Number.isSafeInteger(x.memberBlock)||x.memberBlock<1||x.memberBlock>10000)throw fail('LOCATOR_INVALID','ZIP requires member and content fingerprints');
+    return {kind:'archive-member',member:x.member,memberSha256:x.memberSha256,memberFormat:x.memberFormat,memberBlock:x.memberBlock,inner:normalizeLocator(x.inner,x.memberFormat==='md'?'markdown':x.memberFormat,x.memberBlock)};
+  }
+  if(format==='xls'){
+    const x=rawLocator;if(!x||!Number.isSafeInteger(x.sheet)||x.sheet<1||x.sheet>1024||!Number.isSafeInteger(x.row)||x.row<1||!Number.isSafeInteger(x.column)||x.column<1)throw fail('LOCATOR_INVALID','Legacy XLS requires exported cell coordinates');
+    return {kind:'legacy-sheet-export-cell',sheet:x.sheet,row:x.row,column:x.column};
+  }
+  if(format==='doc'||format==='ppt'){
+    if(!rawLocator||!Number.isSafeInteger(rawLocator.segment)||rawLocator.segment<1||rawLocator.segment>10000)throw fail('LOCATOR_INVALID','Legacy text requires an extracted segment');
+    return {kind:'legacy-extracted-segment-not-page',segment:rawLocator.segment};
+  }
   if(format==='pdf'){
     if(!rawLocator||!Number.isSafeInteger(rawLocator.page)||rawLocator.page<1||rawLocator.page>200)throw fail('LOCATOR_INVALID','PDF requires a real page locator');
     return {kind:'pdf-page',page:rawLocator.page};

@@ -1,16 +1,16 @@
 'use strict';
 const path=require('node:path'),{Worker}=require('node:worker_threads'),{createHash}=require('node:crypto');
 const fail=code=>Object.assign(new Error('Office document could not be parsed'),{code});let activeWorkers=0;
-function parseOfficeDocument({bytes,format,signal,timeoutMs=10000}={}){
+function parseOfficeWorker({bytes,format,signal,timeoutMs=10000}={}){
  if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>20*1024*1024)return Promise.reject(fail('OFFICE_INPUT_LIMIT'));
  if(!['docx','xlsx','pptx','pdf'].includes(format))return Promise.reject(fail('OFFICE_FORMAT_UNSUPPORTED'));
  if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>15000)return Promise.reject(fail('OFFICE_LIMIT_INVALID'));
- if(signal?.aborted)return Promise.reject(fail('OFFICE_CANCELLED'));if(activeWorkers>=2)return Promise.reject(fail('OFFICE_PARSER_BUSY'));
+ if(signal?.aborted)return Promise.reject(fail('OFFICE_CANCELLED'));
  const sourceSha256=createHash('sha256').update(bytes).digest('hex'),sourceBytes=bytes.length,data=Uint8Array.from(bytes);
  return new Promise((resolve,reject)=>{
-  let worker;activeWorkers++;
+  let worker;
   try{worker=new Worker(path.join(__dirname,'office-document-worker.cjs'),{workerData:{format,bytes:data},transferList:[data.buffer],resourceLimits:{maxOldGenerationSizeMb:128,maxYoungGenerationSizeMb:16,stackSizeMb:4}});}
-  catch{activeWorkers--;reject(fail('OFFICE_WORKER_FAILED'));return;}
+  catch{reject(fail('OFFICE_WORKER_FAILED'));return;}
   let response=null,failure=null,settled=false;const controller=new AbortController();
   const stop=code=>{if(!failure){failure=fail(code);controller.abort();void worker.terminate();}};
   const cancel=()=>stop('OFFICE_CANCELLED');signal?.addEventListener('abort',cancel,{once:true});const timer=setTimeout(()=>stop('OFFICE_TIMEOUT'),timeoutMs);
@@ -31,8 +31,26 @@ function parseOfficeDocument({bytes,format,signal,timeoutMs=10000}={}){
     if(Buffer.byteLength(result.text)>5*1024*1024)throw fail('OFFICE_TEXT_LIMIT');
     if(failure||signal?.aborted)throw failure||fail('OFFICE_CANCELLED');resolve(Object.freeze({...result,sourceSha256,sourceBytes}));
    }catch(error){reject(failure||(/^OFFICE_[A-Z_]+$/.test(error.code||'')?error:fail('OFFICE_PARSE_FAILED')));}
-   finally{activeWorkers--;clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
+   finally{clearTimeout(timer);signal?.removeEventListener('abort',cancel);}
   });if(signal?.aborted)cancel();
  });
+}
+async function parseOfficeDocument({bytes,format,signal,timeoutMs=10000}={}){
+ if(!Buffer.isBuffer(bytes)||!bytes.length||bytes.length>20*1024*1024)throw fail('OFFICE_INPUT_LIMIT');
+ if(!['docx','xlsx','pptx','pdf','doc','xls','ppt','zip'].includes(format))throw fail('OFFICE_FORMAT_UNSUPPORTED');
+ if(!Number.isSafeInteger(timeoutMs)||timeoutMs<1||timeoutMs>15000)throw fail('OFFICE_LIMIT_INVALID');
+ if(signal?.aborted)throw fail('OFFICE_CANCELLED');if(activeWorkers>=2)throw fail('OFFICE_PARSER_BUSY');
+ const deadline=AbortSignal.timeout(timeoutMs),combined=signal?AbortSignal.any([signal,deadline]):deadline;
+ async function parse(options){
+  if(['doc','xls','ppt'].includes(options.format))return require('./legacy-office.cjs').parseLegacyOffice({...options,signal:combined});
+  return parseOfficeWorker({...options,signal:combined,timeoutMs});
+ }
+ activeWorkers++;
+ try{
+  const result=format==='zip'?await require('./document-bundle.cjs').parseDocumentBundle({bytes,signal:combined,parseMember:parse}):await parse({bytes,format});
+  if(combined.aborted)throw fail(signal?.aborted?'OFFICE_CANCELLED':'OFFICE_TIMEOUT');
+  return Object.freeze({...result,sourceSha256:createHash('sha256').update(bytes).digest('hex'),sourceBytes:bytes.length});
+ }catch(error){if(signal?.aborted)throw fail('OFFICE_CANCELLED');if(deadline.aborted)throw fail('OFFICE_TIMEOUT');if(/^ISOLATION_/.test(error.code||'')||error.code==='ENOENT')throw fail('OFFICE_LEGACY_BACKEND_UNAVAILABLE');throw /^OFFICE_[A-Z_]+$/.test(error.code||'')?error:fail('OFFICE_PARSE_FAILED');}
+ finally{activeWorkers--;}
 }
 module.exports={parseOfficeDocument};

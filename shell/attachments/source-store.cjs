@@ -11,7 +11,7 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
  const decode=row=>({id:row.source_id,sourceRef:row.source_ref,sourceSha256:row.source_sha256,size:row.source_bytes,format:row.source_format,name:row.display_name,version:row.source_version,deleted:!!row.deleted_at,pendingCleanup:!!row.deleted_at&&!row.cleanup_complete});
  async function byRef(identity,ref){return (await db.query('SELECT * FROM document_sources WHERE user_id=$1 AND tenant_id=$2 AND source_ref=$3',[identity.userId,identity.tenantId,ref])).rows[0]||null;}
  async function register(identity,{ref,sha256,size,format,name}){
-  const match=/^\/uploads\/([a-f0-9-]{36})\/([a-zA-Z0-9_-]+\.(txt|md|csv|docx|xlsx|pptx|pdf))$/.exec(ref||'');
+  const match=/^\/uploads\/([a-f0-9-]{36})\/([a-zA-Z0-9_-]+\.(txt|md|csv|docx|xlsx|pptx|pdf|doc|xls|ppt|zip))$/.exec(ref||'');
   if(!match||match[1]!==identity.tenantId||format!==match[3]||!Number.isSafeInteger(size)||size<1||size>20*1024*1024||!/^[a-f0-9]{64}$/.test(sha256))throw fail('SOURCE_INVALID',400);
   await db.query('INSERT INTO document_sources(source_id,user_id,tenant_id,source_ref,source_sha256,source_bytes,source_format,display_name) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(tenant_id,source_ref) DO NOTHING',[randomUUID(),identity.userId,identity.tenantId,ref,sha256,size,format,Array.from(Buffer.from(String(name||match[2]).replace(/[\x00-\x1f\x7f]/g,'')).toString('utf8')).slice(0,200).join('')||match[2]]);
   const record=await byRef(identity,ref);if(!record||record.deleted_at||record.source_sha256!==sha256||record.source_bytes!==size)throw fail('SOURCE_CHANGED');return decode(record);
@@ -31,8 +31,8 @@ function createSourceStore({db,uploadsRoot,onRevoke}){
   let total=0;const sources=[];
   for(const row of records){if(signal?.aborted)throw fail('SOURCE_SEARCH_CANCELLED');total+=row.source_bytes;if(total>20*1024*1024)throw fail('SOURCE_TOTAL_LIMIT');
    const bytes=await readVerifiedChatAttachmentBytes(row.source_ref,{ref:row.source_ref,sha256:row.source_sha256,size:row.source_bytes},{uploadsRoot,identity,includeBytes:true,maxBytes:20*1024*1024});
-   const parsed=row.source_format==='pdf'?await require('./office-document-parser.cjs').parseOfficeDocument({bytes,format:'pdf',signal}):null;
-   sources.push({id:row.source_id,ref:row.source_ref,sha256:row.source_sha256,version:row.source_version,format:row.source_format,...(parsed?{pdfBlocks:parsed.blocks}:{}),data:Uint8Array.from(bytes)});
+   const parsed=['pdf','doc','xls','ppt','zip'].includes(row.source_format)?await require('./office-document-parser.cjs').parseOfficeDocument({bytes,format:row.source_format,signal}):null;
+   sources.push({id:row.source_id,ref:row.source_ref,sha256:row.source_sha256,version:row.source_version,format:row.source_format,...(parsed?{parsedBlocks:parsed.blocks}:{}),data:Uint8Array.from(bytes)});
   }
   return sources;
  }

@@ -10,8 +10,8 @@ const {inspectOfficeZip}=require('./office-zip-guard.cjs');
    const bytes=Buffer.from(source.data),format=source.format==='md'?'markdown':source.format;
    if(createHash('sha256').update(bytes).digest('hex')!==source.sha256)throw Error('snapshot');
    let blocks;
-   if(format==='pdf'){
-    if(!Array.isArray(source.pdfBlocks))throw Error('PDF parse authority missing');blocks=source.pdfBlocks;
+   if(['pdf','doc','xls','ppt','zip'].includes(format)){
+    if(!Array.isArray(source.parsedBlocks))throw Error('PDF parse authority missing');blocks=source.parsedBlocks;
    }else if(['docx','xlsx','pptx'].includes(format)){
     const archive=inspectOfficeZip(bytes);
     if(format==='docx'){

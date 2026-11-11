@@ -371,7 +371,7 @@ const HEARTBEAT_PROMPT = process.env.PT_HEARTBEAT_PROMPT || "ping";
 // ---- 文档上传（纯文本 v1：.txt/.md/.csv）与上下文注入限制 ----
 const DOC_UPLOAD_MAX_BYTES = Number(process.env.PT_DOC_UPLOAD_MB || 5) * 1024 * 1024;
 const DOC_CONTEXT_MAX_CHARS = Number(process.env.PT_DOC_CONTEXT_CHARS || 100000);
-const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx", "pdf"]);
+const DOC_EXT_WHITELIST = new Set(["txt", "md", "csv", "docx", "xlsx", "pptx", "pdf", "doc", "xls", "ppt", "zip"]);
 const DOCX_UPLOAD_MAX_BYTES=20*1024*1024;
 
 // ---- 视频/音频上传（mp4/webm/mov/mp3/wav/m4a；单文件上限默认 50MB，PT_MEDIA_UPLOAD_MB 覆盖）----
@@ -601,7 +601,7 @@ async function docsToNote(urls, tenantId, evidence = [], { maxChars = DOC_CONTEX
     if (!match || match[1] !== tenantId) throw fail("DOCUMENT_SCOPE_INVALID");
     const filename = match[2];
     const absolute = path.join(dir, filename);
-    const byteLimit=['.docx','.xlsx','.pptx','.pdf'].includes(path.extname(filename).toLowerCase())?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
+    const byteLimit=['.docx','.xlsx','.pptx','.pdf','.doc','.xls','.ppt','.zip'].includes(path.extname(filename).toLowerCase())?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
     let bytes;
     try {
       const directory = fs.lstatSync(dir), stat = fs.lstatSync(absolute);
@@ -630,7 +630,7 @@ async function docsToNote(urls, tenantId, evidence = [], { maxChars = DOC_CONTEX
     const header = "\n\nDOCUMENT ref=" + JSON.stringify(ref) + "; sha256=" + sha256 + "\n";
     const remaining = maxChars - note.length - header.length - footerReserve;
     if (remaining <= 0) { omittedDocuments++; continue; }
-    if(['.docx','.xlsx','.pptx','.pdf'].includes(path.extname(filename).toLowerCase())){
+    if(['.docx','.xlsx','.pptx','.pdf','.doc','.xls','.ppt','.zip'].includes(path.extname(filename).toLowerCase())){
       const format=path.extname(filename).slice(1).toLowerCase();
       const parsed=await parseOfficeDocument({bytes,format,signal,timeoutMs:Math.max(1,Math.floor(Math.min(10000,contextDeadline-performance.now())))});
       const coverageHash=format==='docx'?buildDocxEvidenceIndex({tenantId,documentId:filename,sourceSha256:sha256,blocks:parsed.blocks}).summary.coverageHash:crypto.createHash('sha256').update(JSON.stringify({format,sourceSha256:sha256,blocks:parsed.blocks})).digest('hex');
@@ -643,7 +643,7 @@ async function docsToNote(urls, tenantId, evidence = [], { maxChars = DOC_CONTEX
       const parsedChars=parsed.blocks.reduce((sum,b)=>sum+b.text.length,0),truncated=shownBlocks<parsed.blocks.length||shownChars<parsedChars;
       note+=header+format.toUpperCase()+'_UNTRUSTED_EXTRACT; locator='+(format==='docx'?'extracted-text-block-not-original-page':parsed.locatorKind)+'; warnings='+parsed.warningCount+(parsed.limitations?'\nLIMITATIONS '+parsed.limitations:'')+excerpt+
         `\n${format.toUpperCase()}_COVERAGE blocks=${shownBlocks}/${parsed.blocks.length}; chars=${shownChars}/${parsedChars}; truncated=${truncated}`;
-      sources.push({kind:format,ref,sha256,extractor:format==='pdf'?'pdfjs-dist@6.5.438':format==='docx'?'mammoth@1.13.0':'ooxml-structured-text@1',locatorKind:parsed.locatorKind,limitations:parsed.limitations||null,coverageHash,characterUnit:'utf16-code-unit-blocks-concatenated-without-separators',totalBlocks:parsed.blocks.length,shownBlocks,shownChars,parsedChars,truncated,warningCount:parsed.warningCount});
+      sources.push({kind:format,ref,sha256,extractor:format==='pdf'?'pdfjs-dist@6.5.438':format==='docx'?'mammoth@1.13.0':['doc','xls','ppt'].includes(format)?'catdoc@0.95-debian6':format==='zip'?'bounded-document-bundle@1':'ooxml-structured-text@1',locatorKind:parsed.locatorKind,limitations:parsed.limitations||null,coverageHash,characterUnit:'utf16-code-unit-blocks-concatenated-without-separators',totalBlocks:parsed.blocks.length,shownBlocks,shownChars,parsedChars,truncated,warningCount:parsed.warningCount});
     }else if (path.extname(filename).toLowerCase() === ".csv") {
       const source = buildCsvSource({ bytes, ref, limits: { maxBytes: DOC_UPLOAD_MAX_BYTES } });
       // Reserve a bounded prefix for column evidence before the literal cells.
@@ -2689,18 +2689,20 @@ if (p === "/api/artifact" && (req.method === "GET" || req.method === "HEAD")) {
     // 扩展名白名单（先粗筛，最终以内容解码为准）
     const ext = path.extname(String(rawName).trim()).slice(1).toLowerCase();
     if (!DOC_EXT_WHITELIST.has(ext)) {
-      return json(res, 400, { ok: false, error: "支持 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf；旧版 .doc / .xls / .ppt 暂未接入。" });
+      return json(res, 400, { ok: false, error: "支持 .txt / .md / .csv / .docx / .xlsx / .pptx / .pdf / .doc / .xls / .ppt / .zip；ZIP只解析支持的文档成员。" });
     }
     if (!buf.length) return json(res, 400, { ok: false, error: "文档数据无效" });
-    const uploadLimit=['docx','xlsx','pptx','pdf'].includes(ext)?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
+    const uploadLimit=['docx','xlsx','pptx','pdf','doc','xls','ppt','zip'].includes(ext)?DOCX_UPLOAD_MAX_BYTES:DOC_UPLOAD_MAX_BYTES;
     if (buf.length > uploadLimit) {
       return json(res, 400, { ok: false, error: "文档过大（单文件上限 " + Math.round(uploadLimit / 1048576) + "MB）" });
     }
     // 按内容判断是否纯文本（不看扩展名）：UTF-8 严格解码，NUL/非法字节一律拒绝
     let text,office;
-    if(['docx','xlsx','pptx','pdf'].includes(ext)){
-      try{office=await parseOfficeDocument({bytes:buf,format:ext});text=office.text;}
+    if(['docx','xlsx','pptx','pdf','doc','xls','ppt','zip'].includes(ext)){
+      const parseAbort=new AbortController(),cancelParse=()=>parseAbort.abort();req.once('aborted',cancelParse);res.once('close',cancelParse);
+      try{office=await parseOfficeDocument({bytes:buf,format:ext,signal:parseAbort.signal});text=office.text;}
       catch(error){return json(res,error.code==='OFFICE_PARSER_BUSY'?503:400,{ok:false,code:error.code||'OFFICE_PARSE_FAILED',error:error.code==='OFFICE_PARSER_BUSY'?'文档解析繁忙，请稍后重试。':error.code==='OFFICE_PDF_OCR_UNAVAILABLE'?'此 PDF 需要 OCR，但本次 OCR 后端不可用或未能完成，请稍后重试。':'文档解析失败、含不支持内容或超过资源限制。'});}
+      finally{req.removeListener('aborted',cancelParse);res.removeListener('close',cancelParse);}
     }else text = decodeTextBuffer(buf);
     if (text == null) return json(res, 400, { ok: false, error: "不是有效的纯文本文件" });
     if (ext === "csv") {

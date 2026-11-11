@@ -18,7 +18,7 @@ async function prepareAnalysisWorkspace({workspaceRoot,uploadsRoot,identity,runI
    if(signal?.aborted)throw fail('RUN_CANCELLED');
    const snapshot=evidence.find(item=>item.ref===ref),bytes=await readVerifiedChatAttachmentBytes(ref,snapshot,{uploadsRoot,identity,includeBytes:true,maxBytes:1024*1024});
    total+=bytes.length;if(total>2*1024*1024)throw fail('ANALYSIS_INPUT_LIMIT');
-   const ext=path.extname(ref).slice(1);if(!['txt','md','csv','pdf','docx','xlsx','pptx'].includes(ext))throw fail('ANALYSIS_FORMAT_UNSUPPORTED');
+   const ext=path.extname(ref).slice(1);if(!['txt','md','csv','pdf','docx','xlsx','pptx','doc','xls','ppt','zip'].includes(ext))throw fail('ANALYSIS_FORMAT_UNSUPPORTED');
    const name='input-'+(index+1)+'.'+ext;let fd;
    try{fd=run.openFile(name,{createExclusive:true,writeOnly:true,mode:0o400});created.push(name);fs.writeFileSync(fd,bytes);fs.fsyncSync(fd);}
    catch(error){if(fd!==undefined)throw error;const existing=run.openFile(name);try{const stat=fs.fstatSync(existing);if(stat.nlink!==1||stat.size!==bytes.length||createHash('sha256').update(fs.readFileSync(existing)).digest('hex')!==snapshot.sha256)throw fail('ANALYSIS_SNAPSHOT_CHANGED');}finally{fs.closeSync(existing);}}

@@ -24,7 +24,7 @@ def main():
     safe(member.name);files[member.name]=archive.extractfile(member).read();modes[member.name]=member.mode&0o755
  for name in tracked:
   if not name:continue
-  if not(name.startswith('shell/') or name in ('business/attribution/import/workspace-meta.js','business/media/powertokens.cjs') or name in ('scripts/northstar-r34-runtime-acl.cjs','scripts/northstar-runtime-db-gate.cjs','scripts/northstar-price-catalog.cjs','scripts/northstar-profile-maintenance.cjs')):continue
+  if not(name.startswith('shell/') or name in ('business/attribution/import/workspace-meta.js','business/media/powertokens.cjs') or name in ('scripts/northstar-r34-runtime-acl.cjs','scripts/northstar-runtime-db-gate.cjs','scripts/northstar-price-catalog.cjs','scripts/northstar-profile-maintenance.cjs','scripts/build-legacy-office-20261111.sh')):continue
   safe(name);file=ROOT/name
   if file.is_symlink() or not file.is_file():raise ValueError('SOURCE_TYPE')
   body=file.read_bytes();files[name]=body;modes[name]=0o644;bound[name]=sha(body)
@@ -44,6 +44,17 @@ def main():
   rel=file.relative_to(runtime).as_posix()
   if rel!='manifest.json' and rel not in manifest['files']:raise ValueError('UNBOUND_MEDIA_FILE')
   name='shell/media/vendor-runtime/'+rel;safe(name);files[name]=file.read_bytes();bound[name]=sha(files[name]);modes[name]=0o755 if file.stat().st_mode&0o111 else 0o644
+ legacy=ROOT/'.release-inputs/legacy/runtime-linux-x64'
+ legacy_manifest=json.loads((legacy/'manifest.json').read_text())
+ for rel,record in legacy_manifest['files'].items():
+  file=legacy/rel
+  if file.is_symlink() or not file.is_file() or sha(file.read_bytes())!=record['sha256'] or file.stat().st_size!=record['size']:raise ValueError('LEGACY_RUNTIME_CHANGED')
+ for file in sorted(legacy.rglob('*')):
+  if file.is_symlink():raise ValueError('LEGACY_RUNTIME_SYMLINK')
+  if not file.is_file() or file.name=='.catdocrc':continue
+  rel=file.relative_to(legacy).as_posix()
+  if rel not in legacy_manifest['files'] and rel not in ('manifest.json','LICENSE','catdoc_0.95.orig.tar.gz','catdoc_0.95-6.debian.tar.xz'):raise ValueError('UNBOUND_LEGACY_FILE')
+  name='shell/attachments/vendor-legacy/'+rel;safe(name);files[name]=file.read_bytes();bound[name]=sha(files[name]);modes[name]=0o755 if rel.startswith('bin/') else 0o644
  # No deleted/changed historical migration may be hidden by the base archive.
  for name,digest in baseline['sources'].items():
   if name.startswith('shell/db-migrations/') and sha(files[name])!=digest:raise ValueError('HISTORICAL_MIGRATION_CHANGED')
@@ -53,7 +64,7 @@ def main():
   for name,body in sorted(files.items()):
    info=tarfile.TarInfo(name);info.size=len(body);info.mode=modes[name];info.uid=info.gid=info.mtime=0;tar.addfile(info,io.BytesIO(body))
  archive_sha=hashlib.file_digest(archive.open('rb'),'sha256').hexdigest()
- plan={'schemaVersion':2,'status':'FROZEN_CANDIDATE_NOT_DEPLOYED','revision':'r34-all8','commit':COMMIT,'archive':archive.name,'archiveSha256':archive_sha,'sources':bound,'members':{n:sha(b) for n,b in sorted(files.items())},'migrationAdditions':['030_model_request_attempts.sql','031_pdf_document_sources.sql','032_web_source_evidence.sql','033_billing_login_credentials.sql','034_run_operation_approvals.sql'],'bug12':'DEGRADED_PREVIEW','acceptance':'same-version independent QA and real provider acceptance pending','billing':'Official credits and local USD estimates are independent; reviewed base tariffs and bounded weekday periods cover two models until superseded; other dimensions/models remain unknown.','auto08':'Pre-dispatch qualification and ordering; uncertain submitted requests never automatically repost or switch model.'}
+ plan={'schemaVersion':2,'status':'FROZEN_CANDIDATE_NOT_DEPLOYED','revision':'r34-all8','commit':COMMIT,'archive':archive.name,'archiveSha256':archive_sha,'sources':bound,'members':{n:sha(b) for n,b in sorted(files.items())},'memberModes':modes,'migrationAdditions':['030_model_request_attempts.sql','031_pdf_document_sources.sql','032_web_source_evidence.sql','033_billing_login_credentials.sql','034_run_operation_approvals.sql'],'bug12':'DEGRADED_PREVIEW','acceptance':'same-version independent QA and real provider acceptance pending','billing':'Official credits and local USD estimates are independent; reviewed base tariffs and bounded weekday periods cover two models until superseded; other dimensions/models remain unknown.','auto08':'Pre-dispatch qualification and ordering; uncertain submitted requests never automatically repost or switch model.'}
  planfile=OUT/(NAME+'.sources.json');planfile.write_text(json.dumps(plan,ensure_ascii=False,indent=2)+'\n')
  (OUT/(NAME+'.sha256')).write_text(archive_sha+'  '+archive.name+'\n'+sha(planfile.read_bytes())+'  '+planfile.name+'\n')
  print(json.dumps({'directory':str(OUT),'archiveSha256':archive_sha,'sourceFiles':len(bound),'members':len(files)}))

@@ -37,5 +37,5 @@ test('deadline and cancellation settle only after the worker exits with safe err
  await assert.rejects(parseOfficeDocument({bytes,format:'docx',signal:controller.signal}),{code:'OFFICE_CANCELLED'});
  await assert.rejects(parseOfficeDocument({bytes,format:'docx',timeoutMs:1}),{code:'OFFICE_TIMEOUT'});
  await assert.rejects(parseOfficeDocument({bytes:Buffer.from('private sentinel'),format:'docx'}),e=>!e.message.includes('sentinel')&&e.code.startsWith('OFFICE_'));
- await assert.rejects(parseOfficeDocument({bytes,format:'doc'}),{code:'OFFICE_FORMAT_UNSUPPORTED'});
+ await assert.rejects(parseOfficeDocument({bytes,format:'rtf'}),{code:'OFFICE_FORMAT_UNSUPPORTED'});
 });

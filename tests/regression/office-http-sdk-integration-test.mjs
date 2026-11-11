@@ -11,7 +11,7 @@ test('same-version Office/PDF upload reaches native DSH, exports Word/PDF and re
    await storage.db.query('INSERT INTO google_identities(issuer,subject,user_id,email) VALUES($1,$2,$3,$4)',['https://accounts.google.com','image-'+suffix,u.id,u.email]);
    const token=crypto.randomBytes(32).toString('hex');await storage.db.query('INSERT INTO sessions(user_id,token_hash,expires_at) VALUES($1,$2,$3)',[u.id,sha(token),new Date(Date.now()+120000).toISOString()]);cookies.push('pt_session='+token);
   }
-  await storage.close();storage=null;
+  await storage.close();storage=null;global.gc?.();await new Promise(setImmediate);
   const listener=createServer();await new Promise(resolve=>listener.listen(0,'127.0.0.1',resolve));const port=listener.address().port;await new Promise(resolve=>listener.close(resolve));
   const entry=path.join(temp,'sdk.mjs');fs.writeFileSync(entry,`
 import fs from 'node:fs';import path from 'node:path';import {createRequire} from 'node:module';import {pathToFileURL} from 'node:url';
@@ -21,7 +21,7 @@ const ctx=new Context();for(const [plugin,config]of [[Agents],[Sessions],[Llm],[
 ctx.provide('loader',{await:async()=>{}});ctx.provide('agentDefaultModel',{currentSelection:()=>({provider:'fixture',model:'fixture-office'})});ctx.provide('appExit',code=>process.exit(code));
 class Adapter extends LlmAdapter{
  async resolveModel(provider,model){return {provider,id:model,name:model,inputModalities:['text','image']};}
- async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');const nativeImages=options.messages.flatMap(message=>message.content||[]).filter(block=>block.type==='image');for(const block of nativeImages)await ctx.attachments.readImage(block.attachment);const office=text.includes('XLSX_UNTRUSTED_EXTRACT')||text.includes('PPTX_UNTRUSTED_EXTRACT')||text.includes('PDF_UNTRUSTED_EXTRACT');const media=text.includes('UNTRUSTED_MEDIA_CONTENT');if(media&&!text.includes('ask not what your country')&&nativeImages.length!==3)throw Error('Video frames did not reach native attachments');if(!office&&!media)throw Error('Owned source did not reach native request');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({office,xlsx:text.includes('编号00123中文'),pptx:text.includes('中文演示第一段'),pdf:text.includes('PDF original page 2'),media,nativeImages:nativeImages.length})+'\\n');yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:media?'MEDIA_CHAIN_OK':'OFFICE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
+ async *stream(options){const text=JSON.stringify(options.messages)+' '+JSON.stringify(options.system||'');const nativeImages=options.messages.flatMap(message=>message.content||[]).filter(block=>block.type==='image');for(const block of nativeImages)await ctx.attachments.readImage(block.attachment);const office=/(?:XLSX|PPTX|PDF|DOC|XLS|PPT|ZIP)_UNTRUSTED_EXTRACT/.test(text);const media=text.includes('UNTRUSTED_MEDIA_CONTENT');if(media&&!text.includes('ask not what your country')&&nativeImages.length!==3)throw Error('Video frames did not reach native attachments');if(!office&&!media)throw Error('Owned source did not reach native request');fs.appendFileSync(${JSON.stringify(trace)},JSON.stringify({office,xlsx:text.includes('编号00123中文'),pptx:text.includes('中文演示第一段'),pdf:text.includes('PDF original page 2'),media,nativeImages:nativeImages.length})+'\\n');yield {type:'block-start',index:0,blockType:'text'};yield {type:'block-end',index:0,block:{type:'text',text:media?'MEDIA_CHAIN_OK':'OFFICE_CHAIN_OK'}};yield {type:'usage',usage:{inputTokens:5,outputTokens:2}};yield {type:'finish',reason:{kind:'stop'}};}
 }
 ctx.llm.registerAdapter(['fixture'],new Adapter());fs.writeFileSync(${JSON.stringify(pid)},String(process.pid));const {apply}=await import(pathToFileURL(path.join(process.env.DSH_HOME,'profiles/run-persistent/persistent-runner.mjs')));apply(ctx);
 `);
@@ -34,11 +34,11 @@ value.writeScopedCache(scopeId,{scopeId,models:[m],lastSuccessfulAt:at,lastCompl
 return {models:[m],scopeId,availability:{status:'available',modelIds:[m.id]},catalogDiagnostics:{state:'fresh',errorCode:null}};}};
 if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process')return {...value,spawn:(command,args,opts)=>value.spawn(command,[${JSON.stringify(entry)},...args.slice(1)],opts)};return value;};`);
   const profiles=path.join(runtime,'dsh-home/profiles');fs.mkdirSync(profiles,{recursive:true});fs.symlinkSync(path.join(root,'shell/node_modules'),path.join(profiles,'node_modules'),'dir');
-  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0',NODE_PATH:process.env.NODE_PATH,PT_NATIVE_MEDIA_RUNTIME:process.env.PT_NATIVE_MEDIA_RUNTIME},stdio:['ignore','pipe','pipe']});
+  child=spawn(process.execPath,['--require',preload,'shell/server.cjs','--port',String(port)],{cwd:root,env:{PATH:process.env.PATH,HOME:temp,PT_RUNTIME_DIR:runtime,PT_DB_DIR:dataDir,PT_MASTER_KEY_FILE:masterKeyFile,PT_LOG_DIR:path.join(temp,'logs'),PT_LISTEN_HOST:'127.0.0.1',PT_KEY_LIVE_VERIFY:'0',NODE_PATH:process.env.NODE_PATH,PT_NATIVE_MEDIA_RUNTIME:process.env.PT_NATIVE_MEDIA_RUNTIME,PT_LEGACY_OFFICE_RUNTIME:process.env.PT_LEGACY_OFFICE_RUNTIME,PT_MEDIA_PROCESSING_DIR:process.env.PT_MEDIA_PROCESSING_DIR,TMPDIR:process.env.TMPDIR},stdio:['ignore','pipe','pipe']});
   child.stdout.on('data',b=>logs+=b);child.stderr.on('data',b=>logs+=b);
-  const req=(url,{user=0,method='GET',body}={})=>fetch('http://127.0.0.1:'+port+url,{method,headers:{Cookie:cookies[user],...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});
+  const req=(url,{user=0,method='GET',body}={})=>{if(process.env.R34_FIXTURE_TRACE==='1')console.error('FIXTURE_REQUEST',method,url);return fetch('http://127.0.0.1:'+port+url,{method,headers:{Cookie:cookies[user],...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{}),signal:AbortSignal.timeout(15000)});};
   const json=async(url,opts)=>{const r=await req(url,opts);assert.equal(r.status,200,await r.clone().text());return r.json();};
-  let ready=false;for(let i=0;i<150;i++){if(child.exitCode!==null)throw Error(logs);try{if((await req('/api/auth/me')).status===200){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,40));}assert.ok(ready,logs);
+  let ready=false;for(let i=0;i<150;i++){if(child.exitCode!==null||child.signalCode!==null)throw Error('Fixture server exit '+child.exitCode+'/'+child.signalCode+' '+logs);try{if((await req('/api/auth/me')).status===200){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,40));}assert.ok(ready,logs);
   await json('/api/auth/key',{method:'POST',body:{key:'fixture-not-paid-key'}});
   const {spreadsheet,presentation}=require('../helpers/office-structured-fixtures.cjs');
   const conversationId=(await json('/api/conversations',{method:'POST'})).id;
@@ -78,6 +78,23 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
   const found=await json('/api/sources/search',{method:'POST',body:{sourceIds:[pdfSource.id],query:'original'}});
   assert.ok(found.results.some(hit=>hit.locator.kind==='pdf-page'&&hit.locator.page===2));
   assert.equal((await req('/api/sources/search',{user:1,method:'POST',body:{sourceIds:[pdfSource.id],query:'original'}})).status,404);
+  const {zipSync,strToU8}=shellRequire('fflate'),archive=Buffer.from(zipSync({'note.txt':strToU8('ARCHIVE_FACTS_WITNESS'),'nested/source.pdf':await pdfBytes}));
+  const archiveUpload=await json('/api/upload-doc',{method:'POST',body:{name:'documents.zip',data:archive.toString('base64')}});
+  const archiveResponse=await req('/api/chat',{method:'POST',body:{conversationId,message:'Read the original document bundle',documents:[archiveUpload.url]}});assert.match(await archiveResponse.text(),/OFFICE_CHAIN_OK/,logs);
+  const archiveRun=archiveResponse.headers.get('x-agent-run-id');assert.equal((await json('/api/runs/'+archiveRun)).run.state,'completed');
+  const archiveEvents=(await json('/api/runs/'+archiveRun+'/events')).events;assert.equal(archiveEvents.find(e=>e.type==='attachment.status'&&e.payload?.kind==='zip')?.payload.sha256,sha(archive));
+  const archiveSource=(await json('/api/sources')).sources.find(s=>s.sourceRef===archiveUpload.url);
+  const archiveSearch=await json('/api/sources/search',{method:'POST',body:{sourceIds:[archiveSource.id],query:'original'}});assert(archiveSearch.results.some(hit=>hit.locator.kind==='archive-member'&&hit.locator.member==='nested/source.pdf'&&hit.locator.inner.page===2));
+  assert.equal((await req('/api/sources/search',{user:1,method:'POST',body:{sourceIds:[archiveSource.id],query:'original'}})).status,404);
+  if(process.env.R34_LEGACY_PROOF_ROOT){
+   for(const [name,format,query]of [['SampleDoc.doc','doc','document'],['Simple.xls','xls','replaceMe'],['basic_test_ppt_file.ppt','ppt','subtitle']]){
+    const original=fs.readFileSync(path.join(process.env.R34_LEGACY_PROOF_ROOT,name));const uploaded=await json('/api/upload-doc',{method:'POST',body:{name,data:original.toString('base64')}});
+    const response=await req('/api/chat',{method:'POST',body:{conversationId,message:'Read the supplied legacy Office input',documents:[uploaded.url]}});assert.match(await response.text(),/OFFICE_CHAIN_OK/,logs);
+    const id=response.headers.get('x-agent-run-id');assert.equal((await json('/api/runs/'+id)).run.state,'completed');
+    const events=(await json('/api/runs/'+id+'/events')).events;assert.equal(events.find(e=>e.type==='attachment.status'&&e.payload?.kind===format)?.payload.sha256,sha(original));
+    const source=(await json('/api/sources')).sources.find(s=>s.sourceRef===uploaded.url);const results=await json('/api/sources/search',{method:'POST',body:{sourceIds:[source.id],query}});assert(results.results.length>0);assert(!results.results.some(hit=>hit.locator.page));
+   }
+  }
   if(process.env.R34_MEDIA_PROOF_ROOT){
    const audio=fs.readFileSync(path.join(process.env.R34_MEDIA_PROOF_ROOT,'whisper.cpp-1.7.6/samples/jfk.wav'));
    const upload=await json('/api/upload-media',{method:'POST',body:{data:audio.toString('base64')}});
@@ -108,7 +125,7 @@ if(parent?.filename.endsWith('/runtime/dsh-adapter.cjs')&&name==='child_process'
 
 
  }finally{
-  if(child&&child.exitCode===null){const end=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await end;}
+  if(child&&child.exitCode===null&&child.signalCode===null){const end=new Promise(r=>child.once('exit',r));child.kill('SIGTERM');await Promise.race([end,new Promise(r=>setTimeout(r,2000))]);if(child.exitCode===null){child.kill('SIGKILL');await end;}}
   if(fs.existsSync(pid)){try{process.kill(Number(fs.readFileSync(pid,'utf8')),'SIGTERM');}catch{}}
   if(storage)await storage.close();fs.rmSync(temp,{recursive:true,force:true});
  }

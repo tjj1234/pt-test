@@ -1,0 +1,65 @@
+[
+  {
+    "name": "simple.doc",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/document/simple.doc",
+    "sha256": "4876e828e62d490fa188c7c4e47013e2e0dfdf02f5903dfd374bc0d2b2049ca1",
+    "license": "Apache-2.0",
+    "bytes": 19456
+  },
+  {
+    "name": "SampleDoc.doc",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/document/SampleDoc.doc",
+    "sha256": "717585c0a88f20862c86220163dd03da87cd743970354c6b29add32725f2e833",
+    "license": "Apache-2.0",
+    "bytes": 27136
+  },
+  {
+    "name": "SimpleMacro.doc",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/document/SimpleMacro.doc",
+    "sha256": "39e9608c711d38f298ed20a5bfae12fcdaed6f4be2be4d26db670475216ca393",
+    "license": "Apache-2.0",
+    "bytes": 36864
+  },
+  {
+    "name": "PasswordProtected.doc",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/document/PasswordProtected.doc",
+    "sha256": "863d2216a6f5bb4cec0ea4131a05ae0822dbce347e2940155ef638c6d64935fe",
+    "license": "Apache-2.0",
+    "bytes": 19968
+  },
+  {
+    "name": "Simple.xls",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/Simple.xls",
+    "sha256": "2b5ec8298bacffdca61c50f6f7607da0a4e63cf76fa011c62f203e6a66bc072a",
+    "license": "Apache-2.0",
+    "bytes": 13824
+  },
+  {
+    "name": "SimpleMacro.xls",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/spreadsheet/SimpleMacro.xls",
+    "sha256": "0e92c9bb018abd8a5f9121d65827c9e3bd280777219cb77a2efd70635143c00a",
+    "license": "Apache-2.0",
+    "bytes": 30720
+  },
+  {
+    "name": "basic_test_ppt_file.ppt",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/slideshow/basic_test_ppt_file.ppt",
+    "sha256": "e8fd4c38ad72ce3735acbca0b60dd5870fb60f819c169e3947d166f4f1bcc79d",
+    "license": "Apache-2.0",
+    "bytes": 15360
+  },
+  {
+    "name": "WithMacros.ppt",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/slideshow/WithMacros.ppt",
+    "sha256": "b11f51046ee699b72e29a53adffe71161a59a2bb5f9369839834c974d7690a61",
+    "license": "Apache-2.0",
+    "bytes": 16896
+  },
+  {
+    "name": "Password_Protected-hello.ppt",
+    "url": "https://raw.githubusercontent.com/apache/poi/trunk/test-data/slideshow/Password_Protected-hello.ppt",
+    "sha256": "8d0dd9f53317a720687cf5234af0c021fab665194b09b9bb56a3f71b495bf45a",
+    "license": "Apache-2.0",
+    "bytes": 10752
+  }
+]
