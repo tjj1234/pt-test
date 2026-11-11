@@ -1,5 +1,7 @@
 # 北极星完整产品路线图与资源需求
 
+最新/new交接：[R34只读媒体事故核查与AUTO方案交接](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/HANDOFF-20261111-R34-LIVE-AUDIT-AND-AUTO-PLAN.md)。用户明确暂不整体开工；指定用户842a987b-1ec1-4931-9224-ba6886392dea的媒体提示尚未查日志，报错时间14:02:27需确认时区后绑定R33/R34。新通道应为本机~/.ssh/pt-r34-audit.sock，但当前工具环境未找到socket；私有参数/Key分组/route/TRUST_PROXY仍未查。公网17:28东京时间健康、Google配置及JS指纹重核通过。交接副本已保存主目录docs/refactor，供新会话继续，不重复部署或媒体提交。
+
 R34限制与首用AUTO专项核查（2026-11-11）：[清单草稿](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/R34-LIMITS-AND-AUTO-RULES-20261111.md)已区分代码默认/固定值与待查线上值。代码确认文字AUTO存在按user+Key scope的运行验证冷启动缺口；第三人事故尚未定位，不提前归因。公网健康及Google configured直接实查通过；私有环境/路由/nginx/日志/Key分组待恢复SSH后只读核实。用户明确暂不整体开发、不改配置、不部署；改进方案第21节增加自动bootstrap验收，不标已修复。
 
 AUTO小验证与补充方案（2026-11-11）：锁定DSH同Agent同turn三模型/两工具链、动态选模/全局工具限制、局部工具门禁边界、取消与maxCost共8组通过；真实CLI/pi-ai回环换模1/1通过，无付费调用。详见[补充方案第11–20节](https://github.com/tjj1234/pt-test/blob/integration/r34-final-all8-20261109/docs/refactor/AUTO-CHAT-PRODUCT-IMPROVEMENT-PLAN-20261111.md#11-补充审查结论与小验证2026-11-11)。新增金额/媒体上限、设置授权撤销、多租户/RLS计划、冻结与注入防护、Python独立安全门禁、PT依赖、规划模型/格式/数据传递及5–7人日估计。状态：原生复用可行，产品尚未整体开工；官方实扣硬帽与未知受理恢复不可提前标通过。
